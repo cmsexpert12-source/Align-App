@@ -452,7 +452,7 @@ window.ALIGN_SOUND = (() => {
 
   return {
     STATIONS, load, snapshot, onChange, unlock,
-    playStation, playTrack, pause, resume, stop, next,
-    setVolume, setSfx, sfx, saveTrack, removeTrack, loadTracks
+    playStation, playTrack, playLibrary, playUrl, pause, resume, stop, next,
+    setVolume, setSfx, sfx, saveTrack, removeTrack, loadTracks, mergeRemote
   };
 })();

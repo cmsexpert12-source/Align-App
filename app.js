@@ -2426,7 +2426,7 @@
     };
     const tab = tabFor(state.view);
     app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
-    app.classList.toggle("has-now", !hideNowChip());
+    try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
     bind();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
@@ -3319,6 +3319,17 @@
     if (state.view === "home" || state.view === "profile") render();
   });
 
+  const timed = (pr, ms) => Promise.race([
+    Promise.resolve(pr).catch(() => null),
+    new Promise((res) => setTimeout(() => res(null), ms))
+  ]);
+
+  const leaveSplash = () => {
+    if (state.view !== "splash") return;
+    state.view = state.onboardingDone ? "home" : "onboard";
+    try { render(); } catch (err) { console.warn(err); }
+  };
+
   const boot = async () => {
     registerSW();
     if (window.ALIGN_AI && ALIGN_AI.probe) ALIGN_AI.probe().then(() => {
@@ -3327,43 +3338,49 @@
     if (window.ALIGN_SOUND && ALIGN_SOUND.loadTracks) ALIGN_SOUND.loadTracks().then(() => {}).catch(() => {});
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
       if (["splash", "onboard"].includes(state.view)) return;
-      const bar = app.querySelector(".now-bar b");
-      const snap = ALIGN_SOUND.snapshot();
-      if (bar) {
-        bar.textContent = snap.playing ? snap.title : "Play through the morning";
-        const sub = app.querySelector(".now-bar span");
-        if (sub) sub.textContent = snap.playing ? "Playing in ALIGN" : "Stations · your music";
-        const play = app.querySelector(".now-play");
-        if (play) {
-          play.textContent = snap.playing ? "❚❚" : "▶";
-          play.dataset.act = snap.playing ? "sound-pause" : "sound-resume";
+      try {
+        const snap = ALIGN_SOUND.snapshot();
+        app.classList.toggle("has-now", !nowHidden());
+        const bar = app.querySelector(".now-chip b");
+        if (bar) {
+          bar.textContent = snap.title || "Sound";
+          const sub = app.querySelector(".now-chip span");
+          if (sub) sub.textContent = snap.playing ? "Playing" : "Paused";
+          const play = app.querySelector(".now-play");
+          if (play) {
+            play.textContent = snap.playing ? "❚❚" : "▶";
+            play.dataset.act = snap.playing ? "sound-pause" : "sound-resume";
+          }
         }
-      }
+      } catch { /* keep UI */ }
     });
     window.addEventListener("online", () => { state.offline = false; if (state.view !== "splash") render(); });
     window.addEventListener("offline", () => { state.offline = true; if (state.view !== "splash") render(); });
-    render();
+    try { render(); } catch (err) { console.warn(err); }
+    const splashWatch = setTimeout(leaveSplash, 1200);
     const t0 = Date.now();
-    if (AlignDB.configured()) {
-      AlignDB.onAuth((sess) => applySession(sess).then(() => {
-        if (state.view === "splash") return;
-        if (state.view === "auth" && sess) { state.view = "home"; }
-        render();
-      }));
-      const s = await AlignDB.session();
-      if (s.ok && s.data) await applySession(s.data);
-    }
+    try {
+      if (AlignDB.configured()) {
+        AlignDB.onAuth((sess) => {
+          timed(applySession(sess), 4000).then(() => {
+            if (state.view === "splash") return;
+            if (state.view === "auth" && sess) { state.view = "home"; }
+            try { render(); } catch { /* keep UI */ }
+          });
+        });
+        const s = await timed(AlignDB.session(), 2500);
+        if (s && s.ok && s.data) await timed(applySession(s.data), 4000);
+      }
+    } catch (err) { console.warn(err); }
     try {
       const prefs = JSON.parse(localStorage.getItem("align-notif-prefs") || "null");
       if (prefs) state.prefs = prefs;
     } catch { /* ignore */ }
-    const wait = Math.max(0, 1000 - (Date.now() - t0));
+    const wait = Math.max(0, 900 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
-    if (state.view === "splash") {
-      state.view = state.onboardingDone ? "home" : "onboard";
-    }
-    render();
+    clearTimeout(splashWatch);
+    leaveSplash();
   };
 
-  boot();
+  boot().catch(() => leaveSplash());
 })();
