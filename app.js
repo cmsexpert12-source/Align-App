@@ -68,7 +68,10 @@
     pdfPage: 1,
     pdfPages: 0,
     uploadBusy: false,
-    ai: { open: false, busy: false, input: "", reply: "", error: "", provider: "", model: "" }
+    ai: { open: false, busy: false, input: "", reply: "", error: "", provider: "", model: "" },
+    verseSess: null,
+    drill: null,
+    readPacks: []
   };
 
   /* ---------- SVG poses ---------- */
@@ -344,7 +347,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -388,6 +391,7 @@
 
   const L = () => window.ALIGN_LIFE;
   const B = () => window.ALIGN_BOOKS;
+  const S = () => window.ALIGN_SCRIPTURE;
   let pdfDoc = null;
 
   const pathSteps = () => {
@@ -429,6 +433,12 @@
     ];
     if (v === "bible") return [
       ["One question", "Ask me one question on the open chapter that helps me actually read it. Do not replace the text."]
+    ];
+    if (v === "verse") return [
+      ["Why this verse", "In two sentences, why hiding today's verse would help a spiritual life. Do not invent a different verse."]
+    ];
+    if (v === "drill") return [
+      ["Missed one", "I missed a Scripture quiz item. Give one short fact that would help it stick. Do not lecture."]
     ];
     if (v === "dayplan") return [
       ["Three priorities", "From my notes and context, propose three true priorities for today. Short labels only, then one line each."]
@@ -649,11 +659,158 @@
     render();
     try {
       state.bibleData = await L().fetchChapter(book, chapter);
+      const verses = (state.bibleData && state.bibleData.verses) || [];
+      if (verses.length) {
+        state.readPacks = (state.readPacks || []).filter((p) => !(p.book === book && p.chapter === chapter));
+        state.readPacks.push({ book, chapter, verses });
+        if (state.readPacks.length > 8) state.readPacks = state.readPacks.slice(-8);
+      }
     } catch (e) {
       state.bibleErr = (e && e.message) || "Could not load this chapter. Check the connection.";
     }
     state.bibleLoading = false;
     render();
+  };
+
+  const openVerseTutor = (forceToday) => {
+    const iso = today().iso;
+    const a = L().todayAssignment(iso);
+    const read = a.read || [];
+    if (read.length || forceToday) {
+      S().ensureTodayVerse(iso, read, state.readPacks || []);
+    }
+    const tv = S().todayVerse(iso);
+    const daily = S().load().daily[iso] || {};
+    const queue = [];
+    const seen = new Set();
+    if (tv && !daily.verseDone) {
+      queue.push({ kind: "today", verse: tv });
+      seen.add(tv.id);
+    }
+    S().dueVerses().forEach((row) => {
+      const v = row.v;
+      if (!v || seen.has(v.id)) return;
+      if (queue.length >= 6) return;
+      queue.push({ kind: "review", verse: v });
+      seen.add(v.id);
+    });
+    if (!queue.length && tv) queue.push({ kind: "review", verse: tv });
+    if (!queue.length) {
+      toast("Read today’s Scripture first. The verse is picked from those chapters.");
+      return;
+    }
+    const first = queue[0];
+    state.verseSess = {
+      queue, i: 0,
+      phase: first.kind === "today" ? "learn" : "recall",
+      cloze: null, filled: [], chips: [], used: [], misses: 0, revealed: false
+    };
+    if (state.verseSess.phase === "learn") { /* stay */ }
+    state.view = "verse";
+    render();
+  };
+
+  const advanceVerse = () => {
+    const sess = state.verseSess;
+    if (!sess) return;
+    const item = currentVerse();
+    if (item && item.kind === "today") S().markVerseDone(today().iso);
+    sess.i += 1;
+    sess.cloze = null;
+    sess.filled = [];
+    sess.chips = [];
+    sess.used = [];
+    sess.misses = 0;
+    sess.revealed = false;
+    const next = currentVerse();
+    if (!next) {
+      sess.phase = "done";
+      toast("Verse hidden.");
+      state.view = "word";
+      render();
+      return;
+    }
+    sess.phase = next.kind === "today" ? "learn" : "recall";
+    render();
+  };
+
+  let drillTick = null;
+  const stopDrillTick = () => {
+    if (drillTick) { clearInterval(drillTick); drillTick = null; }
+  };
+
+  const finishDrill = () => {
+    stopDrillTick();
+    if (!state.drill) return;
+    state.drill.running = false;
+    state.drill.done = true;
+    S().markSprint(today().iso, {
+      answered: state.drill.answered,
+      correct: state.drill.correct,
+      finished: Date.now()
+    });
+    render();
+  };
+
+  const startDrill = () => {
+    stopDrillTick();
+    const queue = S().dailyQueue(S().SPRINT_N);
+    const first = queue[0];
+    state.drill = {
+      running: true,
+      left: S().SPRINT_SEC,
+      i: 0,
+      queue,
+      answered: 0,
+      correct: 0,
+      flash: null,
+      picked: null,
+      done: false,
+      options: first ? S().optionsOf(first) : []
+    };
+    state.view = "drill";
+    drillTick = setInterval(() => {
+      if (!state.drill || !state.drill.running) return;
+      state.drill.left -= 1;
+      if (state.drill.left <= 0) {
+        state.drill.left = 0;
+        finishDrill();
+        return;
+      }
+      const el = app.querySelector(".drill-clock");
+      if (el) el.textContent = fmtClock(state.drill.left);
+    }, 1000);
+    render();
+  };
+
+  const answerDrill = (i) => {
+    const d = state.drill;
+    if (!d || !d.running || d.flash) return;
+    const q = d.queue[d.i];
+    if (!q) return finishDrill();
+    const pick = d.options[i];
+    const ok = pick === q.a;
+    S().gradeQuiz(q.id, ok);
+    d.answered += 1;
+    if (ok) d.correct += 1;
+    d.flash = ok ? "ok" : "no";
+    d.picked = i;
+    buzz(ok ? 12 : 28);
+    render();
+    setTimeout(() => {
+      if (!state.drill || state.drill !== d) return;
+      if (!d.running) return;
+      d.flash = null;
+      d.picked = null;
+      d.i += 1;
+      if (d.i >= d.queue.length || d.answered >= 120) {
+        finishDrill();
+        return;
+      }
+      const nq = d.queue[d.i];
+      d.options = nq ? S().optionsOf(nq) : [];
+      render();
+    }, 160);
   };
 
   const weekDoneCount = () => {
@@ -696,7 +853,9 @@
       read: `<path d="M4 19V6a2 2 0 0 1 2-2h5v15H6a2 2 0 0 0-2 2z" ${s}/><path d="M13 4h5a2 2 0 0 1 2 2v13h-7V4z" ${s}/>`,
       spark: `<path d="M12 3l1.2 6.2L19 12l-5.8 2.8L12 21l-1.2-6.2L5 12l5.8-2.8L12 3z" ${s}/>`,
       bell: `<path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" ${s}/><path d="M10 21h4" ${s}/>`,
-      key: `<circle cx="8" cy="12" r="3" ${s}/><path d="M11 12h9l-2 2 2 2" ${s}/>`
+      key: `<circle cx="8" cy="12" r="3" ${s}/><path d="M11 12h9l-2 2 2 2" ${s}/>`,
+      verse: `<path d="M5 5h14v4H5zM5 12h14M5 16h10" ${s}/>`,
+      drill: `<circle cx="12" cy="12" r="8" ${s}/><path d="M12 8v4l3 2" ${s}/>`
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${map[name] || map.move}</svg>`;
   };
@@ -1438,10 +1597,21 @@
     const scriptureSub = n
       ? n + " / " + target + " today · next " + a.next.book + " " + a.next.chapter
       : (target === 1 ? "Sunday · one chapter · " : "Today · ") + a.next.book + " " + a.next.chapter;
+    const st = S().stats();
+    const tv = S().todayVerse(iso);
+    const sprint = S().sprintOf(iso);
+    const verseSub = tv
+      ? (S().load().daily[iso] && S().load().daily[iso].verseDone
+        ? S().refOf(tv) + " · hidden"
+        : S().refOf(tv) + " · from today’s reading")
+      : (n ? "A verse from what you just read" : "Read first. Then hide one line.");
+    const sprintSub = sprint && sprint.answered
+      ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
+      : "2 minutes · 120 questions · tap fast";
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
-        <p class="plan-kicker">Prayer first. Then devotion. Then Scripture. Books live on this phone.</p>
+        <p class="plan-kicker">Prayer first. Then devotion. Then Scripture. Hide a verse. Drill the rest.</p>
         <div class="hub-grid">
           <button class="hub-card" data-act="open-step" data-step="pray">
             <div class="tile">${stepIcon("pray")}</div>
@@ -1460,6 +1630,16 @@
               <p>${scriptureSub}</p>
             </div>
           </button>
+          <button class="hub-card ${tv && !(S().load().daily[iso] && S().load().daily[iso].verseDone) ? "ready" : ""}" data-act="open-verse">
+            <div class="tile">${stepIcon("verse")}</div>
+            <h3>Memory</h3>
+            <p>${verseSub}</p>
+          </button>
+          <button class="hub-card" data-act="open-drill">
+            <div class="tile">${stepIcon("drill")}</div>
+            <h3>Sprint</h3>
+            <p>${sprintSub}</p>
+          </button>
           <button class="hub-card" data-act="open-step" data-step="evening">
             <div class="tile">${stepIcon("rise")}</div>
             <h3>Evening</h3>
@@ -1470,6 +1650,195 @@
             <h3>Books</h3>
             <p>${B().list().length ? B().list().length + " on this device" : "Upload a PDF. Read offline."}</p>
           </button>
+        </div>
+        <div class="pulse" style="margin-top:4px">
+          <div class="pulse-top">
+            <div class="pulse-num">${st.verseStreak}</div>
+            <div>
+              <h4>Verse streak</h4>
+              <p>${st.learned} hidden · ${st.due} due · sprint ${st.acc ? st.acc + "%" : "—"}.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const currentVerse = () => {
+    const sess = state.verseSess;
+    if (!sess || !sess.queue || !sess.queue.length) return null;
+    return sess.queue[sess.i] || null;
+  };
+
+  const startCloze = (verse) => {
+    const c = S().clozeOf(verse.text, verse.text.split(/\s+/).length > 18 ? 4 : 3);
+    const decoys = S().shuffle(verse.text.split(/\s+/)
+      .map((w) => w.replace(/[^A-Za-z']/g, ""))
+      .filter((w) => w.length >= 4 && !c.answers.includes(w)));
+    const chips = S().shuffle(c.answers.concat(decoys.slice(0, 3)));
+    state.verseSess.cloze = c;
+    state.verseSess.filled = [];
+    state.verseSess.chips = chips;
+    state.verseSess.used = [];
+    state.verseSess.misses = 0;
+  };
+
+  const viewVerse = () => {
+    const sess = state.verseSess;
+    if (!sess) {
+      return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="page-title"><div class="tag">Memory</div><h1>Hide the Word.</h1>
+            <p>Read today’s chapters first. ALIGN picks one line worth hiding — inspiring, known, or the bottom of the text.</p></div>
+          <div style="padding:0 22px"><button class="btn" data-go="word">Back to Word</button></div>
+        </div>`;
+    }
+    const item = currentVerse();
+    const v = item && item.verse;
+    if (!v) {
+      return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="done-hero" style="padding:24px 22px">
+            <div class="kicker">Memory</div>
+            <h1>Hidden.</h1>
+            <p class="lead" style="color:var(--muted)">Spaced repetition will bring it back. Tomorrow’s reading picks the next line.</p>
+          </div>
+          <div style="padding:0 22px calc(22px + var(--safe-b))">
+            <button class="btn" data-go="word">Done</button>
+          </div>
+        </div>`;
+    }
+    const phase = sess.phase;
+    const n = sess.queue.length;
+    const tag = item.kind === "today" ? "Today’s verse" : "Review";
+    const clozeHtml = () => {
+      const c = sess.cloze;
+      if (!c) return "";
+      let fi = 0;
+      const body = c.parts.map((p, i) => {
+        if (!c.pick.includes(i)) return escapeHtml(p);
+        const got = sess.filled[fi];
+        fi += 1;
+        return got
+          ? `<span class="mv-blank">${escapeHtml(got)}</span>`
+          : `<span class="mv-blank">&nbsp;</span>`;
+      }).join("");
+      return `<p class="mv-text">${body}</p>
+        <div class="chip-row">
+          ${sess.chips.map((w, i) => `<button class="${sess.used.includes(i) ? "used" : ""}" ${sess.used.includes(i) ? "disabled" : ""} data-act="cloze-tap" data-i="${i}">${escapeHtml(w)}</button>`).join("")}
+        </div>`;
+    };
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row">
+          <button class="icon-btn" data-go="word">${chev()}</button>
+          <div style="flex:1"></div>
+          <span class="linkish">${sess.i + 1} / ${n}</span>
+        </div>
+        <div class="page-title" style="padding-bottom:4px">
+          <div class="tag">${tag} · ${escapeHtml(v.theme || "The Word")}</div>
+          <h1>${phase === "grade" ? "How did it sit?" : phase === "cloze" ? "Fill the line." : phase === "recall" ? "Say it." : "Hide it."}</h1>
+          <p>${phase === "learn" ? escapeHtml(v.why || "A line worth keeping.") : phase === "recall" ? "First letters. Speak it. Then grade yourself honestly." : phase === "cloze" ? "Tap the missing words, in order." : "Again if it slipped. Easy if you could preach it."}</p>
+        </div>
+        <div class="verse-body">
+          <div class="verse-card">
+            <div class="verse-theme">${escapeHtml(v.theme || "Scripture")}</div>
+            <div class="ref">${escapeHtml(S().refOf(v))}</div>
+            ${phase === "learn" || phase === "grade" || (phase === "recall" && sess.revealed)
+              ? `<q class="mv-text">${escapeHtml(v.text)}</q>`
+              : phase === "cloze" ? clozeHtml()
+              : `<p class="mv-text" style="letter-spacing:.04em">${escapeHtml(S().initialsOf(v.text))}</p>`}
+            ${phase === "learn" ? `<p class="verse-why">${escapeHtml(v.why || "")}</p>` : ""}
+          </div>
+        </div>
+        <div class="sticky-cta">
+          ${phase === "learn" ? `<button class="btn" data-act="verse-next">I’ve read it · hide words</button>` : ""}
+          ${phase === "recall" && !sess.revealed ? `<button class="btn" data-act="verse-reveal">Reveal</button>` : ""}
+          ${phase === "recall" && sess.revealed ? `
+            <div class="grade-row">
+              <button class="g-again" data-act="verse-grade" data-g="0">Again</button>
+              <button class="g-hard" data-act="verse-grade" data-g="1">Hard</button>
+              <button class="g-good" data-act="verse-grade" data-g="2">Good</button>
+              <button class="g-easy" data-act="verse-grade" data-g="3">Easy</button>
+            </div>` : ""}
+          ${phase === "grade" ? `
+            <div class="grade-row">
+              <button class="g-again" data-act="verse-grade" data-g="0">Again</button>
+              <button class="g-hard" data-act="verse-grade" data-g="1">Hard</button>
+              <button class="g-good" data-act="verse-grade" data-g="2">Good</button>
+              <button class="g-easy" data-act="verse-grade" data-g="3">Easy</button>
+            </div>` : ""}
+        </div>
+      </div>
+    `;
+  };
+
+  const viewDrill = () => {
+    const d = state.drill;
+    if (!d) {
+      return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="page-title">
+            <div class="tag">Scripture sprint</div>
+            <h1>2 minutes.<br>120 questions.</h1>
+            <p>Short taps. Whole Bible. Spaced repetition brings back what you miss until it’s in the bone.</p>
+          </div>
+          <div style="padding:0 22px calc(22px + var(--safe-b))">
+            <button class="btn" data-act="drill-start">Start the clock</button>
+            <p class="next-up">Sunday morning: skip if you’re walking out the door. It waits.</p>
+          </div>
+        </div>`;
+    }
+    if (d.done) {
+      const acc = d.answered ? Math.round((d.correct / d.answered) * 100) : 0;
+      return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="done-hero" style="padding:24px 22px">
+            <div class="kicker">Sprint</div>
+            <h1>${d.answered >= 120 ? "Cleared." : "Time."}</h1>
+            <p class="lead" style="color:var(--muted)">${d.answered} answered · ${d.correct} right · ${acc}%. Misses come back sooner.</p>
+            <div class="done-stats">
+              <div><b>${d.answered}</b><span>answered</span></div>
+              <div><b>${d.correct}</b><span>right</span></div>
+              <div><b>${acc}%</b><span>accuracy</span></div>
+            </div>
+          </div>
+          <div style="padding:0 22px calc(22px + var(--safe-b))">
+            <button class="btn" data-act="drill-start">Go again</button>
+            <button class="btn ghost" style="margin-top:8px" data-go="word">Back to Word</button>
+          </div>
+        </div>`;
+    }
+    const q = d.queue[d.i];
+    if (!q) {
+      d.done = true;
+      d.running = false;
+      return viewDrill();
+    }
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row">
+          <button class="icon-btn" data-act="drill-quit">${chev()}</button>
+        </div>
+        <div class="drill-top">
+          <div class="drill-clock">${fmtClock(d.left)}</div>
+          <div class="drill-count">${d.answered} / 120</div>
+        </div>
+        <div class="prog-thin"><i style="width:${Math.min(100, (d.answered / 120) * 100)}%;background:var(--lime)"></i></div>
+        <div class="drill-body">
+          <h2 class="drill-q">${escapeHtml(q.q)}</h2>
+          <div class="drill-opts">
+            ${(d.options || []).map((opt, i) => {
+              let cls = "";
+              if (d.flash && d.picked === i) cls = d.flash;
+              else if (d.flash === "ok" && opt === q.a) cls = "ok";
+              return `<button ${d.flash ? "disabled" : ""} class="${cls}" data-act="drill-ans" data-i="${i}">${escapeHtml(opt)}</button>`;
+            }).join("")}
+          </div>
         </div>
       </div>
     `;
@@ -1886,7 +2255,9 @@
       lights: viewLights,
       library: viewLibrary,
       book: viewBook,
-      reader: viewReader
+      reader: viewReader,
+      verse: viewVerse,
+      drill: viewDrill
     };
     const tab = tabFor(state.view);
     app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
@@ -1896,6 +2267,7 @@
 
   const bind = () => {
     app.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+      if (state.view === "drill") stopDrillTick();
       state.view = b.dataset.go;
       render();
     }));
@@ -2483,8 +2855,7 @@
         openBible(cur.book, cur.chapter);
       } else if (readN >= target) {
         completeStep("word");
-        state.view = "home";
-        render();
+        openVerseTutor(true);
       } else {
         openBible(cur.book, cur.chapter);
       }
@@ -2624,6 +2995,68 @@
     } else if (act === "ai-test") {
       state.ai.open = true;
       runAi("Reply with exactly: ALIGN is ready. Then name which model you are, in one short clause.");
+    } else if (act === "open-verse") {
+      openVerseTutor(false);
+    } else if (act === "verse-next") {
+      const sess = state.verseSess;
+      const item = currentVerse();
+      if (!sess || !item) return;
+      startCloze(item.verse);
+      sess.phase = (sess.cloze && sess.cloze.answers && sess.cloze.answers.length) ? "cloze" : "grade";
+      render();
+    } else if (act === "cloze-tap") {
+      const sess = state.verseSess;
+      if (!sess || sess.phase !== "cloze") return;
+      const idx = Number(el.dataset.i);
+      if (sess.used.includes(idx)) return;
+      const word = sess.chips[idx];
+      const need = sess.cloze.answers[sess.filled.length];
+      if (String(word).toLowerCase() !== String(need).toLowerCase()) {
+        sess.misses += 1;
+        buzz(24);
+        return;
+      }
+      sess.used.push(idx);
+      sess.filled.push(word);
+      if (sess.filled.length >= sess.cloze.answers.length) {
+        sess.phase = "grade";
+      }
+      render();
+    } else if (act === "verse-reveal") {
+      if (state.verseSess) state.verseSess.revealed = true;
+      render();
+    } else if (act === "verse-grade") {
+      const item = currentVerse();
+      if (!item) return;
+      const g = Number(el.dataset.g);
+      S().gradeVerse(item.verse.id, g, {
+        book: item.verse.book,
+        chapter: item.verse.chapter,
+        verse: item.verse.verse,
+        text: item.verse.text
+      });
+      if (g === 0) {
+        const sess = state.verseSess;
+        sess.queue.push({ kind: "review", verse: item.verse });
+      }
+      advanceVerse();
+    } else if (act === "open-drill") {
+      stopDrillTick();
+      state.drill = null;
+      state.view = "drill";
+      render();
+    } else if (act === "drill-start") {
+      startDrill();
+    } else if (act === "drill-ans") {
+      answerDrill(Number(el.dataset.i));
+    } else if (act === "drill-quit") {
+      if (state.drill && state.drill.running && state.drill.answered) finishDrill();
+      else {
+        stopDrillTick();
+        state.drill = null;
+        state.view = "word";
+        render();
+      }
     }
   };
 
