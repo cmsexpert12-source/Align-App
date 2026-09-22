@@ -816,6 +816,67 @@
 
   const markSvg = () => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12 L8 3 L14 12" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
+  const isoOf = (d) => new Date(d).toISOString().slice(0, 10);
+
+  const morningDone = (iso) => {
+    const m = L().morningOf(iso);
+    if (m.go) return true;
+    const steps = L().STEPS || [];
+    return steps.length > 0 && steps.every((s) => !!m[s.id]);
+  };
+
+  const morningStreak = () => {
+    let n = 0;
+    const d = new Date();
+    if (!morningDone(isoOf(d))) d.setDate(d.getDate() - 1);
+    for (let i = 0; i < 365; i++) {
+      if (morningDone(isoOf(d))) { n++; d.setDate(d.getDate() - 1); }
+      else break;
+    }
+    return n;
+  };
+
+  const bestMorningStreak = () => {
+    let best = 0, cur = 0;
+    const d = new Date();
+    for (let i = 0; i < 180; i++) {
+      if (morningDone(isoOf(d))) { cur++; if (cur > best) best = cur; }
+      else cur = 0;
+      d.setDate(d.getDate() - 1);
+    }
+    return Math.max(best, morningStreak());
+  };
+
+  const weekPulse = () => {
+    const start = startOfWeek(today().date);
+    const isoStart = isoOf(start);
+    let mornings = 0, sessions = 0;
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const iso = isoOf(d);
+      const md = morningDone(iso);
+      const sess = !!completedOn(iso);
+      if (md) mornings++;
+      if (sess) sessions++;
+      days.push({ iso, dow: i, morning: md, session: sess, isToday: iso === today().iso });
+    }
+    let chapters = 0;
+    try {
+      chapters = (L().bibleCursor().log || []).filter((x) => x.date >= isoStart).length;
+    } catch { /* ignore */ }
+    return { mornings, sessions, chapters, days };
+  };
+
+  const streakCopy = (n) => {
+    if (n <= 0) return "Start today. The first morning counts.";
+    if (n === 1) return "Day one is in. Come back tomorrow.";
+    if (n < 7) return n + " mornings in a row. Don’t break it.";
+    if (n < 21) return "A week-plus streak. This is the habit.";
+    return n + " days. Guard this.";
+  };
+
   const viewHome = () => {
     const t = today();
     const day = todayDay();
@@ -855,28 +916,58 @@
     const weekDots = [0,1,2,3,4,5,6].map((i) => {
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
-      const isToday = i === t.dow;
-      const done = !!(L().morningOf(iso).go) || !!completedOn(iso);
-      return `<div class="wd ${isToday?"today":""} ${done?"done":""}">
-        <div class="n">${DOW[i]}</div>
-        <div class="dot">${d.getDate()}</div>
-      </div>`;
+      const iso = isoOf(d);
+      const isToday = iso === t.iso;
+      const done = morningDone(iso);
+      return `<button type="button" class="wd ${isToday?"today":""} ${done?"done":""}" aria-label="${DOW_FULL[i]}">
+        <span class="n">${DOW[i][0]}</span>
+        <span class="dot">${d.getDate()}</span>
+      </button>`;
     }).join("");
 
     const nextCta = cur
       ? (cur.id === "rise" ? "I’m up" : cur.id === "move" ? "Open session" : cur.id === "go" ? "Step out" : "Continue")
       : "Begin the day";
 
+    const mStreak = morningStreak();
+    const pulse = weekPulse();
+    const best = bestMorningStreak();
+
+    const stepRow = (s, done, now, act, extra = "") => `
+      <button class="path-step ${done?"done":""} ${now?"now":""}" ${act}>
+        <div class="path-ico">${done ? "✓" : now ? "→" : stepIcon(s.icon || s.id)}</div>
+        <div class="path-copy">
+          <h4>${s.title}</h4>
+          <p>${s.sub || ""}</p>
+        </div>
+      </button>${extra}`;
+
     return `
       <div class="screen home">
         <div class="topbar">
-          <div class="greet">${greet()}${name ? `<h2>${escapeHtml(name)}.</h2>` : `<h2>${DOW_FULL[t.dow]}.</h2>`}</div>
+          <div class="greet">${greet()}<h2>${name ? escapeHtml(name) : DOW_FULL[t.dow]}</h2></div>
           <button class="avatar" data-go="profile" title="You">${initials()}</button>
         </div>
         ${state.offline ? `<div class="offline">You’re offline. The morning still works on this device.</div>` : ""}
         ${install}
         <div class="week-strip">${weekDots}</div>
+        <div class="pulse">
+          <div class="pulse-top">
+            <div class="pulse-num">${mStreak}</div>
+            <div>
+              <h4>${mStreak === 1 ? "Day streak" : "Day streak"}</h4>
+              <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
+            </div>
+          </div>
+          <div class="pulse-days" aria-hidden="true">
+            ${pulse.days.map((d) => `<i class="${d.morning?"on":""} ${d.isToday?"today":""}"></i>`).join("")}
+          </div>
+          <div class="pulse-stats">
+            <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
+            <div><b>${pulse.sessions}</b><span>Sessions</span></div>
+            <div><b>${pulse.chapters}</b><span>Chapters</span></div>
+          </div>
+        </div>
         <div class="clocks">
           <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
           <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
@@ -896,15 +987,12 @@
           <div class="path">
             ${dueE.map((b) => {
               const done = B().loggedToday(t.iso, b.id);
-              return `
-                <button class="path-step ${done?"done":"now"}" data-act="open-book" data-id="${b.id}">
-                  <div class="path-ico">${stepIcon("read")}</div>
-                  <div>
-                    <h4>${escapeHtml(b.title)}</h4>
-                    <p>${done ? "Sitting done" : "Page " + (b.current_page || 1) + (b.pages ? " of " + b.pages : "") + " · " + (b.pages_per_day || 8) + " pages"}</p>
-                  </div>
-                  <div class="check">${done ? "✓" : ""}</div>
-                </button>`;
+              return stepRow(
+                { id: "read", icon: "read", title: escapeHtml(b.title), sub: done ? "Sitting done" : "Page " + (b.current_page || 1) + (b.pages ? " of " + b.pages : "") + " · " + (b.pages_per_day || 8) + " pages" },
+                done,
+                !done,
+                `data-act="open-book" data-id="${b.id}"`
+              );
             }).join("")}
           </div>
         ` : ""}
@@ -914,15 +1002,7 @@
           ${steps.map((s) => {
             const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
             const now = cur && cur.id === s.id && !done;
-            return `
-              <button class="path-step ${done?"done":""} ${now?"now":""}" data-act="open-step" data-step="${s.id}">
-                <div class="path-ico">${stepIcon(s.icon || s.id)}</div>
-                <div>
-                  <h4>${s.title}</h4>
-                  <p>${subFor(s)}</p>
-                </div>
-                <div class="check">${done ? "✓" : now ? "→" : ""}</div>
-              </button>`;
+            return stepRow({ ...s, sub: subFor(s) }, done, now, `data-act="open-step" data-step="${s.id}"`);
           }).join("")}
         </div>
       </div>
@@ -1117,20 +1197,30 @@
   const viewProgress = () => {
     const total = state.history.length;
     const minutes = state.history.reduce((a, h) => a + (h.minutes || 0), 0);
-    const byPattern = { push: 0, pull: 0, legs: 0, core: 0, mobility: 0 };
-    state.history.forEach(h => {
-      const d = days.find(x => x.id === h.dayId);
-      if (d) byPattern[d.pattern] = (byPattern[d.pattern] || 0) + 1;
-    });
+    const pulse = weekPulse();
+    const mStreak = morningStreak();
+    const trainStreak = streak();
     return `
       <div class="screen progress">
         <div class="topbar"><div class="greet">Move<h2>History.</h2></div>
           <button class="linkish" data-go="plan">Week</button>
         </div>
-        <div class="big-stat">
-          <div class="k">Sessions</div>
-          <div class="v">${total}</div>
-          <div style="color:var(--muted);font-size:13px">${minutes} minutes · ${streak()} day streak</div>
+        <div class="pulse" style="margin-left:0;margin-right:0">
+          <div class="pulse-top">
+            <div class="pulse-num">${trainStreak}</div>
+            <div>
+              <h4>Session streak</h4>
+              <p>${trainStreak ? trainStreak + " training day" + (trainStreak===1?"":"s") + " in a row." : "Finish today’s session to start a chain."} Morning streak ${mStreak}.</p>
+            </div>
+          </div>
+          <div class="pulse-days" aria-hidden="true">
+            ${pulse.days.map((d) => `<i class="${d.session?"on":""} ${d.isToday?"today":""}"></i>`).join("")}
+          </div>
+          <div class="pulse-stats">
+            <div><b>${total}</b><span>All-time</span></div>
+            <div><b>${minutes}</b><span>Minutes</span></div>
+            <div><b>${pulse.sessions}/7</b><span>This week</span></div>
+          </div>
         </div>
         <div class="section-h"><h4>Recent</h4></div>
         ${total === 0 ? `<div class="empty">No sessions yet. Finish today’s training and it lands here.</div>` : `
