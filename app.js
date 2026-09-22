@@ -352,6 +352,12 @@
       if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
       hydrateBooks();
     } catch { /* books schema may not be applied yet */ }
+    try {
+      const remoteSounds = await AlignDB.fetchSounds();
+      if (remoteSounds.ok && remoteSounds.data && window.ALIGN_SOUND) {
+        ALIGN_SOUND.mergeRemote(remoteSounds.data);
+      }
+    } catch { /* sounds schema may not be applied yet */ }
   };
 
   let toastTimer = null;
@@ -364,20 +370,26 @@
     }, 2600);
   };
 
+  const nowHidden = () => {
+    const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
+    const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
+    return !live || ["splash", "onboard", "auth", "setup", "player", "rest", "drill", "sound"].includes(state.view);
+  };
+
   const overlays = () => {
     const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
-    const hideNow = ["splash", "onboard", "auth", "setup", "sound"].includes(state.view);
+    const hideNow = nowHidden();
     const nowBar = hideNow ? "" : `
-      <div class="now-bar ${withNav ? "up" : "low"}">
+      <div class="now-chip">
         <button class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
         <button class="now-meta" data-go="sound">
-          <b>${escapeHtml(snd.playing ? snd.title : "Play through the morning")}</b>
-          <span>${snd.playing ? "Playing in ALIGN" : "Stations · your music"}</span>
+          <b>${escapeHtml(snd.title || "Sound")}</b>
+          <span>${snd.playing ? "Playing" : "Paused"}</span>
         </button>
-        <input class="now-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" data-act="sound-vol" aria-label="Volume" />
+        <button class="now-x" data-act="sound-stop" title="Stop">×</button>
       </div>`;
     return `
     ${nowBar}
@@ -1500,6 +1512,7 @@
             </div>` : ""}
             <button class="btn ${state.authBusy?"busy":""}" data-act="auth-submit">${
               state.authBusy ? "Working…" : tab === "signup" ? "Create account" : tab === "magic" ? "Email me a link" : "Sign in"
+            }</== "magic" ? "Email me a link" : "Sign in"
             }</button>
             <div style="display:flex;justify-content:space-between;margin-top:14px">
               <button class="linkish" data-act="auth-tab" data-tab="${tab==="magic"?"signin":"magic"}">${tab==="magic"?"Use password":"Magic link instead"}</button>
@@ -1652,19 +1665,30 @@
   };
 
   const viewSound = () => {
-    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { stations: [], tracks: [], volume: 0.42, sfxOn: true, playing: false, id: "", kind: "" };
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { stations: [], tracks: [], library: [], volume: 0.42, sfxOn: true, playing: false, id: "", kind: "" };
     const stations = snd.stations || [];
     const tracks = snd.tracks || [];
+    const library = snd.library || [];
+    const signed = !!state.session;
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Sound</div>
           <h1>Stay in ALIGN.</h1>
-          <p>Stations for the morning, or audio from this phone. No other app.</p>
+          <p>Open recordings in the library. Your own files upload to your account.</p>
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
-          <div class="set-label" style="padding-top:0">Stations</div>
+          <div class="set-label" style="padding-top:0">ALIGN library</div>
+          <p class="hint" style="margin-top:0">Public-domain field recordings (PDsounds via Wikimedia). Stored on your ALIGN database after you run the sounds SQL.</p>
+          <div class="station-grid">
+            ${library.map((s) => `
+              <button class="station ${snd.kind==="library" && snd.id===s.id && snd.playing ? "on" : ""}" data-act="sound-library" data-id="${s.id}">
+                <h4>${escapeHtml(s.title)}</h4>
+                <p>${escapeHtml((s.artist || "Open source") + (s.mood ? " · " + s.mood : ""))}</p>
+              </button>`).join("")}
+          </div>
+          <div class="set-label">Stations</div>
           <div class="station-grid">
             ${stations.map((s) => `
               <button class="station ${snd.kind==="station" && snd.id===s.id && snd.playing ? "on" : ""}" data-act="sound-station" data-id="${s.id}">
@@ -1673,9 +1697,9 @@
               </button>`).join("")}
           </div>
           <div class="set-label">Your music</div>
-          <p class="hint" style="margin-top:0">Worship, sermons, playlists you already have — they stay on this phone.</p>
+          <p class="hint" style="margin-top:0">${signed ? "Uploads save to your account and this phone." : "Saved on this phone. Sign in to keep them on your account."}</p>
           <input id="sound-files" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple hidden />
-          <button class="btn ghost" style="height:44px" data-act="sound-add">Add audio</button>
+          <button class="btn ghost" style="height:44px" data-act="sound-add">${state.uploadBusy ? "Saving…" : "Upload audio"}</button>
           <div class="track-list">
             ${tracks.length ? tracks.map((t) => `
               <div class="setting">
@@ -2125,7 +2149,7 @@
               <input type="text" autocomplete="off" data-task="${i}" value="${escapeAttr(t.text)}" />
             </div>
           `).join("")}
-          <button class="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
+          <button class="btn g="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
           <div class="field"><label>Notes</label>
             <textarea class="note-box" id="plan-note" placeholder="People, calls, the afternoon…">${escapeHtml(p.note || "")}</textarea>
           </div>
@@ -2384,6 +2408,7 @@
     };
     const tab = tabFor(state.view);
     app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
+    app.classList.toggle("has-now", !hideNowChip());
     bind();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
@@ -2509,6 +2534,48 @@
     if (ag) ag.addEventListener("change", () => AI().save({ gemini: ag.value.trim() }));
     const aq = document.getElementById("ai-groq");
     if (aq) aq.addEventListener("change", () => AI().save({ groq: aq.value.trim() }));
+    const setVol = (e) => {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.setVolume(Number(e.target.value) / 100);
+    };
+    app.querySelectorAll(".now-vol, #sound-vol").forEach((el) => {
+      el.addEventListener("input", setVol);
+      el.addEventListener("change", setVol);
+    });
+    const files = document.getElementById("sound-files");
+    if (files) files.addEventListener("change", async (e) => {
+      const picked = Array.from(e.target.files || []);
+      e.target.value = "";
+      if (!picked.length) return;
+      state.uploadBusy = true;
+      render();
+      let saved = 0;
+      for (const f of picked) {
+        if (!f || f.size > 40 * 1024 * 1024) {
+          toast("Audio can be up to 40 MB.");
+          continue;
+        }
+        try {
+          const id = await ALIGN_SOUND.saveTrack(f);
+          saved += 1;
+          if (state.session && AlignDB.configured()) {
+            const up = await AlignDB.uploadSoundFile(id, f, f.type || "audio/mpeg");
+            await AlignDB.upsertSoundMeta({
+              id,
+              title: f.name.replace(/\.[^.]+$/, ""),
+              filename: f.name,
+              mime: f.type || "",
+              bytes: f.size,
+              storage_path: (up && up.ok && up.data) || ""
+            });
+          }
+        } catch (err) {
+          toast((err && err.message) || "Could not save that audio");
+        }
+      }
+      state.uploadBusy = false;
+      if (saved) toast(state.session ? "Saved to your account" : "Saved on this phone");
+      render();
+    });
   };
 
   const buzz = (ms = 18) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
@@ -3123,6 +3190,9 @@
     } else if (act === "sound-station") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
       render();
+    } else if (act === "sound-library") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.playLibrary(el.dataset.id);
+      render();
     } else if (act === "sound-track") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playTrack(el.dataset.id);
       render();
@@ -3142,7 +3212,10 @@
       const inp = document.getElementById("sound-files");
       if (inp) inp.click();
     } else if (act === "sound-remove") {
-      if (window.ALIGN_SOUND) ALIGN_SOUND.removeTrack(el.dataset.id);
+      const id = el.dataset.id;
+      const row = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot().tracks || []).find((t) => t.id === id) || { id };
+      if (window.ALIGN_SOUND) ALIGN_SOUND.removeTrack(id);
+      if (state.session && AlignDB.configured()) AlignDB.deleteSoundRemote(row).catch(() => {});
       render();
     } else if (act === "ai-test") {
       state.ai.open = true;

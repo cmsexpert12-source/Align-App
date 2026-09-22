@@ -98,6 +98,7 @@ You already ran `sql/schema.sql` (fitness). If you’re not sure, run it again �
 | 1 | `sql/schema.sql` | profiles, workouts, push, notification prefs |
 | 2 | `sql/schema-life.sql` | mornings, day plans, journals, bible cursor |
 | 3 | `sql/schema-books.sql` | books, reading log, private Storage bucket `reading` |
+| 4 | `sql/schema-sounds.sql` | public sound library + your uploads, Storage bucket `sounds` |
 
 If a policy “already exists” warning appears, ignore it. Real errors (red) mean stop and read the message.
 
@@ -119,7 +120,7 @@ After `schema-books.sql`, confirm:
    
    Environment: Production and Preview. Then **Redeploy**. One key is enough; two gives failover. Open **You → Intelligence → Test connection**.
 5. **Word → Books** — upload a PDF. After the first save it reads offline.
-6. **You → Sound** — play a station through the morning, or add audio from this phone. Cues mark steps and rest.
+6. **You → Sound** — play the open library (public-domain field recordings), a station, or upload audio from your profile to your account.
 7. iPhone: Share → **Add to Home Screen**. Android: the install banner, or Chrome → Add to Home screen.
 
 ---

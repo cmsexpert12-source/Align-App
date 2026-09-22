@@ -8,6 +8,16 @@ window.ALIGN_SOUND = (() => {
     { id: "word", name: "Word", sub: "Soft bed under Scripture" }
   ];
 
+  const FALLBACK_LIB = [
+    { id: "11111111-1111-4111-8111-111111111111", title: "Birds at 5am", artist: "jc · PDsounds", mood: "rise", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Bird_singing.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111112", title: "Mild morning song", artist: "PDsounds", mood: "rise", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Birdsong_mild_sunny_day.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111113", title: "Garden birds", artist: "PDsounds", mood: "still", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Birds_singing_in_garden.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111114", title: "Forest room", artist: "nille · PDsounds", mood: "still", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/20090610_0_ambience.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111115", title: "Rain on the pane", artist: "cori · PDsounds", mood: "word", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Rain_against_the_window.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111116", title: "Dordogne pond", artist: "PDsounds", mood: "word", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Nature_sounds_ambience_in_a_Dordogne_pond.ogg", is_public: true },
+    { id: "11111111-1111-4111-8111-111111111117", title: "Breeze, birds, geese", artist: "PDsounds", mood: "train", license: "Public domain", source_url: "https://commons.wikimedia.org/wiki/Special:FilePath/Breeze_birds_and_geese.ogg", is_public: true }
+  ];
+
   const load = () => {
     try {
       const s = JSON.parse(localStorage.getItem(LS) || "null") || {};
@@ -38,8 +48,10 @@ window.ALIGN_SOUND = (() => {
   let currentId = "";
   let title = "Sound";
   let audioEl = null;
-  let tracks = []; // {id,name}
+  let tracks = []; // {id,name,...} local + mine
+  let library = FALLBACK_LIB.slice();
   const blobs = new Map();
+  const uid = () => (crypto.randomUUID && crypto.randomUUID()) || ("t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
   const listeners = new Set();
   const emit = () => listeners.forEach((fn) => { try { fn(snapshot()); } catch {} });
 
@@ -70,7 +82,7 @@ window.ALIGN_SOUND = (() => {
   };
 
   const saveTrack = async (file) => {
-    const id = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const id = uid();
     const row = { id, name: file.name.replace(/\.[^.]+$/, ""), blob: file, type: file.type || "audio/mpeg" };
     const db = await dbp();
     await new Promise((res, rej) => {
@@ -250,7 +262,11 @@ window.ALIGN_SOUND = (() => {
 
   const startTrack = async (id) => {
     const blob = blobs.get(id);
-    if (!blob) return;
+    if (!blob) {
+      const t = tracks.find((x) => x.id === id);
+      if (t && (t.storage_path || t.source_url)) return playUrl(t);
+      return;
+    }
     await ensure();
     clearBed();
     const url = URL.createObjectURL(blob);
@@ -269,8 +285,61 @@ window.ALIGN_SOUND = (() => {
     emit();
   };
 
+  const playUrl = async (item) => {
+    if (!item) return;
+    let url = item.source_url || item.url || "";
+    if (!url && item.storage_path && window.AlignDB) {
+      const r = await AlignDB.soundUrl(item.storage_path);
+      url = (r && r.ok && r.data) || "";
+    }
+    if (!url && blobs.has(item.id)) {
+      await startTrack(item.id);
+      return;
+    }
+    if (!url) return;
+    await ensure();
+    clearBed();
+    const el = new Audio();
+    el.src = url;
+    el.loop = true;
+    el.preload = "auto";
+    el.volume = load().volume;
+    try { await el.play(); } catch {}
+    audioEl = el;
+    kind = item.is_public ? "library" : "track";
+    currentId = item.id;
+    title = item.title || item.name || "Sound";
+    playing = true;
+    persist({ trackId: item.id });
+    emit();
+  };
+
+  const mergeRemote = (rows) => {
+    if (!rows || !rows.length) return;
+    const pub = rows.filter((r) => r.is_public);
+    const mine = rows.filter((r) => !r.is_public);
+    if (pub.length) {
+      const by = {};
+      library.forEach((r) => { by[r.id] = r; });
+      pub.forEach((r) => { by[r.id] = { ...by[r.id], ...r }; });
+      library = Object.values(by);
+    }
+    mine.forEach((r) => {
+      if (!tracks.some((t) => t.id === r.id)) {
+        tracks.push({ id: r.id, name: r.title, title: r.title, storage_path: r.storage_path, source_url: r.source_url, is_public: false, remote: true });
+      } else {
+        tracks = tracks.map((t) => t.id === r.id ? { ...t, name: r.title, storage_path: r.storage_path, remote: true } : t);
+      }
+    });
+    emit();
+  };
+
   const playStation = (id) => startStation(id || load().station);
   const playTrack = (id) => startTrack(id);
+  const playLibrary = (id) => {
+    const item = library.find((x) => x.id === id) || tracks.find((x) => x.id === id);
+    return playUrl(item);
+  };
 
   const pause = () => {
     if (!playing) return;
@@ -288,6 +357,10 @@ window.ALIGN_SOUND = (() => {
     }
     if (kind === "track" && currentId && blobs.has(currentId)) {
       await startTrack(currentId);
+      return;
+    }
+    if (kind === "library" && currentId) {
+      await playLibrary(currentId);
       return;
     }
     await startStation(currentId || load().station);
@@ -362,6 +435,7 @@ window.ALIGN_SOUND = (() => {
       sfxOn: s.sfxOn,
       station: s.station,
       tracks: tracks.slice(),
+      library: library.slice(),
       stations: STATIONS
     };
   };

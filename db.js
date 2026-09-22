@@ -468,6 +468,87 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
+  const fetchSounds = async () => {
+    const sb = client();
+    if (!sb) return ok([]);
+    const userId = await uidOf();
+    let q = sb.from("sounds").select("*").eq("is_public", true);
+    const { data: pub, error: e1 } = await q;
+    if (e1) {
+      if (/does not exist|schema cache/i.test(e1.message || "")) return ok([]);
+      return fail(e1);
+    }
+    let mine = [];
+    if (userId) {
+      const { data, error } = await sb.from("sounds").select("*").eq("user_id", userId).eq("is_public", false);
+      if (!error) mine = data || [];
+    }
+    return ok([].concat(pub || [], mine));
+  };
+
+  const upsertSoundMeta = async (row) => {
+    const sb = client();
+    const userId = await uidOf();
+    if (!sb || !userId) return ok(null);
+    const rec = {
+      id: row.id,
+      user_id: userId,
+      title: row.title,
+      artist: row.artist || "",
+      source: row.source || "upload",
+      license: row.license || "",
+      mood: row.mood || "still",
+      source_url: row.source_url || null,
+      storage_path: row.storage_path || null,
+      filename: row.filename || "",
+      mime: row.mime || "",
+      bytes: row.bytes || 0,
+      is_public: false,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await sb.from("sounds").upsert(rec);
+    if (error) return fail(error);
+    return ok(rec);
+  };
+
+  const uploadSoundFile = async (soundId, blob, mime) => {
+    const sb = client();
+    const userId = await uidOf();
+    if (!sb || !userId) return ok(null);
+    const ext = (mime || "").includes("mpeg") || (mime || "").includes("mp3") ? "mp3"
+      : (mime || "").includes("wav") ? "wav"
+      : (mime || "").includes("ogg") ? "ogg"
+      : (mime || "").includes("mp4") || (mime || "").includes("m4a") || (mime || "").includes("aac") ? "m4a"
+      : "bin";
+    const path = userId + "/" + soundId + "." + ext;
+    const { error } = await sb.storage.from("sounds").upload(path, blob, {
+      contentType: mime || "application/octet-stream",
+      upsert: true
+    });
+    if (error) return fail(error);
+    return ok(path);
+  };
+
+  const soundUrl = async (storagePath) => {
+    const sb = client();
+    if (!sb || !storagePath) return ok(null);
+    const { data, error } = await sb.storage.from("sounds").createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+    if (error) return fail(error);
+    return ok(data && data.signedUrl);
+  };
+
+  const deleteSoundRemote = async (row) => {
+    const sb = client();
+    const userId = await uidOf();
+    if (!sb || !userId || !row) return ok(null);
+    if (row.storage_path) {
+      await sb.storage.from("sounds").remove([row.storage_path]);
+    }
+    const { error } = await sb.from("sounds").delete().eq("id", row.id).eq("user_id", userId);
+    if (error) return fail(error);
+    return ok(true);
+  };
+
   const testConnection = async (url, anonKey) => {
     if (!window.supabase) return fail("Supabase library failed to load.");
     try {
