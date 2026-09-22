@@ -414,7 +414,11 @@ window.ALIGN_SCRIPTURE = (() => {
   };
 
   const save = (data) => {
+    data.updated_at = new Date().toISOString();
     localStorage.setItem(LS, JSON.stringify(data));
+    try {
+      if (window.AlignDB && AlignDB.saveScripture) AlignDB.saveScripture(data);
+    } catch { /* local copy still good */ }
     return data;
   };
 

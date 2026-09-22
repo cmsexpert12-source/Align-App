@@ -42,8 +42,24 @@ body {
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation;
 }
-button, input { font-family: inherit; color: inherit; }
+button, input, textarea, select { font-family: inherit; color: inherit; }
 button { cursor: pointer; border: 0; background: none; }
+input, textarea, select {
+  color: var(--text);
+  caret-color: var(--lime);
+  color-scheme: dark;
+  -webkit-text-fill-color: var(--text);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--faint);
+  -webkit-text-fill-color: var(--faint);
+  opacity: 1;
+}
+input:-webkit-autofill, textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--lime);
+  transition: background-color 9999s ease-out;
+}
 img { max-width: 100%; display: block; }
 
 .app {
@@ -782,12 +798,36 @@ img { max-width: 100%; display: block; }
 
 .prio { margin-bottom: 10px; }
 .prio label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 6px; }
+.prio input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  padding: 14px 14px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  caret-color: var(--lime);
+  -webkit-text-fill-color: var(--text);
+  outline: none;
+}
+.prio input:focus { border-color: var(--lime); }
 .task-row {
   display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px;
 }
-.task-row input[type="text"] { background: transparent; border: 0; padding: 8px 4px; font-size: 15px; outline: none; width: 100%; }
-.task-row.done input { text-decoration: line-through; color: var(--muted); }
+.task-row input, .task-row input[type="text"] {
+  background: transparent;
+  border: 0;
+  padding: 8px 4px;
+  font-size: 16px;
+  outline: none;
+  width: 100%;
+  color: var(--text);
+  caret-color: var(--lime);
+  -webkit-text-fill-color: var(--text);
+}
+.task-row.done input { text-decoration: line-through; color: var(--muted); -webkit-text-fill-color: var(--muted); }
 
 .word-hub { padding: 8px 16px calc(var(--nav-h) + var(--safe-b) + 16px); }
 .big-link {
@@ -801,8 +841,12 @@ img { max-width: 100%; display: block; }
   width: 100%; min-height: 140px; background: var(--surface); border: 1px solid var(--line-2);
   border-radius: 16px; padding: 14px; font-size: 16px; outline: none; resize: vertical; color: var(--text);
   line-height: 1.45;
+  font-family: inherit;
+  caret-color: var(--lime);
+  -webkit-text-fill-color: var(--text);
 }
 .note-box:focus { border-color: var(--lime); }
+.field textarea.note-box { font-size: 16px; font-family: inherit; min-height: 140px; }
 
 .clocks {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
@@ -1183,3 +1227,47 @@ img { max-width: 100%; display: block; }
 .pulse-stats div { text-align: left; }
 .pulse-stats b { display: block; font-size: 16px; font-weight: 800; }
 .pulse-stats span { font-size: 11px; color: var(--muted); }
+
+.plan-now {
+  margin: 0 16px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 14px 10px;
+  text-align: left;
+}
+.plan-now .section-h { margin-bottom: 8px; }
+.plan-pri {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.plan-pri:last-of-type { border-bottom: 0; }
+.plan-pri span {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: rgba(214,255,63,.14); color: var(--lime);
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 800;
+}
+.plan-pri p { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.plan-task {
+  font-size: 13px; color: var(--muted); padding: 6px 0 2px; line-height: 1.4;
+}
+.plan-task.done { text-decoration: line-through; opacity: .7; }
+.plan-note-preview {
+  font-size: 13px; color: var(--muted); line-height: 1.45; margin-top: 8px; white-space: pre-wrap;
+}
+.saved-banner {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(214,255,63,.1);
+  border: 1px solid rgba(214,255,63,.28);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.saved-banner b { color: var(--lime); }

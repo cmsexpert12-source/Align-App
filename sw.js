@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v16";
+const CACHE = "align-v17";
 const ASSETS = [
   "./",
   "./index.html",
@@ -16,17 +16,14 @@ const ASSETS = [
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/apple-touch-icon.png",
-  "./assets/favicon-32.png",
-  "./assets/hero-onboard.png",
-  "./assets/done-burst.png",
-  "./data/spurgeon.json",
-  "./vendor/pdfjs/pdf.min.js",
-  "./vendor/pdfjs/pdf.worker.min.js"
+  "./assets/favicon-32.png"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) =>
+      Promise.all(ASSETS.map((u) => cache.add(u).catch(() => {})))
+    ).then(() => self.skipWaiting())
   );
 });
 

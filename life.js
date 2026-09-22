@@ -151,6 +151,9 @@ window.ALIGN_LIFE = (() => {
     return { start: { book: c.book, chapter: c.chapter }, read: [], next: { book: c.book, chapter: c.chapter } };
   };
 
+  const stamp = (obj) => Object.assign({}, obj, { updated_at: new Date().toISOString() });
+  const ts = (v) => Date.parse((v && v.updated_at) || v || "") || 0;
+
   const planOf = (iso) => {
     const all = loadJSON(LS_P, {});
     if (!all[iso]) all[iso] = { priorities: ["", "", ""], tasks: [], note: "" };
@@ -158,8 +161,9 @@ window.ALIGN_LIFE = (() => {
   };
   const savePlan = (iso, plan) => {
     const all = loadJSON(LS_P, {});
-    all[iso] = plan;
+    all[iso] = stamp(plan || {});
     saveJSON(LS_P, all);
+    return all[iso];
   };
 
   const journalOf = (iso) => {
@@ -169,8 +173,21 @@ window.ALIGN_LIFE = (() => {
   };
   const saveJournal = (iso, j) => {
     const all = loadJSON(LS_J, {});
-    all[iso] = j;
+    all[iso] = stamp(j || {});
     saveJSON(LS_J, all);
+    return all[iso];
+  };
+
+  const mergeByTime = (localMap, rows, pick) => {
+    (rows || []).forEach((r) => {
+      const remote = pick(r);
+      const local = localMap[r.date];
+      const rAt = ts(r.updated_at || (remote && remote.updated_at));
+      const lAt = ts(local);
+      if (!local) localMap[r.date] = remote;
+      else if (rAt > lAt) localMap[r.date] = remote;
+    });
+    return localMap;
   };
 
   let votdCache = null;
@@ -187,6 +204,7 @@ window.ALIGN_LIFE = (() => {
     return votdCache;
   };
 
+  const LS_SP = "align-spurgeon-day";
   let spurgeon = null;
   const loadSpurgeon = async () => {
     if (spurgeon) return spurgeon;
@@ -196,11 +214,20 @@ window.ALIGN_LIFE = (() => {
   };
 
   const todaySpurgeon = async (which, date = new Date()) => {
-    const list = await loadSpurgeon();
     const m = date.getMonth() + 1;
     const d = date.getDate();
     const t = which === "pm" ? "pm" : "am";
-    return list.find((x) => x.m === m && x.d === d && x.t === t) || list.find((x) => x.m === m && x.d === d) || null;
+    const key = m + "-" + d;
+    try {
+      const cached = JSON.parse(localStorage.getItem(LS_SP) || "null");
+      if (cached && cached.key === key && cached[t]) return cached[t];
+    } catch { /* ignore */ }
+    const list = await loadSpurgeon();
+    const am = list.find((x) => x.m === m && x.d === d && x.t === "am") || list.find((x) => x.m === m && x.d === d) || null;
+    const pm = list.find((x) => x.m === m && x.d === d && x.t === "pm") || am;
+    try { localStorage.setItem(LS_SP, JSON.stringify({ key, am, pm })); } catch { /* quota */ }
+    spurgeon = null;
+    return t === "pm" ? pm : am;
   };
 
   const fetchODB = async () => {

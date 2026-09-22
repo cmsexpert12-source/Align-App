@@ -86,8 +86,30 @@ window.ALIGN_BOOKS = (() => {
     return lib;
   };
 
+  let pdfjsLoading = null;
+  const loadPdfjs = () => {
+    if (window.pdfjsLib) return Promise.resolve(ensurePdfjs());
+    if (pdfjsLoading) return pdfjsLoading;
+    pdfjsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "./vendor/pdfjs/pdf.min.js";
+      s.async = true;
+      s.onload = () => {
+        const lib = ensurePdfjs();
+        if (!lib) reject(new Error("The reader didn’t load."));
+        else resolve(lib);
+      };
+      s.onerror = () => {
+        pdfjsLoading = null;
+        reject(new Error("The reader didn’t load. Refresh once with a connection."));
+      };
+      document.head.appendChild(s);
+    });
+    return pdfjsLoading;
+  };
+
   const countPages = async (blob) => {
-    const lib = ensurePdfjs();
+    const lib = await loadPdfjs();
     if (!lib) return 0;
     const buf = await blob.arrayBuffer();
     const doc = await lib.getDocument({ data: buf }).promise;
@@ -238,6 +260,6 @@ window.ALIGN_BOOKS = (() => {
     loggedToday, markRead, dueToday,
     remaining, progress, targetEnd,
     mergeRemote, mergeRemoteLog,
-    ensurePdfjs, countPages, fmtSize, slotLabel, daysLabel
+    ensurePdfjs, loadPdfjs, countPages, fmtSize, slotLabel, daysLabel
   };
 })();

@@ -53,3 +53,8 @@ create policy "journals self" on public.journals
 drop policy if exists "bible self" on public.bible_state;
 create policy "bible self" on public.bible_state
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+alter table public.app_state enable row level security;
+drop policy if exists "app state self" on public.app_state;
+create policy "app state self" on public.app_state
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

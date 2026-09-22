@@ -129,22 +129,9 @@ window.AlignDB = (() => {
     return ok(data);
   };
 
-  const saveWorkout = async (row) => {
-    const sb = client();
-    if (!sb) return ok(null);
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return ok(null);
-    const { error } = await sb.from("workouts").insert({
-      user_id: u.user.id,
-      date: row.date,
-      day_id: row.dayId,
-      minutes: row.minutes,
-      completed: row.completed,
-      total: row.total,
-      log: row.log || []
-    });
-    if (error) return fail(error);
-    return ok(true);
+  const saveWorkout = async (row, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("workout", (row.date || "") + "|" + (row.dayId || ""), row, opts && opts.now);
   };
 
   const fetchWorkouts = async () => {
@@ -234,70 +221,155 @@ window.AlignDB = (() => {
     return (u && u.user && u.user.id) || null;
   };
 
-  const saveMorning = async (iso, steps) => {
+  const LS_OUT = "align-outbox";
+  const readOut = () => {
+    try { return JSON.parse(localStorage.getItem(LS_OUT) || "[]") || []; } catch { return []; }
+  };
+  const writeOut = (arr) => {
+    try { localStorage.setItem(LS_OUT, JSON.stringify((arr || []).slice(-80))); } catch { /* quota */ }
+  };
+  const missingTable = (err) => /does not exist|schema cache|Could not find the table/i.test((err && err.message) || String(err || ""));
+  const enqueue = (kind, key, payload) => {
+    const q = readOut().filter((x) => !(x.kind === kind && x.key === key));
+    q.push({ kind, key, payload, t: Date.now() });
+    writeOut(q);
+  };
+  const pendingCount = () => readOut().length;
+
+  let flushing = false;
+  let flushTimer = null;
+  const scheduleFlush = (ms = 700) => {
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => { flush(); }, ms);
+  };
+
+  const pushRow = async (item) => {
     const sb = client();
     const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const { error } = await sb.from("mornings").upsert({
-      user_id: userId, date: iso, steps: steps || {}, updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
+    if (!sb || !userId) return { keep: true };
+    const now = new Date().toISOString();
+    const p = item.payload || {};
+    let error = null;
+    if (item.kind === "morning") {
+      ({ error } = await sb.from("mornings").upsert({
+        user_id: userId, date: p.iso, steps: p.steps || {}, updated_at: now
+      }));
+    } else if (item.kind === "plan") {
+      ({ error } = await sb.from("day_plans").upsert({
+        user_id: userId, date: p.iso, payload: p.plan || {}, updated_at: now
+      }));
+    } else if (item.kind === "journal") {
+      ({ error } = await sb.from("journals").upsert({
+        user_id: userId, date: p.iso, payload: p.payload || {}, updated_at: now
+      }));
+    } else if (item.kind === "bible") {
+      ({ error } = await sb.from("bible_state").upsert({
+        user_id: userId,
+        book: p.book || "Genesis",
+        chapter: p.chapter || 1,
+        log: p.log || [],
+        updated_at: now
+      }));
+    } else if (item.kind === "scripture") {
+      ({ error } = await sb.from("app_state").upsert({
+        user_id: userId, scripture: p || {}, updated_at: now
+      }));
+    } else if (item.kind === "workout") {
+      ({ error } = await sb.from("workouts").insert({
+        user_id: userId,
+        date: p.date,
+        day_id: p.dayId,
+        minutes: p.minutes,
+        completed: p.completed,
+        total: p.total,
+        log: p.log || []
+      }));
+    } else {
+      return { keep: false };
+    }
+    if (!error) return { keep: false };
+    if (missingTable(error)) return { keep: false };
+    return { keep: true, error: error.message };
+  };
+
+  const flush = async () => {
+    if (flushing) return ok(true);
+    const q = readOut();
+    if (!q.length) return ok(true);
+    const sb = client();
+    if (!sb || !(await uidOf())) return ok(null);
+    flushing = true;
+    const left = [];
+    let lastErr = null;
+    for (const item of q) {
+      try {
+        const res = await pushRow(item);
+        if (res.keep) {
+          left.push(item);
+          if (res.error) lastErr = res.error;
+        }
+      } catch (e) {
+        left.push(item);
+        lastErr = e && e.message ? e.message : String(e);
+      }
+    }
+    writeOut(left);
+    flushing = false;
+    if (lastErr && left.length) return fail(lastErr);
     return ok(true);
   };
 
-  const saveDayPlan = async (iso, plan) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const { error } = await sb.from("day_plans").upsert({
-      user_id: userId, date: iso, payload: plan || {}, updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
-    return ok(true);
+  const queueAndFlush = (kind, key, payload, now) => {
+    enqueue(kind, key, payload);
+    if (now) return flush();
+    scheduleFlush();
+    return Promise.resolve(ok(true));
   };
 
-  const saveJournal = async (iso, payload) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const { error } = await sb.from("journals").upsert({
-      user_id: userId, date: iso, payload: payload || {}, updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
-    return ok(true);
+  const saveMorning = async (iso, steps, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("morning", iso, { iso, steps }, opts && opts.now);
   };
 
-  const saveBible = async (cursor) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const { error } = await sb.from("bible_state").upsert({
-      user_id: userId,
-      book: cursor.book || "Genesis",
-      chapter: cursor.chapter || 1,
-      log: cursor.log || [],
-      updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
-    return ok(true);
+  const saveDayPlan = async (iso, plan, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("plan", iso, { iso, plan }, opts && opts.now);
+  };
+
+  const saveJournal = async (iso, payload, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("journal", iso, { iso, payload }, opts && opts.now);
+  };
+
+  const saveBible = async (cursor, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("bible", "bible", cursor || {}, opts && opts.now);
+  };
+
+  const saveScripture = async (payload, opts) => {
+    if (!(await uidOf())) return ok(null);
+    return queueAndFlush("scripture", "scripture", payload || {}, opts && opts.now);
   };
 
   const pullLife = async () => {
     const sb = client();
     const userId = await uidOf();
     if (!sb || !userId) return ok(null);
-    const [m, p, j, b] = await Promise.all([
-      sb.from("mornings").select("date, steps").eq("user_id", userId),
-      sb.from("day_plans").select("date, payload").eq("user_id", userId),
-      sb.from("journals").select("date, payload").eq("user_id", userId),
-      sb.from("bible_state").select("book, chapter, log").eq("user_id", userId).maybeSingle()
+    const [m, p, j, b, a] = await Promise.all([
+      sb.from("mornings").select("date, steps, updated_at").eq("user_id", userId),
+      sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId),
+      sb.from("journals").select("date, payload, updated_at").eq("user_id", userId),
+      sb.from("bible_state").select("book, chapter, log, updated_at").eq("user_id", userId).maybeSingle(),
+      sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle()
     ]);
-    if (m.error && /does not exist|schema cache/i.test(m.error.message || "")) return ok(null);
+    if (m.error && missingTable(m.error)) return ok(null);
     return ok({
-      mornings: (m.data || []).map((r) => ({ date: r.date, steps: r.steps })),
-      plans: (p.data || []).map((r) => ({ date: r.date, payload: r.payload })),
-      journals: (j.data || []).map((r) => ({ date: r.date, payload: r.payload })),
-      bible: b.data || null
+      mornings: (m.data || []).map((r) => ({ date: r.date, steps: r.steps, updated_at: r.updated_at })),
+      plans: (p.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
+      journals: (j.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
+      bible: b.data || null,
+      scripture: (a.data && a.data.scripture) || null,
+      scriptureAt: (a.data && a.data.updated_at) || null
     });
   };
 
@@ -415,8 +487,15 @@ window.AlignDB = (() => {
     session, onAuth, signUp, signIn, magicLink, resetPassword, signOut,
     upsertProfile, fetchProfile, saveWorkout, fetchWorkouts,
     savePushSub, deletePushSub, savePrefs, fetchPrefs, testConnection,
-    saveMorning, saveDayPlan, saveJournal, saveBible, pullLife,
+    saveMorning, saveDayPlan, saveJournal, saveBible, saveScripture, pullLife,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
-    downloadBookFile, deleteBookRemote, saveReadingLog
+    downloadBookFile, deleteBookRemote, saveReadingLog,
+    flush, pendingCount
   };
 })();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => {
+    try { if (window.AlignDB) window.AlignDB.flush(); } catch { /* ignore */ }
+  });
+}

@@ -71,7 +71,8 @@
     ai: { open: false, busy: false, input: "", reply: "", error: "", provider: "", model: "" },
     verseSess: null,
     drill: null,
-    readPacks: []
+    readPacks: [],
+    planJustSaved: false
   };
 
   /* ---------- SVG poses ---------- */
@@ -308,14 +309,22 @@
       const Life = window.ALIGN_LIFE;
       const mAll = JSON.parse(localStorage.getItem("align-morning") || "{}");
       (life.data.mornings || []).forEach((r) => {
-        mAll[r.date] = { ...(mAll[r.date] || {}), ...(r.steps || {}) };
+        const local = mAll[r.date] || {};
+        const steps = { ...local };
+        Object.keys(r.steps || {}).forEach((k) => {
+          if (r.steps[k] || local[k]) steps[k] = true;
+          else if (!(k in steps)) steps[k] = !!r.steps[k];
+        });
+        mAll[r.date] = steps;
       });
       localStorage.setItem("align-morning", JSON.stringify(mAll));
       const pAll = JSON.parse(localStorage.getItem("align-plans") || "{}");
-      (life.data.plans || []).forEach((r) => { pAll[r.date] = r.payload || pAll[r.date]; });
+      if (Life && Life.mergeByTime) Life.mergeByTime(pAll, life.data.plans, (r) => r.payload || {});
+      else (life.data.plans || []).forEach((r) => { pAll[r.date] = r.payload || pAll[r.date]; });
       localStorage.setItem("align-plans", JSON.stringify(pAll));
       const jAll = JSON.parse(localStorage.getItem("align-journal") || "{}");
-      (life.data.journals || []).forEach((r) => { jAll[r.date] = r.payload || jAll[r.date]; });
+      if (Life && Life.mergeByTime) Life.mergeByTime(jAll, life.data.journals, (r) => r.payload || {});
+      else (life.data.journals || []).forEach((r) => { jAll[r.date] = r.payload || jAll[r.date]; });
       localStorage.setItem("align-journal", JSON.stringify(jAll));
       if (life.data.bible && Life) {
         const c = Life.bibleCursor();
@@ -324,7 +333,16 @@
           Life.setBibleCursor({ book: life.data.bible.book, chapter: life.data.bible.chapter, log: remoteLog });
         }
       }
+      if (life.data.scripture) {
+        try {
+          const local = JSON.parse(localStorage.getItem("align-scripture") || "null") || {};
+          const rAt = Date.parse(life.data.scriptureAt || life.data.scripture.updated_at || "") || 0;
+          const lAt = Date.parse(local.updated_at || "") || 0;
+          if (!lAt || rAt > lAt) localStorage.setItem("align-scripture", JSON.stringify(life.data.scripture));
+        } catch { /* keep local SRS */ }
+      }
     }
+    try { await AlignDB.flush(); } catch { /* retry on next online */ }
     try {
       const remoteBooks = await AlignDB.fetchBooks();
       if (remoteBooks.ok && remoteBooks.data && remoteBooks.data.length) {
@@ -585,7 +603,7 @@
         }
       }
       if (!blob) throw new Error("This PDF isn’t on the phone yet. Open ALIGN online once to download it.");
-      const lib = B().ensurePdfjs();
+      const lib = await B().loadPdfjs();
       if (!lib) throw new Error("The reader didn’t load. Refresh once with a connection.");
       const buf = await blob.arrayBuffer();
       pdfDoc = await lib.getDocument({ data: buf }).promise;
@@ -1059,6 +1077,18 @@
         <button data-act="install-pwa">Add</button>
       </div>` : "";
 
+    const plan = L().planOf(t.iso);
+    const prios = (plan.priorities || []).map((x) => String(x || "").trim()).filter(Boolean);
+    const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
+    const planNote = String(plan.note || "").trim();
+    const planNow = (prios.length || planTasks.length || planNote) ? `
+        <div class="plan-now">
+          <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
+          ${prios.map((text, i) => `<div class="plan-pri"><span>${i + 1}</span><p>${escapeHtml(text)}</p></div>`).join("")}
+          ${planTasks.map((tk) => `<div class="plan-task ${tk.done ? "done" : ""}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</div>`).join("")}
+          ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
+        </div>` : "";
+
     const subFor = (s) => {
       if (s.id === "move") return moveDone ? "Session logged" : `${day.name} · ${day.minutes} min`;
       if (s.id === "word") {
@@ -1067,6 +1097,9 @@
       }
       if (s.id === "read") {
         return readDone ? "Sitting done" : s.sub;
+      }
+      if (s.id === "plan") {
+        return prios.length ? prios.join(" · ") : s.sub;
       }
       return s.sub;
     };
@@ -1131,6 +1164,7 @@
           <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
           <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
         </div>
+        ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
           <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
@@ -1984,26 +2018,32 @@
   const viewDayPlan = () => {
     const p = L().planOf(today().iso);
     const sunday = L().clocksFor(today().date).sunday;
+    const saved = !!state.planJustSaved;
+    const pri = (p.priorities || []).map((x) => String(x || "").trim());
+    const has = pri.some(Boolean) || (p.tasks || []).some((t) => t && String(t.text || "").trim()) || String(p.note || "").trim();
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">${sunday ? "Church morning" : "After the Word"}</div>
-          <h1>Plan the day.</h1>
-          <p>${sunday ? "Church is first. Keep the rest of the day light." : "Three things that would make today true. Then anything else."}</p>
+          <h1>${saved && has ? "Today’s plan." : "Plan the day."}</h1>
+          <p>${saved && has
+            ? (state.session ? "Saved on this device and your account." : "Saved on this device.")
+            : (sunday ? "Church is first. Keep the rest of the day light." : "Three things that would make today true. Then anything else.")}</p>
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
+          ${saved && has ? `<div class="saved-banner"><b>Saved.</b> This is the plan you’ll see on Today.</div>` : ""}
           ${[0,1,2].map((i) => `
             <div class="prio">
               <label>Priority ${i+1}</label>
-              <input id="prio-${i}" value="${escapeAttr(p.priorities[i] || "")}" placeholder="${["The one that matters","If there’s time","Only if the first two hold"][i]}" />
+              <input id="prio-${i}" type="text" autocomplete="off" autocorrect="off" value="${escapeAttr(p.priorities[i] || "")}" placeholder="${["The one that matters","If there’s time","Only if the first two hold"][i]}" />
             </div>
           `).join("")}
           <div class="section-h"><h4>Also</h4></div>
           ${(p.tasks || []).map((t, i) => `
             <div class="task-row ${t.done?"done":""}">
               <button class="check ${t.done?"done":""}" data-act="toggle-task" data-i="${i}" style="${t.done?"background:var(--lime);border-color:var(--lime)":""}">${t.done?"✓":""}</button>
-              <input data-task="${i}" value="${escapeAttr(t.text)}" />
+              <input type="text" autocomplete="off" data-task="${i}" value="${escapeAttr(t.text)}" />
             </div>
           `).join("")}
           <button class="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
@@ -2012,7 +2052,10 @@
           </div>
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="save-dayplan">Save plan</button>
+          ${saved
+            ? `<button class="btn" data-go="home">See it on Today</button>
+               <button class="btn ghost" style="margin-top:8px" data-act="edit-dayplan">Keep editing</button>`
+            : `<button class="btn" data-act="save-dayplan">Save plan</button>`}
         </div>
       </div>
     `;
@@ -2314,6 +2357,7 @@
       const p = L().planOf(iso);
       p.note = e.target.value;
       L().savePlan(iso, p);
+      AlignDB.saveDayPlan(iso, p);
     });
     [0,1,2].forEach((i) => {
       const el = document.getElementById("prio-" + i);
@@ -2322,6 +2366,7 @@
         const p = L().planOf(iso);
         p.priorities[i] = el.value;
         L().savePlan(iso, p);
+        AlignDB.saveDayPlan(iso, p);
       });
     });
     app.querySelectorAll("[data-task]").forEach((el) => {
@@ -2331,6 +2376,7 @@
         const i = Number(el.dataset.task);
         if (p.tasks[i]) p.tasks[i].text = el.value;
         L().savePlan(iso, p);
+        AlignDB.saveDayPlan(iso, p);
       });
     });
     ["auth-email", "auth-pass", "auth-name"].forEach((id) => {
@@ -2793,6 +2839,7 @@
         const a = L().todayAssignment(iso);
         openBible(a.next.book, a.next.chapter);
       } else if (step === "plan") {
+        state.planJustSaved = false;
         state.view = "dayplan";
         render();
       } else if (step === "ready") {
@@ -2874,16 +2921,22 @@
       p.priorities = [0,1,2].map((i) => ((document.getElementById("prio-" + i) || {}).value || ""));
       p.note = (document.getElementById("plan-note") || {}).value || "";
       L().savePlan(iso, p);
-      AlignDB.saveDayPlan(iso, p).catch(() => {});
+      const res = await AlignDB.saveDayPlan(iso, p, { now: true });
       completeStep("plan");
-      toast("Day planned");
-      state.view = "home";
+      state.planJustSaved = true;
+      state.view = "dayplan";
+      const cloud = !!(state.session && res && res.ok && res.data !== null);
+      toast(cloud ? "Plan saved" : (res && res.ok === false ? "Saved on this device — will sync" : "Plan saved on this device"));
+      render();
+    } else if (act === "edit-dayplan") {
+      state.planJustSaved = false;
       render();
     } else if (act === "add-task") {
       const iso = today().iso;
       const p = L().planOf(iso);
       p.tasks.push({ text: "", done: false });
       L().savePlan(iso, p);
+      AlignDB.saveDayPlan(iso, p);
       render();
     } else if (act === "toggle-task") {
       const iso = today().iso;
@@ -2891,6 +2944,7 @@
       const i = Number(el.dataset.i);
       if (p.tasks[i]) p.tasks[i].done = !p.tasks[i].done;
       L().savePlan(iso, p);
+      AlignDB.saveDayPlan(iso, p);
       render();
     } else if (act === "ready-start") {
       state.readyOn = true;
