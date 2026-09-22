@@ -1533,7 +1533,7 @@
           <h1>Plan the day.</h1>
           <p>${sunday ? "Church is first. Keep the rest of the day light." : "Three things that would make today true. Then anything else."}</p>
         </div>
-        <div style="padding:0 16px 20px">
+        <div class="scroll-body" style="padding:0 16px 20px">
           ${[0,1,2].map((i) => `
             <div class="prio">
               <label>Priority ${i+1}</label>
@@ -1656,7 +1656,7 @@
           <h1>${escapeHtml(b.title)}</h1>
           <p>Schedule a sitting. The file stays on this phone for offline reading.</p>
         </div>
-        <div style="padding:0 16px 20px">
+        <div class="scroll-body" style="padding:0 16px 20px">
           <div class="field"><label>Title</label>
             <input id="book-title" value="${escapeAttr(b.title)}" />
           </div>

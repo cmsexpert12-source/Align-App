@@ -476,8 +476,22 @@ img { max-width: 100%; display: block; }
 
 /* overlay screens that hide nav */
 .full { position: absolute; inset: 0; background: var(--bg); z-index: 12; overflow: auto; height: 100%; }
-.full.has-cta { overflow: hidden; display: flex; flex-direction: column; }
-.full.has-cta .ex-list { flex: 1; overflow-y: auto; min-height: 0; }
+.full.has-cta { overflow: hidden; display: flex; flex-direction: column; animation: none; }
+.full.has-cta .back-row,
+.full.has-cta .page-title,
+.full.has-cta .why,
+.full.has-cta .sticky-cta,
+.full.has-cta .pdf-tools { flex-shrink: 0; }
+.full.has-cta .ex-list,
+.full.has-cta .scripture,
+.full.has-cta .scroll-body,
+.full.has-cta .pdf-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
 
 .hidden { display: none !important; }
 
@@ -748,7 +762,7 @@ img { max-width: 100%; display: block; }
 .acts b { display: block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--lime); margin-bottom: 4px; }
 .acts p { font-size: 13px; color: var(--muted); line-height: 1.4; }
 
-.scripture { padding: 8px 22px 110px; }
+.scripture { padding: 8px 22px 20px; }
 .scripture .ref {
   font-family: var(--display); font-size: 26px; letter-spacing: -.03em; margin: 6px 0 14px;
 }
