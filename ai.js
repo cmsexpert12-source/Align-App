@@ -73,11 +73,6 @@ window.ALIGN_AI = (() => {
     return server;
   };
 
-  const hasKeys = () => {
-    const k = keysOf();
-    return !!(server.ready || k.gemini || k.groq);
-  };
-
   let lastOk = null;
 
   const callServer = async (system, user, prefer) => {
@@ -191,15 +186,35 @@ window.ALIGN_AI = (() => {
     throw last || new Error(label + " failed");
   };
 
+  const hasKeys = () => {
+    const k = keysOf();
+    if (k.gemini || k.groq || server.ready) return true;
+    return !server.checked;
+  };
+
   const ask = async ({ prompt, context, extraSystem }) => {
     const keys = keysOf();
-    if (!keys.gemini && !keys.groq) {
-      const err = new Error("Add a Gemini or Groq key in You → AI.");
-      err.code = "no-keys";
-      throw err;
-    }
     const system = [BASE, extraSystem || "", context || ""].filter(Boolean).join("\n\n");
     const prefer = keys.prefer;
+
+    if (!server.checked) await probe();
+
+    try {
+      const res = await callServer(system, prompt, prefer);
+      lastOk = { provider: res.provider, model: res.model };
+      server.ready = true;
+      if (res.provider === "gemini") server.gemini = true;
+      if (res.provider === "groq") server.groq = true;
+      return res;
+    } catch (e) {
+      if (!keys.gemini && !keys.groq) {
+        const msg = (e && e.message) ? e.message : "ALIGN AI is not reachable. Check Vercel keys and redeploy.";
+        const err = new Error(msg);
+        err.code = "no-keys";
+        throw err;
+      }
+    }
+
     let order;
     if (prefer === "groq") order = ["groq", "gemini"];
     else if (prefer === "gemini") order = ["gemini", "groq"];
@@ -218,8 +233,7 @@ window.ALIGN_AI = (() => {
         lastErr = e;
       }
     }
-    const err = lastErr || new Error("Both Gemini and Groq are unavailable.");
-    throw err;
+    throw lastErr || new Error("Both Gemini and Groq are unavailable.");
   };
 
   const label = (res) => {
