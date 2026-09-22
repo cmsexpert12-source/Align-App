@@ -184,6 +184,7 @@ Open `http://localhost:8080`. Same Supabase backend.
 - [ ] `schema.sql` run
 - [ ] `schema-life.sql` run
 - [ ] `schema-books.sql` run (Storage bucket `reading` exists)
+- [ ] `schema-sounds.sql` run (public library + Storage bucket `sounds`)
 - [ ] Create account from the live URL
 - [ ] `GEMINI_API_KEY` and/or `GROQ_API_KEY` set in Vercel, then redeploy
 - [ ] You → Intelligence → Test connection
