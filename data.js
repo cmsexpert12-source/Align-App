@@ -1,4 +1,4 @@
-/* ALIGN — your week, rebalanced from the Day 22–28 screenshots. */
+/* ALIGN — bodyweight week: push, pull, legs, core, recover */
 window.ALIGN_DATA = (() => {
   const E = (id, name, pattern, muscles, kind, svg, cues, original = false, alts = []) => ({
     id, name, pattern, muscles, kind, svg, cues, original, alts
@@ -148,13 +148,13 @@ window.ALIGN_DATA = (() => {
     {
       id: "sun-push",
       dow: 0,
-      name: "Church Push",
+      name: "Sunday Push",
       short: "Push",
-      subtitle: "Short push · leave 5:45",
+      subtitle: "Express · church morning",
       minutes: 12,
       pattern: "push",
-      origin: "Your Sunday (Day 22) — cut so you can leave for church by 5:45.",
-      why: "Rise 4:00, out the door 5:45. One round of the push-ups you actually do — no second pass, no decline. Friday still carries the full upper mix.",
+      origin: "Sunday mode · leave by 5:45",
+      why: "Twelve minutes of push so the rest of the morning stays free: pray, one chapter, out the door.",
       items: [
         item("jumping-jacks", 20),
         item("arm-circles", 12),
@@ -174,8 +174,8 @@ window.ALIGN_DATA = (() => {
       subtitle: "Abs, obliques, glutes",
       minutes: 26,
       pattern: "core",
-      origin: "Your Monday (Day 23) — kept, with hips added.",
-      why: "Your abs circuit stays. The extra sit-up round is swapped for single-leg bridges, dead bugs, and bird dogs so the core trains in more than one direction.",
+      origin: "The trunk that holds the week",
+      why: "A serious abs circuit, plus hips and anti-extension so your core works in more than one direction.",
       items: [
         item("jumping-jacks", 30),
         item("crunches-raised", 20),
@@ -205,8 +205,8 @@ window.ALIGN_DATA = (() => {
       subtitle: "Back, rear delts, scapula",
       minutes: 28,
       pattern: "pull",
-      origin: "Your Tuesday (Day 24) — same back work, less extra pressing.",
-      why: "Y-raises, snow angels, hyperextensions and hover push-ups stay. Pike dips are cut down. Towel rows, T-raises and a Superman hold give you an actual pull so pushing doesn't win every week.",
+      origin: "The other half of every press",
+      why: "Floor back work plus rows, so pushing never owns the week.",
       items: [
         item("jumping-jacks", 30),
         item("inchworms", 8),
@@ -231,13 +231,13 @@ window.ALIGN_DATA = (() => {
     {
       id: "wed-legs",
       dow: 3,
-      name: "Legs Found",
+      name: "Lower Body",
       short: "Legs",
       subtitle: "Quads, glutes, hamstrings, calves",
       minutes: 30,
       pattern: "legs",
-      origin: "New. Replaces Wednesday's third push-up marathon (Day 25).",
-      why: "Across seven days the only lower-body work was glute bridges on Monday. This is the biggest gap. Same home floor, no gear, 30 minutes that finally trains the other half of you.",
+      origin: "Home floor. No gear.",
+      why: "Squats, lunges, hinges, calves — the work most morning routines skip.",
       items: [
         item("jumping-jacks", 30),
         item("arm-circles", 12),
@@ -270,8 +270,8 @@ window.ALIGN_DATA = (() => {
       subtitle: "Abs, anti-extension, sides",
       minutes: 24,
       pattern: "core",
-      origin: "Your Thursday (Day 26) — same circuit, smarter second half.",
-      why: "Sit-ups, bicycles, Russian twists, mountain climbers and leg raises stay. The second identical round is replaced with a hollow hold and a shorter plank so your spine isn't only trained by crunching.",
+      origin: "Second core day, cleaner finish",
+      why: "The abs circuit, finished with hollow and plank instead of another crunch round.",
       items: [
         item("jumping-jacks", 30),
         item("sit-ups", 18),
@@ -300,8 +300,8 @@ window.ALIGN_DATA = (() => {
       subtitle: "Shoulders, triceps, back",
       minutes: 28,
       pattern: "push",
-      origin: "Your Friday (Day 27) — pike, dips, reverse push-ups, plus the back circuit.",
-      why: "This still feels like your Friday. Knee push-ups, dips, pikes and reverse push-ups stay. The back-bow / Y-raise / snow-angel block stays. A little less grinding so Saturday recovery actually works.",
+      origin: "The full upper day",
+      why: "Pikes, dips, reverse push-ups, and the back circuit. Saturday can actually recover.",
       items: [
         item("jumping-jacks", 30),
         item("burpees", 6),
@@ -325,13 +325,13 @@ window.ALIGN_DATA = (() => {
     {
       id: "sat-recover",
       dow: 6,
-      name: "Recover & Move",
+      name: "Recover",
       short: "Recover",
       subtitle: "Mobility, easy legs, breathing",
       minutes: 16,
       pattern: "mobility",
-      origin: "New. Replaces Saturday's third full push day (Day 28).",
-      why: "Seven hard days in a row is why shoulders get cranky. You still open the app, you still move, you just don't beat the same joints up. Light squats and bridges keep the new legs work alive.",
+      origin: "You still open the app",
+      why: "Open the joints, breathe, keep the legs alive. No grinding the same pattern a third time.",
       items: [
         item("jumping-jacks", 20),
         item("arm-circles", 15),
@@ -358,20 +358,20 @@ window.ALIGN_DATA = (() => {
     neu: { push: 28, pull: 22, legs: 24, core: 22, mobility: 18 },
     findings: [
       {
-        title: "Push was the whole week",
-        body: "Sunday, Wednesday and Saturday were almost entirely push-up variations. Tuesday and Friday added pikes, dips and reverse push-ups. That's five pressing days."
+        title: "Push is a day, not the week",
+        body: "Sunday is a twelve-minute press. Friday carries the full upper mix. The other days train something else, so shoulders last."
       },
       {
-        title: "Legs were a cameo",
-        body: "The only real lower-body work in the screenshots was glute bridges on Monday. No squats, lunges, calves, hinges. That's the gap that was throwing everything off."
+        title: "Legs get a real session",
+        body: "Wednesday is lower body: squats, lunges, hinges, calves. Saturday keeps a light dose so the pattern sticks."
       },
       {
-        title: "Pull was floor-only",
-        body: "Back-bow pulls, Y-raises, snow angels and hyperextensions are good. They aren't rows. Without a pull, the chest work you love will keep pulling your shoulders forward."
+        title: "Pull keeps the shoulders honest",
+        body: "Floor back work plus rows. Without a pull, all that pressing drifts the posture forward."
       },
       {
-        title: "Core was already strong",
-        body: "Monday and Thursday abs days are serious. We kept them and added anti-extension (dead bug, hollow) so it's not only sit-ups."
+        title: "Core trains more than crunching",
+        body: "Monday and Thursday stay serious. Dead bugs, hollow, and side work so the spine is trained in more than one direction."
       }
     ]
   };

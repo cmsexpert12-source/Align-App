@@ -1,7 +1,7 @@
 {
   "name": "ALIGN",
   "short_name": "ALIGN",
-  "description": "Wake, train, pray, Word, plan, go. The morning in one app.",
+  "description": "The morning operating system. Wake, train, pray, Word, plan, go.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

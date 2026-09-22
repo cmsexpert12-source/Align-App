@@ -1,4 +1,4 @@
-/* ALIGN — personal trainer app */
+/* ALIGN — morning operating system */
 (() => {
   const { exercises, days, insights, restAfter } = window.ALIGN_DATA;
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -143,7 +143,7 @@
   };
 
   const initials = () => {
-    const n = (state.profile.name || "You").trim();
+    const n = (state.profile.name || "A").trim();
     const p = n.split(/\s+/);
     return ((p[0]?.[0] || "Y") + (p[1]?.[0] || "")).toUpperCase();
   };
@@ -256,7 +256,7 @@
   const sendTestPush = async () => {
     const day = todayDay();
     const title = "ALIGN";
-    const body = `Today is ${day.name} · ${day.minutes} min. Let’s train.`;
+    const body = `${day.name} · ${day.minutes} min. The morning is waiting.`;
     if (state.session && AlignDB.configured() && AlignDB.client()) {
       try {
         const sb = AlignDB.client();
@@ -359,14 +359,14 @@
           <button class="btn ghost" style="margin-top:10px" data-act="sheet-no">${escapeHtml(state.sheet.cancel || "Cancel")}</button>
         </div>
       </div>` : ""}
-    ${!hideFab && !state.ai.open ? `<button class="ai-fab ${withNav ? "up" : "low"}" data-act="ai-open" title="Ask ALIGN">AI</button>` : ""}
+    ${!hideFab && !state.ai.open ? `<button class="ai-fab ${withNav ? "up" : "low"}" data-act="ai-open" title="Ask ALIGN">${stepIcon("spark")}</button>` : ""}
     ${state.ai.open ? `
       <div class="ai-bg" data-act="ai-close">
         <div class="ai-sheet" data-act="ai-nop">
           <div class="grab"></div>
           <div class="page-title" style="padding:0 0 8px">
             <div class="tag">ALIGN · AI</div>
-            <h1 style="font-size:24px;margin:4px 0 0">Ask.</h1>
+            <h1 style="font-size:24px;margin:4px 0 0">Ask ALIGN</h1>
           </div>
           <div class="ai-chips">
             ${chips.map((c, i) => `<button data-act="ai-chip" data-i="${i}">${escapeHtml(c[0])}</button>`).join("")}
@@ -374,11 +374,11 @@
           <div class="ai-reply">
             ${state.ai.busy ? `<p class="hint">Thinking…</p>` : ""}
             ${state.ai.error ? `<div class="err">${escapeHtml(state.ai.error)}</div>` : ""}
-            ${state.ai.reply ? escapeHtml(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">${(window.ALIGN_AI && ALIGN_AI.hasKeys()) ? "Short answers. Gemini first, Groq if Gemini is down." : "Add a Gemini or Groq key in You → AI."}</p>` : "")}
+            ${state.ai.reply ? escapeHtml(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">${(window.ALIGN_AI && ALIGN_AI.hasKeys()) ? "Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down." : "Add a free Gemini or Groq key in You → Intelligence."}</p>` : "")}
           </div>
           ${state.ai.provider ? `<div class="ai-via">${escapeHtml((state.ai.provider === "groq" ? "Groq" : "Gemini") + " · " + state.ai.model)}</div>` : ""}
           <div class="ai-row">
-            <textarea id="ai-input" rows="2" placeholder="Ask about today…">${escapeHtml(state.ai.input || "")}</textarea>
+            <textarea id="ai-input" rows="2" placeholder="Ask about this morning…">${escapeHtml(state.ai.input || "")}</textarea>
             <button class="btn" style="width:72px;height:44px" data-act="ai-send">${state.ai.busy ? "…" : "Go"}</button>
           </div>
         </div>
@@ -402,6 +402,7 @@
       steps.splice(at, 0, {
         id: "read",
         title: "Read",
+        icon: "read",
         sub: first.title + " · " + (first.pages_per_day || 8) + " pages"
       });
     }
@@ -681,6 +682,25 @@
     you: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.2-3.2 3.6-5 7-5s5.8 1.8 7 5"/></svg>`
   };
 
+  const stepIcon = (name) => {
+    const s = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+    const map = {
+      rise: `<circle cx="12" cy="12" r="4" ${s}/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4" ${s}/>`,
+      move: `<circle cx="12" cy="5" r="2.2" ${s}/><path d="M12 8.5v4.5M8 21l4-9 4 9M5 13h14" ${s}/>`,
+      pray: `<path d="M12 5v6M9.5 8.5h5" ${s}/><path d="M8 20c0-2.8 1.8-4.5 4-4.5s4 1.7 4 4.5" ${s}/>`,
+      book: `<path d="M5 5h9a3 3 0 0 1 3 3v12H8a3 3 0 0 0-3 3V5z" ${s}/><path d="M14 5h5v15h-8" ${s}/>`,
+      word: `<path d="M5 5h9a3 3 0 0 1 3 3v12H8a3 3 0 0 0-3 3V5z" ${s}/><path d="M14 5h5v15h-8" ${s}/>`,
+      plan: `<rect x="5" y="4" width="14" height="16" rx="2" ${s}/><path d="M8 9h8M8 13h6" ${s}/>`,
+      ready: `<path d="M8 12l3 3 5-6" ${s}/><circle cx="12" cy="12" r="9" ${s}/>`,
+      go: `<path d="M5 12h12M13 6l6 6-6 6" ${s}/>`,
+      read: `<path d="M4 19V6a2 2 0 0 1 2-2h5v15H6a2 2 0 0 0-2 2z" ${s}/><path d="M13 4h5a2 2 0 0 1 2 2v13h-7V4z" ${s}/>`,
+      spark: `<path d="M12 3l1.2 6.2L19 12l-5.8 2.8L12 21l-1.2-6.2L5 12l5.8-2.8L12 3z" ${s}/>`,
+      bell: `<path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" ${s}/><path d="M10 21h4" ${s}/>`,
+      key: `<circle cx="8" cy="12" r="3" ${s}/><path d="M11 12h9l-2 2 2 2" ${s}/>`
+    };
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${map[name] || map.move}</svg>`;
+  };
+
   const nav = (active) => `
     <nav class="nav">
       <button data-go="home" class="${active==="home"?"on":""}">${iconNav.home}Today</button>
@@ -702,54 +722,51 @@
     <div class="screen splash">
       <div class="logo">${markSvg()}</div>
       <h1>ALIGN</h1>
-      <p>Your routine, rebalanced</p>
+      <p>The morning, in one place</p>
     </div>
   `;
 
   const viewOnboard = () => {
     const step = state.onboard;
-    const vol = weekVolume();
     const bodies = [
       `
         <img class="hero-art" src="./assets/hero-onboard.png" alt="" />
-        <div class="kicker">The morning OS</div>
-        <h1>Wake. Train.<br>Word. Go.</h1>
-        <p class="lead">One app from the alarm to out the door. Training is a step — then prayer, devotion, Scripture, the day.</p>
+        <div class="kicker">Morning OS</div>
+        <h1>The morning,<br>in one place.</h1>
+        <p class="lead">Wake, train, pray, Word, plan, go. Training is a step — not the whole product. Stay in ALIGN until you’re out the door.</p>
         <div class="stat-row">
-          <div class="stat"><b>4</b><span>am Sunday rise</span></div>
-          <div class="stat"><b>1</b><span>chapter on Sunday</span></div>
-          <div class="stat"><b>5:45</b><span>leave for church</span></div>
-          <div class="stat"><b>0</b><span>other apps needed</span></div>
+          <div class="stat"><b>8</b><span>steps each morning</span></div>
+          <div class="stat"><b>7</b><span>days, one to recover</span></div>
+          <div class="stat"><b>1</b><span>app until you’re out</span></div>
+          <div class="stat"><b>0</b><span>tabs to hunt</span></div>
         </div>
       `,
       `
-        <div class="kicker">The diagnosis</div>
-        <h1>Push was winning.</h1>
-        <p class="lead">Share of movement slots in your old week vs the ALIGN week.</p>
-        <div class="compare" style="margin-top:18px">
-          <div class="col">
-            <h5>Before</h5>
-            ${barCol(insights.old)}
-          </div>
-          <div class="col">
-            <h5>Align</h5>
-            ${barCol(insights.neu)}
-          </div>
-        </div>
-      `,
-      `
-        <div class="kicker">What changed</div>
-        <h1>Keep the engine.<br>Fill the gaps.</h1>
+        <div class="kicker">The path</div>
+        <h1>Same order.<br>Every day.</h1>
+        <p class="lead">A quiet sequence so the morning doesn’t have to be decided twice.</p>
         <div class="keep-list">
-          <div class="keep"><div class="ic" style="background:#ff6b4a22;color:#ff6b4a">P</div><div><h4>Push stays</h4><p>Sunday is a 12-minute church push. Friday still has pikes, dips, reverse push-ups.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#ffb02022;color:#ffb020">C</div><div><h4>Core stays</h4><p>Monday and Thursday abs circuits, with dead bugs and hollow holds added.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#5b8cff22;color:#5b8cff">B</div><div><h4>Back work stays</h4><p>Y-raises, snow angels, back-bows — plus towel rows so you actually pull.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#d6ff3f22;color:#d6ff3f">L</div><div><h4>Legs, finally</h4><p>Wednesday is a full lower-body day. Saturday is recovery instead of a third push marathon.</p></div></div>
+          <div class="keep"><div class="ic" style="background:#d6ff3f22;color:#d6ff3f">${stepIcon("rise")}</div><div><h4>Rise</h4><p>You’re up. The day is a gift.</p></div></div>
+          <div class="keep"><div class="ic" style="background:#ff6b4a22;color:#ff6b4a">${stepIcon("move")}</div><div><h4>Train</h4><p>Body first, while the mind is quiet. Bodyweight, at home.</p></div></div>
+          <div class="keep"><div class="ic" style="background:#8b7cff22;color:#8b7cff">${stepIcon("pray")}</div><div><h4>Pray & Word</h4><p>Prayer, devotion, Scripture — in the app, not another tab.</p></div></div>
+          <div class="keep"><div class="ic" style="background:#3ee0b322;color:#3ee0b3">${stepIcon("go")}</div><div><h4>Plan, ready, go</h4><p>Three priorities. Then bath, dress, and step out.</p></div></div>
         </div>
       `,
       `
-        <div class="kicker">Your week</div>
-        <h1>Six train days.<br>One to recover.</h1>
+        <div class="kicker">Sunday · weekdays</div>
+        <h1>Church morning<br>is built in.</h1>
+        <p class="lead">Sunday rises at 4:00, trains for twelve minutes, reads one chapter, and leaves by 5:45. Weekdays rise at 5:00 with a fuller session and 3–4 chapters.</p>
+        <div class="stat-row">
+          <div class="stat"><b>4:00</b><span>Sunday rise</span></div>
+          <div class="stat"><b>5:45</b><span>leave for church</span></div>
+          <div class="stat"><b>5:00</b><span>Mon–Sat rise</span></div>
+          <div class="stat"><b>1:00</b><span>Mon–Sat lights out</span></div>
+        </div>
+      `,
+      `
+        <div class="kicker">Move</div>
+        <h1>Six work days.<br>One to recover.</h1>
+        <p class="lead">Push, pull, legs, core, mobility — balanced so no pattern owns the week.</p>
         <div class="week-preview">
           ${days.map(d => `
             <div class="wp p-${d.pattern}">
@@ -764,16 +781,16 @@
         </div>
       `,
       `
-        <div class="kicker">Last step</div>
-        <h1>What should I call you?</h1>
-        <p class="lead">Shows up on the home screen. You can skip it.</p>
+        <div class="kicker">You</div>
+        <h1>What should we<br>call you?</h1>
+        <p class="lead">It shows on Today. You can skip this and change it later.</p>
         <div class="name-field">
           <label>Name</label>
           <input id="name-input" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
         </div>
       `
     ];
-    const labels = ["See the diagnosis", "What you keep", "Show my week", "Almost there", "Let’s train"];
+    const labels = ["See the path", "Sunday & hours", "The week", "Almost there", "Open ALIGN"];
     return `
       <div class="onboard">
         <div class="onboard-top">
@@ -802,7 +819,7 @@
   const viewHome = () => {
     const t = today();
     const day = todayDay();
-    const name = state.profile.name || "athlete";
+    const name = (state.profile.name || "").trim();
     const morn = L().morningOf(t.iso);
     const steps = pathSteps();
     const dueM = B().dueToday(t.iso, "morning");
@@ -815,43 +832,64 @@
     const moveDone = !!completedOn(t.iso) || morn.move;
     const clk = L().clocksFor(t.date);
     const evening = L().isEvening(t.date);
-    const eveDone = !!(morn.evening && morn.lights);
+    const allDone = doneN >= steps.length;
     const install = state.installPrompt ? `
       <div class="install-banner">
-        <p><strong style="color:var(--text)">Install ALIGN</strong> on your home screen.</p>
-        <button data-act="install-pwa">Install</button>
+        <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
+        <button data-act="install-pwa">Add</button>
       </div>` : "";
 
     const subFor = (s) => {
-      if (s.id === "move") return moveDone ? "Training logged" : `${day.name} · ${day.minutes} min`;
+      if (s.id === "move") return moveDone ? "Session logged" : `${day.name} · ${day.minutes} min`;
       if (s.id === "word") {
         const n = (assign.read || []).length;
         return n ? `${n} chapter${n===1?"":"s"} read` : `${nextRef.book} ${nextRef.chapter}`;
       }
       if (s.id === "read") {
-        return readDone ? "Today’s sitting done" : s.sub;
+        return readDone ? "Sitting done" : s.sub;
       }
       return s.sub;
     };
 
+    const weekStart = startOfWeek(t.date);
+    const weekDots = [0,1,2,3,4,5,6].map((i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const isToday = i === t.dow;
+      const done = !!(L().morningOf(iso).go) || !!completedOn(iso);
+      return `<div class="wd ${isToday?"today":""} ${done?"done":""}">
+        <div class="n">${DOW[i]}</div>
+        <div class="dot">${d.getDate()}</div>
+      </div>`;
+    }).join("");
+
+    const nextCta = cur
+      ? (cur.id === "rise" ? "I’m up" : cur.id === "move" ? "Open session" : cur.id === "go" ? "Step out" : "Continue")
+      : "Begin the day";
+
     return `
       <div class="screen home">
         <div class="topbar">
-          <div class="greet">${greet()}<h2>${escapeHtml(name)}.</h2></div>
-          <button class="avatar" data-go="profile" title="Account">${initials()}</button>
+          <div class="greet">${greet()}${name ? `<h2>${escapeHtml(name)}.</h2>` : `<h2>${DOW_FULL[t.dow]}.</h2>`}</div>
+          <button class="avatar" data-go="profile" title="You">${initials()}</button>
         </div>
         ${state.offline ? `<div class="offline">You’re offline. The morning still works on this device.</div>` : ""}
         ${install}
-        <div class="page-title" style="padding-top:4px">
-          <div class="tag">${clk.sunday ? "Church morning · leave 5:45" : (evening ? "Evening" : "Morning") + " · " + DOW_FULL[t.dow]}</div>
-          <h1>${clk.sunday ? (doneN >= steps.length ? "Go to church." : "Light path.") : (doneN >= steps.length ? "Day is open." : "The morning.")}</h1>
-          <p>${clk.sunday
-            ? "Rise 4:00. Twelve-minute push. One chapter. Out by 5:45."
-            : (doneN >= steps.length ? "You walked the whole path. Go well." : "Wake. Train. Pray. Word. Plan. Ready. One app.")}</p>
-        </div>
+        <div class="week-strip">${weekDots}</div>
         <div class="clocks">
           <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
           <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
+        </div>
+        <div class="next-hero ${allDone ? "done-hero-card" : ""}">
+          <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
+          <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
+          <p>${allDone
+            ? (clk.sunday ? "The light path is done. Church is the first appointment." : "You walked the whole path. Go well.")
+            : (cur ? subFor(cur) : "Mark rise and the morning begins.")}</p>
+          ${allDone
+            ? ""
+            : `<button class="btn" data-act="open-step" data-step="${cur ? cur.id : "rise"}">${nextCta}</button>`}
         </div>
         ${evening && dueE.length ? `
           <div class="section-h" style="padding:0 16px"><h4>Tonight’s book</h4></div>
@@ -860,15 +898,17 @@
               const done = B().loggedToday(t.iso, b.id);
               return `
                 <button class="path-step ${done?"done":"now"}" data-act="open-book" data-id="${b.id}">
-                  <div class="check">${done ? "✓" : "→"}</div>
+                  <div class="path-ico">${stepIcon("read")}</div>
                   <div>
                     <h4>${escapeHtml(b.title)}</h4>
                     <p>${done ? "Sitting done" : "Page " + (b.current_page || 1) + (b.pages ? " of " + b.pages : "") + " · " + (b.pages_per_day || 8) + " pages"}</p>
                   </div>
+                  <div class="check">${done ? "✓" : ""}</div>
                 </button>`;
             }).join("")}
           </div>
         ` : ""}
+        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
         <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
         <div class="path">
           ${steps.map((s) => {
@@ -876,19 +916,14 @@
             const now = cur && cur.id === s.id && !done;
             return `
               <button class="path-step ${done?"done":""} ${now?"now":""}" data-act="open-step" data-step="${s.id}">
-                <div class="check">${done ? "✓" : now ? "→" : ""}</div>
+                <div class="path-ico">${stepIcon(s.icon || s.id)}</div>
                 <div>
                   <h4>${s.title}</h4>
                   <p>${subFor(s)}</p>
                 </div>
+                <div class="check">${done ? "✓" : now ? "→" : ""}</div>
               </button>`;
           }).join("")}
-        </div>
-        <div style="padding:4px 16px 0">
-          <button class="big-link" data-go="library" style="margin-bottom:0">
-            <h3>Books</h3>
-            <p>${B().list().length ? B().list().length + " on this device" : "Upload a PDF. Read it here, offline."}</p>
-          </button>
         </div>
       </div>
     `;
@@ -896,12 +931,21 @@
 
   const viewPlan = () => {
     const t = today();
+    const todayD = todayDay();
+    const moveDone = !!completedOn(t.iso);
     return `
       <div class="screen plan">
-        <div class="topbar"><div class="greet">Move<h2>Training.</h2></div>
+        <div class="topbar"><div class="greet">Move<h2>This week.</h2></div>
           <button class="linkish" data-go="progress">Log</button>
         </div>
-        <p class="hint" style="padding:0 16px 12px;margin:0">One step in the morning. The rest of the path is on Today and Word.</p>
+        <div class="hero p-${todayD.pattern}">
+          <div class="tag">${moveDone ? "Logged today" : "Today · " + DOW_FULL[todayD.dow]}</div>
+          <h3>${todayD.name}</h3>
+          <p class="sub">${todayD.subtitle}</p>
+          <div class="hero-meta"><span><b>${todayD.minutes}</b> min</span><span><b>${todayD.items.length}</b> moves</span></div>
+          <button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>
+        </div>
+        <p class="plan-kicker">Bodyweight · no gear. One step on the morning path — Word and plan live on Today.</p>
         ${days.map(d => `
           <button class="day-card p-${d.pattern} ${d.dow===t.dow?"today":""}" data-go-day="${d.dow}">
             <div class="when">${DOW[d.dow]}</div>
@@ -926,7 +970,7 @@
         <div class="page-title">
           <div class="tag">${DOW_FULL[day.dow]} · ${day.minutes} min</div>
           <h1>${day.name}</h1>
-          <p>${day.origin}</p>
+          <p>${day.subtitle} · bodyweight</p>
         </div>
         <div class="why">${day.why}</div>
         <div class="ex-list">
@@ -936,7 +980,7 @@
               <button class="ex-row p-${ex.pattern}" data-ex="${ex.id}" data-day="${day.id}">
                 <div class="ex-ico">${pose(ex.svg)}</div>
                 <div>
-                  <h4>${ex.name}${it.side ? " " + it.side : ""}${ex.original ? `<span class="og">yours</span>` : ""}</h4>
+                  <h4>${ex.name}${it.side ? " " + it.side : ""}</h4>
                   <div class="meta">${ex.muscles.join(" · ")}</div>
                 </div>
                 <div class="tgt">${fmtTarget(ex, it.target, null)}</div>
@@ -958,7 +1002,7 @@
           <button class="icon-btn" data-go="${state.selectedDay ? "ready" : "home"}">${chev()}</button>
         </div>
         <div class="page-title">
-          <div class="tag">${ex.pattern}${ex.original ? " · from your routine" : " · added for balance"}</div>
+          <div class="tag">${ex.pattern}</div>
           <h1>${ex.name}</h1>
           <p>${ex.muscles.join(" · ")}</p>
         </div>
@@ -1056,16 +1100,16 @@
       <div class="screen full done">
         <div class="done-hero">
           <img class="done-burst" src="./assets/done-burst.png" alt="" />
-          <div class="kicker">Session in the bank</div>
+          <div class="kicker">Session logged</div>
           <h1>${day.name}<br>done.</h1>
-          <p class="lead" style="color:var(--muted)">${day.why}</p>
+          <p class="lead" style="color:var(--muted)">Back to the path. Word is next if you haven’t opened it.</p>
           <div class="done-stats">
             <div><b>${mins}m</b><span>time</span></div>
             <div><b>${logged}</b><span>logged</span></div>
             <div><b>${streak() + 1}</b><span>streak</span></div>
           </div>
         </div>
-        <button class="btn" data-act="save-workout">Save & go home</button>
+        <button class="btn" data-act="save-workout">Save & continue</button>
       </div>
     `;
   };
@@ -1080,16 +1124,16 @@
     });
     return `
       <div class="screen progress">
-        <div class="topbar"><div class="greet">Move<h2>The log.</h2></div>
+        <div class="topbar"><div class="greet">Move<h2>History.</h2></div>
           <button class="linkish" data-go="plan">Week</button>
         </div>
         <div class="big-stat">
-          <div class="k">Workouts</div>
+          <div class="k">Sessions</div>
           <div class="v">${total}</div>
           <div style="color:var(--muted);font-size:13px">${minutes} minutes · ${streak()} day streak</div>
         </div>
-        <div class="section-h"><h4>History</h4></div>
-        ${total === 0 ? `<div class="empty">Nothing logged yet. Finish today’s session and it will land here.</div>` : `
+        <div class="section-h"><h4>Recent</h4></div>
+        ${total === 0 ? `<div class="empty">No sessions yet. Finish today’s training and it lands here.</div>` : `
           <div class="hist">
             ${[...state.history].reverse().slice(0, 20).map(h => {
               const d = days.find(x => x.id === h.dayId);
@@ -1110,16 +1154,13 @@
 
   const viewBalance = () => `
     <div class="screen balance">
-      <div class="topbar"><div class="greet">From your screenshots<h2>The gaps.</h2></div></div>
+      <div class="topbar"><div class="greet">Move<h2>How it’s built.</h2></div></div>
+      <p class="plan-kicker" style="padding-top:0">A typical press-heavy week versus ALIGN — push, pull, legs, core, and mobility each get a real seat.</p>
       <div class="compare">
-        <div class="col"><h5>Your old week</h5>${barCol(insights.old)}</div>
-        <div class="col"><h5>ALIGN week</h5>${barCol(insights.neu)}</div>
+        <div class="col"><h5>Unbalanced</h5>${barCol(insights.old)}</div>
+        <div class="col"><h5>ALIGN</h5>${barCol(insights.neu)}</div>
       </div>
       ${insights.findings.map(f => `<div class="find"><h4>${f.title}</h4><p>${f.body}</p></div>`).join("")}
-      <div class="find">
-        <h4>How the week maps</h4>
-        <p>Sun Push Engine ← Day 22. Mon Core & Hips ← Day 23. Tue Pull & Posture ← Day 24. Wed Legs Found ← new (was Day 25 push). Thu Core Control ← Day 26. Fri Upper Mix ← Day 27. Sat Recover ← new (was Day 28 push).</p>
-      </div>
     </div>
   `;
 
@@ -1135,13 +1176,12 @@
         <div class="page-title">
           <div class="kicker">${connected ? "Account" : "Local only"}</div>
           <h1>${tab === "signup" ? "Create your account." : "Welcome back."}</h1>
-          <p>${connected ? "Workouts sync across devices. Reminders need an account." : "Connect Supabase first so people can sign up."}</p>
+          <p>${connected ? "Your morning syncs across devices. Reminders need an account." : "Accounts aren’t connected on this build."}</p>
         </div>
         <div style="padding:0 20px 24px">
           ${!connected ? `
-            <button class="btn" data-go="setup">Connect Supabase</button>
-            <p class="hint" style="margin-top:14px">You can keep training on this device without an account.</p>
-            <button class="btn ghost" data-go="home">Continue without account</button>
+            <p class="hint">You can still walk the morning on this device without an account.</p>
+            <button class="btn" data-go="home">Continue</button>
           ` : `
             <div class="seg">
               <button class="${tab==="signin"?"on":""}" data-act="auth-tab" data-tab="signin">Sign in</button>
@@ -1216,42 +1256,46 @@
   const viewProfile = () => {
     const email = state.session && state.session.user ? state.session.user.email : "";
     const signed = !!state.session;
+    const nBooks = B().list().length;
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">You<h2>Settings.</h2></div></div>
+        <div class="topbar"><div class="greet">You<h2>Account.</h2></div></div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <div class="account-card">
             <div class="avatar">${initials()}</div>
             <div class="grow">
-              <h3>${escapeHtml(state.profile.name || "Athlete")}</h3>
-              <p>${signed ? escapeHtml(email) : "On this device only"}</p>
+              <h3>${escapeHtml(state.profile.name || "ALIGN")}</h3>
+              <p>${signed ? escapeHtml(email) : "On this device · create an account to sync"}</p>
             </div>
           </div>
 
-          <div class="field"><label>Name</label>
-            <input id="prof-name" maxlength="24" value="${escapeAttr(state.profile.name)}" />
+          <div class="set-label">Profile</div>
+          <div class="field"><label>Display name</label>
+            <input id="prof-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
           </div>
-          <button class="btn ghost" data-act="save-name" style="height:44px;margin-bottom:18px">Save</button>
+          <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
 
-          <div class="section-h"><h4>Your clocks</h4></div>
+          <div class="set-label">Morning hours</div>
           <div class="sched-card">
             <div class="sched-row"><span class="k">Sunday rise</span><span class="v">4:00 AM</span></div>
-            <div class="sched-row"><span class="k">Sunday leave for church</span><span class="v">5:45 AM</span></div>
+            <div class="sched-row"><span class="k">Sunday · church</span><span class="v">Leave 5:45 AM</span></div>
             <div class="sched-row"><span class="k">Sunday lights out</span><span class="v">12:00 AM</span></div>
             <div class="sched-row"><span class="k">Mon–Sat rise</span><span class="v">5:00 AM</span></div>
             <div class="sched-row"><span class="k">Mon–Sat lights out</span><span class="v">1:00 AM</span></div>
           </div>
+
+          <div class="set-label">Notifications</div>
           <div class="setting">
             <div class="grow">
-              <h4>Wake nudge</h4>
-              <p>${state.prefs.enabled ? "On · today " + L().clocksFor(new Date()).wakeLabel : "Off — 4am Sunday, 5am other days"}</p>
+              <h4>Wake call</h4>
+              <p>${state.prefs.enabled ? "On · today " + L().clocksFor(new Date()).wakeLabel : "Off · 4:00 Sunday, 5:00 weekdays"}</p>
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
-          <button class="btn ghost" data-act="test-push" style="height:44px;margin-bottom:16px">Preview reminder</button>
+          <button class="btn ghost" data-act="test-push" style="height:44px">Send a test</button>
 
-          <div class="section-h"><h4>AI</h4></div>
-          <p class="hint" style="margin-top:0">Free Gemini, then Groq if Gemini is down. Keys stay on this phone.</p>
+          <div class="set-label">Intelligence</div>
+          <p class="hint" style="margin-top:0">ALIGN briefs the morning, scales a session, or asks one question on the Word. Free Gemini, then Groq. Keys stay on this phone.</p>
           <div class="field"><label>Gemini API key</label>
             <input id="ai-gemini" type="password" autocomplete="off" placeholder="AIza…" value="${escapeAttr((AI().keysOf().gemini) || "")}" />
           </div>
@@ -1265,28 +1309,31 @@
               <button class="${AI().load().prefer==="groq"?"on":""}" data-act="ai-prefer" data-p="groq">Groq</button>
             </div>
           </div>
-          <button class="btn ghost" data-act="ai-test" style="height:44px;margin-bottom:16px">Test both</button>
+          <button class="btn ghost" data-act="ai-test" style="height:44px">Test connection</button>
 
-          <button class="setting" data-go="library">
-            <div class="grow"><h4>Books</h4><p>${B().list().length ? B().list().length + " PDF" + (B().list().length===1?"":"s") + " on this device" : "Upload PDFs. Read offline."}</p></div>
-          </button>
+          <div class="set-label">Library</div>
+          <div class="set-stack">
+            <button class="setting" data-go="library">
+              <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload PDFs. Read them offline."}</p></div>
+            </button>
+            <button class="setting" data-go="balance">
+              <div class="grow"><h4>How training is built</h4><p>Push, pull, legs, core, recover</p></div>
+            </button>
+          </div>
 
-          <div class="section-h"><h4>App</h4></div>
+          <div class="set-label">App</div>
           ${state.installPrompt ? `
             <button class="setting" data-act="install-pwa">
-              <div class="grow"><h4>Install ALIGN</h4><p>Add to your home screen</p></div>
+              <div class="grow"><h4>Add to Home Screen</h4><p>Install ALIGN like an app</p></div>
             </button>` : `
             <div class="setting"><div class="grow"><h4>Add to Home Screen</h4><p>iPhone: Share → Add to Home Screen</p></div></div>
           `}
-          <button class="setting" data-go="balance">
-            <div class="grow"><h4>Why this program</h4><p>How your week was rebalanced</p></div>
-          </button>
 
           ${signed
             ? `<button class="btn ghost" style="margin-top:18px" data-act="sign-out">Sign out</button>`
             : `<button class="btn" style="margin-top:18px" data-go="auth">Create account</button>`
           }
-          <div class="ver">ALIGN · 1.4</div>
+          <div class="ver">ALIGN</div>
         </div>
       </div>
     `;
@@ -1297,33 +1344,41 @@
     const a = L().todayAssignment(iso);
     const j = L().journalOf(iso);
     const n = (a.read || []).length;
+    const target = L().chapterTarget(iso);
+    const scriptureSub = n
+      ? n + " / " + target + " today · next " + a.next.book + " " + a.next.chapter
+      : (target === 1 ? "Sunday · one chapter · " : "Today · ") + a.next.book + " " + a.next.chapter;
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
-        <div class="word-hub">
-          <button class="big-link" data-act="open-step" data-step="pray">
+        <p class="plan-kicker">Prayer first. Then devotion. Then Scripture. Books live on this phone.</p>
+        <div class="hub-grid">
+          <button class="hub-card" data-act="open-step" data-step="pray">
+            <div class="tile">${stepIcon("pray")}</div>
             <h3>Pray</h3>
             <p>${j.praySeconds ? fmtClock(j.praySeconds) + " today" : "Before you read. Before you plan."}</p>
           </button>
-          <button class="big-link" data-act="open-step" data-step="devotion">
+          <button class="hub-card" data-act="open-step" data-step="devotion">
+            <div class="tile">${stepIcon("book")}</div>
             <h3>Devotion</h3>
-            <p>${j.devotion ? "Takeaway saved" : "Read yours. Write what remains."}</p>
+            <p>${j.devotion ? "Takeaway saved" : "Spurgeon in the app. Write what remains."}</p>
           </button>
-          <button class="big-link" data-act="open-step" data-step="word">
-            <h3>Scripture</h3>
-            <p>${(() => {
-              const target = L().chapterTarget(iso);
-              if (n) return n + " / " + target + " today · next " + a.next.book + " " + a.next.chapter;
-              return (target === 1 ? "Sunday · one chapter · " : "Today · ") + a.next.book + " " + a.next.chapter;
-            })()}</p>
+          <button class="hub-card wide" data-act="open-step" data-step="word">
+            <div class="tile">${stepIcon("word")}</div>
+            <div>
+              <h3>Scripture</h3>
+              <p>${scriptureSub}</p>
+            </div>
           </button>
-          <button class="big-link" data-act="open-step" data-step="evening">
-            <h3>Evening Word</h3>
-            <p>Spurgeon for the night. Then lights out.</p>
+          <button class="hub-card" data-act="open-step" data-step="evening">
+            <div class="tile">${stepIcon("rise")}</div>
+            <h3>Evening</h3>
+            <p>Night Word. Then lights out.</p>
           </button>
-          <button class="big-link" data-go="library">
+          <button class="hub-card" data-go="library">
+            <div class="tile">${stepIcon("read")}</div>
             <h3>Books</h3>
-            <p>${B().list().length ? B().list().length + " on this device" : "Upload a PDF. Read it here, offline."}</p>
+            <p>${B().list().length ? B().list().length + " on this device" : "Upload a PDF. Read offline."}</p>
           </button>
         </div>
       </div>
@@ -1567,9 +1622,9 @@
       <div class="screen home">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Your shelf</div>
+          <div class="tag">Library</div>
           <h1>Books.</h1>
-          <p>PDFs live on this phone${state.session ? " and on your account" : ""}. Read them here. No other app.</p>
+          <p>Upload a PDF. Schedule a sitting. Read it here, offline${state.session ? " — synced to your account" : ""}.</p>
         </div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
@@ -2009,7 +2064,7 @@
     successSound();
     state.workout = null;
     state.view = "home";
-    toast("Workout saved");
+    toast("Session saved");
     render();
   };
 
@@ -2102,7 +2157,7 @@
     } else if (act === "quit-workout") {
       state.sheet = {
         title: "End session?",
-        body: "This workout won’t be saved.",
+        body: "This session won’t be saved.",
         confirm: "End",
         cancel: "Keep going",
         danger: true,
