@@ -14,6 +14,8 @@ const GROQ_MODELS = [
   "llama-3.1-8b-instant"
 ];
 
+let MAX_TOK = 512;
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type",
@@ -35,7 +37,7 @@ async function callGemini(key, model, system, prompt) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.55, maxOutputTokens: 512 }
+      generationConfig: { temperature: 0.55, maxOutputTokens: MAX_TOK }
     })
   });
   const data = await r.json().catch(() => ({}));
@@ -53,7 +55,7 @@ async function callGroq(key, model, system, prompt) {
     body: JSON.stringify({
       model,
       temperature: 0.55,
-      max_tokens: 512,
+      max_tokens: MAX_TOK,
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt }

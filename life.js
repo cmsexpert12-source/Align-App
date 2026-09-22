@@ -40,7 +40,8 @@ window.ALIGN_LIFE = (() => {
   const isEvening = (date = new Date()) => date.getHours() >= 20 || date.getHours() < 2;
 
   const EVENING = [
-    { id: "evening", title: "Evening Word", sub: "Spurgeon for the night. Then put the phone down.", icon: "word" },
+    { id: "evening", title: "Evening Word", sub: "Spurgeon for the night. Then test the day’s chapters.", icon: "word" },
+    { id: "nightquiz", title: "Night test", sub: "Same reading. Misses first. Then lights out.", icon: "drill" },
     { id: "lights", title: "Lights out", sub: "Bed at the hour you set. The morning is already planned.", icon: "ready" }
   ];
 

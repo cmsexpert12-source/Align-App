@@ -71,6 +71,7 @@
     ai: { open: false, busy: false, input: "", reply: "", error: "", provider: "", model: "" },
     verseSess: null,
     drill: null,
+    drillMode: "morning",
     readPacks: [],
     planJustSaved: false
   };
@@ -706,6 +707,8 @@
         state.readPacks = (state.readPacks || []).filter((p) => !(p.book === book && p.chapter === chapter));
         state.readPacks.push({ book, chapter, verses });
         if (state.readPacks.length > 8) state.readPacks = state.readPacks.slice(-8);
+        try { S().ingestReading(today().iso, state.readPacks); } catch { /* local quiz */ }
+        S().enrichReading(today().iso, state.readPacks).catch(() => {});
       }
     } catch (e) {
       state.bibleErr = (e && e.message) || "Could not load this chapter. Check the connection.";
@@ -790,16 +793,33 @@
       answered: state.drill.answered,
       correct: state.drill.correct,
       finished: Date.now()
-    });
+    }, state.drill.mode || "morning");
+    if ((state.drill.mode || "") === "night") completeStep("nightquiz");
     render();
   };
 
-  const startDrill = () => {
+  const startDrill = (mode) => {
+    const iso = today().iso;
+    const kind = mode || state.drillMode || "morning";
+    if ((state.readPacks || []).length) {
+      try { S().ingestReading(iso, state.readPacks); } catch { /* ok */ }
+    }
+    const have = (S().readingQs(iso) || []).length;
+    if (!have && !(L().todayAssignment(iso).read || []).length) {
+      toast("Read today’s Scripture first. Questions are built from those chapters.");
+      return;
+    }
     stopDrillTick();
-    const queue = S().dailyQueue(S().SPRINT_N);
+    const queue = S().dailyQueue(S().SPRINT_N, kind, iso);
+    if (!queue.length) {
+      toast("Read today’s Scripture first. Questions are built from those chapters.");
+      return;
+    }
     const first = queue[0];
+    state.drillMode = kind;
     state.drill = {
       running: true,
+      mode: kind,
       left: S().SPRINT_SEC,
       i: 0,
       queue,
@@ -1760,6 +1780,8 @@
     const st = S().stats();
     const tv = S().todayVerse(iso);
     const sprint = S().sprintOf(iso);
+    const nightSp = S().nightSprintOf ? S().nightSprintOf(iso) : null;
+    const readQs = (S().readingQs && S().readingQs(iso)) || [];
     const verseSub = tv
       ? (S().load().daily[iso] && S().load().daily[iso].verseDone
         ? S().refOf(tv) + " · hidden"
@@ -1803,7 +1825,7 @@
           <button class="hub-card" data-act="open-step" data-step="evening">
             <div class="tile">${stepIcon("rise")}</div>
             <h3>Evening</h3>
-            <p>Night Word. Then lights out.</p>
+            <p>${nightSp && nightSp.answered ? "Night test " + nightSp.correct + "/" + nightSp.answered : "Night Word, then the same chapters again."}</p>
           </button>
           <button class="hub-card" data-go="library">
             <div class="tile">${stepIcon("read")}</div>
@@ -1938,17 +1960,25 @@
   const viewDrill = () => {
     const d = state.drill;
     if (!d) {
+      const iso = today().iso;
+      const night = (state.drillMode || "morning") === "night";
+      const nQ = (S().readingQs && S().readingQs(iso) || []).length;
+      const refs = ((S().load().daily[iso] || {}).readRefs || []).join(" · ");
       return `
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="page-title">
-            <div class="tag">Scripture sprint</div>
-            <h1>2 minutes.<br>${S().SPRINT_N} questions.</h1>
-            <p>Missed cards come back tomorrow. What you know waits days, then weeks. New cards fill the rest.</p>
+            <div class="tag">${night ? "Night test" : "Morning test"}</div>
+            <h1>2 minutes.<br>${S().SPRINT_N} from the text.</h1>
+            <p>${nQ
+              ? (night
+                ? "Same chapters as this morning. Misses first, then lines you already got — so they stick overnight."
+                : ("Built from " + (refs || "today’s reading") + ". Fill the blank. Name the verse. Misses return tonight."))
+              : "Read today’s Scripture first. ALIGN writes the questions from those chapters — not a generic bank."}</p>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
-            <button class="btn" data-act="drill-start">Start the clock</button>
-            <p class="next-up">Sunday morning: skip if you’re walking out the door. It waits.</p>
+            <button class="btn" ${nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`}>${nQ ? "Start the clock" : "Read first"}</button>
+            <p class="next-up">${night ? "Then lights out." : "Sunday morning: skip if you’re walking out the door. It waits tonight."}</p>
           </div>
         </div>`;
     }
@@ -2079,7 +2109,8 @@
           ` : `<p class="hint">Loading evening reading…</p>`}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="complete-step" data-step="evening">Amen · I’m done</button>
+          <button class="btn" data-act="open-nightdrill">Test today’s reading</button>
+          <button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="evening">Amen · I’m done</button>
         </div>
       </div>
     `;
@@ -3055,6 +3086,12 @@
         (state.spurgeonPm ? Promise.resolve(state.spurgeonPm) : L().todaySpurgeon("pm"))
           .then((sp) => { state.spurgeonPm = sp; if (state.view === "evening") render(); })
           .catch(() => {});
+      } else if (step === "nightquiz") {
+        stopDrillTick();
+        state.drill = null;
+        state.drillMode = "night";
+        state.view = "drill";
+        render();
       } else if (step === "lights") {
         state.view = "lights";
         render();
@@ -3125,6 +3162,8 @@
       AlignDB.saveBible(cur).catch(() => {});
       const readN = (L().todayAssignment(iso).read || []).length;
       const target = L().chapterTarget(iso);
+      try { S().ingestReading(iso, state.readPacks || []); } catch { /* ok */ }
+      S().enrichReading(iso, state.readPacks || []).catch(() => {});
       toast(state.readBook + " " + state.readCh + " · done");
       if (readN >= target && target >= 3 && verses < 30 && readN < 4) {
         openBible(cur.book, cur.chapter);
@@ -3360,10 +3399,17 @@
     } else if (act === "open-drill") {
       stopDrillTick();
       state.drill = null;
+      state.drillMode = "morning";
+      state.view = "drill";
+      render();
+    } else if (act === "open-nightdrill") {
+      stopDrillTick();
+      state.drill = null;
+      state.drillMode = "night";
       state.view = "drill";
       render();
     } else if (act === "drill-start") {
-      startDrill();
+      startDrill(state.drillMode || "morning");
     } else if (act === "drill-ans") {
       answerDrill(Number(el.dataset.i));
     } else if (act === "drill-quit") {

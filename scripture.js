@@ -629,35 +629,210 @@ window.ALIGN_SCRIPTURE = (() => {
 
   const optionsOf = (item) => shuffle([item.a].concat(item.d || []));
 
-  const dailyQueue = (n = SPRINT_N) => {
-    const data = load();
-    const now = Date.now();
-    const missed = [];
-    const due = [];
-    const fresh = [];
-    const later = [];
-    QUIZ.forEach((q) => {
-      const c = data.quiz[q.id];
-      if (!c) fresh.push(q);
-      else if (c.due <= now && ((c.lapses || 0) > 0 && (c.reps || 0) === 0)) missed.push(q);
-      else if (c.due <= now) due.push(q);
-      else later.push(q);
+  const STOP = /^(the|and|that|this|with|from|they|them|then|than|when|what|your|their|have|been|were|will|shall|unto|into|upon|for|but|not|you|his|her|its|was|are|has|had|who|whom|which|there|these|those|also|into|onto)$/i;
+  const SKIP_LINE = /(begat|cubit|shekel|genealogy|thousand thousands)/i;
+  const FALLBACK_D = ["heaven", "earth", "covenant", "Israel", "mercy", "faith", "Spirit", "heart", "peace", "glory", "wisdom", "promise", "wilderness", "temple", "kingdom"];
+
+  const cleanText = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+  const contentWords = (text) => cleanText(text).split(/\s+/).map((w) => {
+    const core = w.replace(/[^A-Za-z']/g, "");
+    return core;
+  }).filter((w) => w.length >= 4 && !STOP.test(w));
+
+  const pickBlank = (text) => {
+    const words = contentWords(text);
+    if (!words.length) return null;
+    const ranked = words.slice().sort((a, b) => {
+      const sc = (w) => ( /^[A-Z]/.test(w) ? 4 : 0) + (/(Yahweh|Lord|God|Jesus|Christ|Spirit|faith|love|heart|holy)/i.test(w) ? 5 : 0) + Math.min(w.length, 10);
+      return sc(b) - sc(a);
     });
-    const byDue = (a, b) => {
-      const ca = data.quiz[a.id], cb = data.quiz[b.id];
-      return ((ca && ca.due) || 0) - ((cb && cb.due) || 0);
-    };
-    missed.sort(byDue);
-    due.sort(byDue);
-    const pool = missed.concat(due, shuffle(fresh), shuffle(later));
+    return ranked[0];
+  };
+
+  const twoOthers = (answer, pool) => {
+    const a = String(answer || "");
+    const uniq = [];
+    pool.forEach((w) => {
+      const s = String(w || "").trim();
+      if (!s || s.toLowerCase() === a.toLowerCase()) return;
+      if (!uniq.some((x) => x.toLowerCase() === s.toLowerCase())) uniq.push(s);
+    });
+    const out = shuffle(uniq).slice(0, 2);
+    FALLBACK_D.forEach((w) => {
+      if (out.length >= 2) return;
+      if (w.toLowerCase() === a.toLowerCase()) return;
+      out.push(w);
+    });
+    while (out.length < 2) out.push(out[0] === "mercy" ? "faith" : "mercy");
+    return out.slice(0, 2);
+  };
+
+  const fromPacks = (packs, iso) => {
+    const list = [];
+    const allWords = [];
+    const verses = [];
+    (packs || []).forEach((p) => {
+      (p.verses || []).forEach((v) => {
+        const text = cleanText(v.text || v);
+        if (!text || text.length < 28 || SKIP_LINE.test(text)) return;
+        const row = {
+          book: p.book || v.book_name || v.book,
+          chapter: Number(p.chapter || v.chapter),
+          verse: Number(v.verse || v.n || 0),
+          text
+        };
+        if (!row.book || !row.chapter || !row.verse) return;
+        verses.push(row);
+        contentWords(text).forEach((w) => allWords.push(w));
+      });
+    });
+    verses.forEach((v) => {
+      const ref = v.book + " " + v.chapter + ":" + v.verse;
+      const blank = pickBlank(v.text);
+      if (blank) {
+        const re = new RegExp("\\b" + blank.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+        const shown = v.text.replace(re, "____");
+        if (shown !== v.text) {
+          const d = twoOthers(blank, allWords);
+          list.push({
+            id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":cloze",
+            q: ref + " — “" + shown + "”",
+            a: blank,
+            d,
+            tag: "read",
+            ref
+          });
+        }
+      }
+      const quote = v.text.length > 110 ? v.text.slice(0, 96).replace(/\s+\S*$/, "") + "…" : v.text;
+      const otherRefs = verses.filter((x) => !(x.book === v.book && x.chapter === v.chapter && x.verse === v.verse))
+        .map((x) => x.book + " " + x.chapter + ":" + x.verse);
+      otherRefs.push(v.book + " " + v.chapter + ":" + Math.max(1, v.verse - 1));
+      otherRefs.push(v.book + " " + v.chapter + ":" + (v.verse + 1));
+      const d = twoOthers(ref, otherRefs);
+      list.push({
+        id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":ref",
+        q: "Which verse says: “" + quote + "”",
+        a: ref,
+        d,
+        tag: "read",
+        ref
+      });
+    });
+    const seen = new Set();
+    return list.filter((q) => {
+      if (seen.has(q.id) || !q.a || q.a === q.d[0]) return false;
+      seen.add(q.id);
+      return true;
+    });
+  };
+
+  const readingQs = (iso) => ((load().daily[iso] || {}).readingQs) || [];
+
+  const ingestReading = (iso, packs) => {
+    const built = fromPacks(packs, iso);
+    if (!built.length) return [];
+    const data = load();
+    const row = data.daily[iso] || {};
+    const have = {};
+    (row.readingQs || []).forEach((q) => { have[q.id] = q; });
+    built.forEach((q) => { if (!have[q.id]) have[q.id] = q; });
+    row.readingQs = Object.values(have);
+    row.readRefs = (packs || []).map((p) => p.book + " " + p.chapter);
+    data.daily[iso] = row;
+    save(data);
+    return row.readingQs;
+  };
+
+  const parseAiQuiz = (text) => {
+    const m = String(text || "").match(/\[[\s\S]*\]/);
+    if (!m) return [];
+    try {
+      const arr = JSON.parse(m[0]);
+      if (!Array.isArray(arr)) return [];
+      return arr.map((row, i) => {
+        const q = cleanText(row.q || row.question);
+        const a = cleanText(row.a || row.answer);
+        const d1 = cleanText(row.d1 || (row.d && row.d[0]) || row.wrong1);
+        const d2 = cleanText(row.d2 || (row.d && row.d[1]) || row.wrong2);
+        if (!q || !a || !d1 || !d2) return null;
+        return { q, a, d: [d1, d2], i };
+      }).filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const enrichReading = async (iso, packs) => {
+    const data0 = load();
+    const row0 = data0.daily[iso] || {};
+    if (row0.aiQuizDone) return readingQs(iso);
+    const body = (packs || []).map((p) => {
+      const vs = (p.verses || []).slice(0, 40).map((v) => (v.verse || "") + ". " + cleanText(v.text || v)).join(" ");
+      return (p.book || "") + " " + (p.chapter || "") + "\n" + vs;
+    }).join("\n\n").slice(0, 3800);
+    if (body.length < 80) return readingQs(iso);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maxOutputTokens: 1200,
+          system: "You write short Bible quizzes only from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Facts must appear in the text. One sentence stems.",
+          prompt: "Write 8 multiple-choice questions about this reading only:\n\n" + body
+        })
+      });
+      const js = await res.json().catch(() => ({}));
+      const made = parseAiQuiz(js.text || "");
+      if (!made.length) {
+        const data = load();
+        const row = data.daily[iso] || {};
+        row.aiQuizDone = true;
+        data.daily[iso] = row;
+        save(data);
+        return readingQs(iso);
+      }
+      const data = load();
+      const row = data.daily[iso] || {};
+      const have = {};
+      (row.readingQs || []).forEach((q) => { have[q.id] = q; });
+      made.forEach((q, i) => {
+        const id = "rd:" + iso + ":ai:" + i;
+        if (!have[id]) have[id] = { id, q: q.q, a: q.a, d: q.d, tag: "read-ai", ref: (row.readRefs || []).join(", ") };
+      });
+      row.readingQs = Object.values(have);
+      row.aiQuizDone = true;
+      data.daily[iso] = row;
+      save(data);
+    } catch {
+      /* local questions still stand */
+    }
+    return readingQs(iso);
+  };
+
+  const allReadingBank = () => {
+    const data = load();
+    const out = [];
+    Object.keys(data.daily || {}).forEach((iso) => {
+      (data.daily[iso].readingQs || []).forEach((q) => out.push(q));
+    });
+    return out;
+  };
+
+  const takeN = (n, groups) => {
     const seen = new Set();
     const out = [];
-    pool.forEach((q) => {
-      if (out.length >= n || seen.has(q.id)) return;
-      seen.add(q.id);
-      out.push(q);
+    groups.forEach((arr) => {
+      (arr || []).forEach((q) => {
+        if (!q || out.length >= n || seen.has(q.id)) return;
+        seen.add(q.id);
+        out.push(q);
+      });
     });
+    if (!out.length) return out;
     let i = 0;
+    const pool = out.slice();
     while (out.length < n && pool.length) {
       out.push(pool[i % pool.length]);
       i += 1;
@@ -666,16 +841,55 @@ window.ALIGN_SCRIPTURE = (() => {
     return out;
   };
 
-  const markSprint = (iso, payload) => {
+  const dailyQueue = (n = SPRINT_N, mode = "morning", iso) => {
+    const data = load();
+    const now = Date.now();
+    const todayQs = iso ? readingQs(iso) : [];
+    const bank = todayQs.length ? allReadingBank() : QUIZ.slice();
+    const missed = [];
+    const due = [];
+    const fresh = [];
+    const later = [];
+    const bucket = (q) => {
+      const c = data.quiz[q.id];
+      if (!c) fresh.push(q);
+      else if ((c.lapses || 0) > 0 && (c.reps || 0) === 0) missed.push(q);
+      else if (c.due <= now) due.push(q);
+      else later.push(q);
+    };
+    if (todayQs.length) {
+      todayQs.forEach(bucket);
+      bank.forEach((q) => {
+        if (todayQs.some((t) => t.id === q.id)) return;
+        bucket(q);
+      });
+    } else {
+      bank.forEach(bucket);
+    }
+    const byDue = (a, b) => {
+      const ca = data.quiz[a.id], cb = data.quiz[b.id];
+      return ((ca && ca.due) || 0) - ((cb && cb.due) || 0);
+    };
+    missed.sort(byDue);
+    due.sort(byDue);
+    if (mode === "night") {
+      return takeN(n, [missed, shuffle(later), due, shuffle(fresh)]);
+    }
+    return takeN(n, [missed, shuffle(fresh), due, shuffle(later)]);
+  };
+
+  const markSprint = (iso, payload, mode) => {
     const data = load();
     const row = data.daily[iso] || {};
-    row.sprint = Object.assign({}, row.sprint || {}, payload);
+    const key = mode === "night" ? "nightSprint" : "sprint";
+    row[key] = Object.assign({}, row[key] || {}, payload);
     data.daily[iso] = row;
     save(data);
-    return row.sprint;
+    return row[key];
   };
 
   const sprintOf = (iso) => (load().daily[iso] || {}).sprint || null;
+  const nightSprintOf = (iso) => (load().daily[iso] || {}).nightSprint || null;
 
   const clozeOf = (text, want = 4) => {
     const parts = String(text || "").split(/(\s+)/);
@@ -721,7 +935,8 @@ window.ALIGN_SCRIPTURE = (() => {
     dueVerses, learnedCount, verseStreak,
     pickFromReadings, fromChapter, ensureTodayVerse,
     markVerseDone, todayVerse,
-    shuffle, optionsOf, dailyQueue, markSprint, sprintOf,
+    shuffle, optionsOf, dailyQueue, markSprint, sprintOf, nightSprintOf,
+    ingestReading, enrichReading, readingQs, fromPacks,
     clozeOf, initialsOf, stats, cardOf
   };
 })();
