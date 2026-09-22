@@ -1111,10 +1111,7 @@
       const iso = isoOf(d);
       const isToday = iso === t.iso;
       const done = morningDone(iso);
-      return `<button type="button" class="wd ${isToday?"today":""} ${done?"done":""}" aria-label="${DOW_FULL[i]}">
-        <span class="n">${DOW[i][0]}</span>
-        <span class="dot">${d.getDate()}</span>
-      </button>`;
+      return `<button type="button" class="wd${isToday?" today":""}${done?" done":""}" aria-label="${DOW_FULL[i]}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></button>`;
     }).join("");
 
     const nextCta = cur
@@ -1147,12 +1144,9 @@
           <div class="pulse-top">
             <div class="pulse-num">${mStreak}</div>
             <div>
-              <h4>${mStreak === 1 ? "Day streak" : "Day streak"}</h4>
+              <h4>Day streak</h4>
               <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
             </div>
-          </div>
-          <div class="pulse-days" aria-hidden="true">
-            ${pulse.days.map((d) => `<i class="${d.morning?"on":""} ${d.isToday?"today":""}"></i>`).join("")}
           </div>
           <div class="pulse-stats">
             <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
@@ -1191,13 +1185,18 @@
         ` : ""}
         <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
         <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        <div class="path">
-          ${steps.map((s) => {
+        ${(() => {
+          const rows = steps.map((s) => {
             const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
-            const now = cur && cur.id === s.id && !done;
-            return stepRow({ ...s, sub: subFor(s) }, done, now, `data-act="open-step" data-step="${s.id}"`);
-          }).join("")}
-        </div>
+            const now = !!(cur && cur.id === s.id && !done);
+            return { s, done, now };
+          });
+          const finished = rows.filter((r) => r.done);
+          const open = rows.filter((r) => !r.done);
+          return `
+        ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
+        ${open.length ? `<div class="path">${open.map((r) => stepRow({ ...r.s, sub: subFor(r.s) }, false, r.now, `data-act="open-step" data-step="${r.s.id}"`)).join("")}</div>` : ""}`;
+        })()}
       </div>
     `;
   };
