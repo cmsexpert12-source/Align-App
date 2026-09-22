@@ -846,7 +846,7 @@
       d.flash = null;
       d.picked = null;
       d.i += 1;
-      if (d.i >= d.queue.length || d.answered >= 120) {
+      if (d.i >= d.queue.length || d.answered >= S().SPRINT_N) {
         finishDrill();
         return;
       }
@@ -1767,7 +1767,7 @@
       : (n ? "A verse from what you just read" : "Read first. Then hide one line.");
     const sprintSub = sprint && sprint.answered
       ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
-      : "2 minutes · 120 questions · tap fast";
+      : "2 minutes · " + S().SPRINT_N + " questions · misses come back first";
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
@@ -1850,7 +1850,7 @@
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="page-title"><div class="tag">Memory</div><h1>Hide the Word.</h1>
-            <p>Read today’s chapters first. ALIGN picks one line worth hiding — inspiring, known, or the bottom of the text.</p></div>
+            <p>Read today’s chapters first. ALIGN picks one line worth hiding — inspiring, known, or the bottom of the text. Miss it and it returns tomorrow. Grade it well and it waits longer.</p></div>
           <div style="padding:0 22px"><button class="btn" data-go="word">Back to Word</button></div>
         </div>`;
     }
@@ -1943,8 +1943,8 @@
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="page-title">
             <div class="tag">Scripture sprint</div>
-            <h1>2 minutes.<br>120 questions.</h1>
-            <p>Short taps. Whole Bible. Spaced repetition brings back what you miss until it’s in the bone.</p>
+            <h1>2 minutes.<br>${S().SPRINT_N} questions.</h1>
+            <p>Missed cards come back tomorrow. What you know waits days, then weeks. New cards fill the rest.</p>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" data-act="drill-start">Start the clock</button>
@@ -1959,7 +1959,7 @@
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="done-hero" style="padding:24px 22px">
             <div class="kicker">Sprint</div>
-            <h1>${d.answered >= 120 ? "Cleared." : "Time."}</h1>
+            <h1>${d.answered >= S().SPRINT_N ? "Cleared." : "Time."}</h1>
             <p class="lead" style="color:var(--muted)">${d.answered} answered · ${d.correct} right · ${acc}%. Misses come back sooner.</p>
             <div class="done-stats">
               <div><b>${d.answered}</b><span>answered</span></div>
@@ -1986,9 +1986,9 @@
         </div>
         <div class="drill-top">
           <div class="drill-clock">${fmtClock(d.left)}</div>
-          <div class="drill-count">${d.answered} / 120</div>
+          <div class="drill-count">${d.answered} / ${S().SPRINT_N}</div>
         </div>
-        <div class="prog-thin"><i style="width:${Math.min(100, (d.answered / 120) * 100)}%;background:var(--lime)"></i></div>
+        <div class="prog-thin"><i style="width:${Math.min(100, (d.answered / Math.max(1, S().SPRINT_N)) * 100)}%;background:var(--lime)"></i></div>
         <div class="drill-body">
           <h2 class="drill-q">${escapeHtml(q.q)}</h2>
           <div class="drill-opts">

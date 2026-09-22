@@ -4,7 +4,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const LS = "align-scripture";
   const DAY_MS = 86400000;
   const SPRINT_SEC = 120;
-  const SPRINT_N = 120;
+  const SPRINT_N = 60;
 
   const V = (id, book, chapter, verse, thru, text, theme, why, score) =>
     ({ id, book, chapter, verse, thru: thru || verse, text, theme, why, score });
@@ -435,7 +435,9 @@ window.ALIGN_SCRIPTURE = (() => {
     return row || { ease: 2.5, interval: 0, reps: 0, lapses: 0, due: 0, last: 0 };
   };
 
-  /* SM-2. Grade 0 again, 1 hard, 2 good, 3 easy. */
+  /* SM-2. Grade 0 again, 1 hard, 2 good, 3 easy.
+     Quiz: wrong = again (due now → next sprint). Right = good (1 day, then 3, then growing).
+     Verse: again = tomorrow; hard ≈ 12h then 2d; good = 1d then 3d; easy = 2d then 5d, then ease × interval. */
   const review = (card, grade) => {
     let ease = Number(card.ease) || 2.5;
     let interval = Number(card.interval) || 0;
@@ -630,26 +632,36 @@ window.ALIGN_SCRIPTURE = (() => {
   const dailyQueue = (n = SPRINT_N) => {
     const data = load();
     const now = Date.now();
+    const missed = [];
     const due = [];
+    const fresh = [];
     const later = [];
     QUIZ.forEach((q) => {
       const c = data.quiz[q.id];
-      if (!c || c.due <= now) due.push(q);
+      if (!c) fresh.push(q);
+      else if (c.due <= now && ((c.lapses || 0) > 0 && (c.reps || 0) === 0)) missed.push(q);
+      else if (c.due <= now) due.push(q);
       else later.push(q);
     });
-    due.sort((a, b) => {
+    const byDue = (a, b) => {
       const ca = data.quiz[a.id], cb = data.quiz[b.id];
       return ((ca && ca.due) || 0) - ((cb && cb.due) || 0);
-    });
-    const rest = shuffle(later);
-    const queue = due.concat(rest);
-    if (!queue.length) return shuffle(QUIZ).slice(0, n);
+    };
+    missed.sort(byDue);
+    due.sort(byDue);
+    const pool = missed.concat(due, shuffle(fresh), shuffle(later));
+    const seen = new Set();
     const out = [];
+    pool.forEach((q) => {
+      if (out.length >= n || seen.has(q.id)) return;
+      seen.add(q.id);
+      out.push(q);
+    });
     let i = 0;
-    while (out.length < n) {
-      out.push(queue[i % queue.length]);
+    while (out.length < n && pool.length) {
+      out.push(pool[i % pool.length]);
       i += 1;
-      if (i > n * 3) break;
+      if (i > n * 4) break;
     }
     return out;
   };
