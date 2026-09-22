@@ -111,7 +111,7 @@ window.ALIGN_SOUND = (() => {
     emit();
   };
 
-  const ensure = async () => {
+  const ensure = async (wantBed) => {
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
@@ -120,31 +120,68 @@ window.ALIGN_SOUND = (() => {
       master.gain.value = load().volume;
       master.connect(ctx.destination);
       bedGain = ctx.createGain();
-      bedGain.gain.value = 1;
+      bedGain.gain.value = 0;
       bedGain.connect(master);
       sfxGain = ctx.createGain();
       sfxGain.gain.value = 0.9;
       sfxGain.connect(master);
     }
-    if (ctx.state === "suspended") {
+    if ((playing || wantBed) && ctx.state === "suspended") {
       try { await ctx.resume(); } catch {}
     }
     return ctx;
   };
 
-  const unlock = () => { ensure(); };
+  const unlock = () => { ensure(false); };
+
+  const killEl = (el) => {
+    if (!el) return;
+    try { el.pause(); } catch {}
+    try { el.loop = false; } catch {}
+    try { el.muted = true; } catch {}
+    try { el.volume = 0; } catch {}
+    try { el.currentTime = 0; } catch {}
+    try {
+      el.removeAttribute("src");
+      el.src = "";
+      el.srcObject = null;
+      el.load();
+    } catch {}
+    liveAudio.delete(el);
+  };
+
+  const muteBed = () => {
+    if (!bedGain) return;
+    try {
+      if (ctx) bedGain.gain.setValueAtTime(0, ctx.currentTime);
+      else bedGain.gain.value = 0;
+    } catch { bedGain.gain.value = 0; }
+  };
+
+  const openBed = () => {
+    if (!bedGain) return;
+    try {
+      if (ctx) bedGain.gain.setValueAtTime(1, ctx.currentTime);
+      else bedGain.gain.value = 1;
+    } catch { bedGain.gain.value = 1; }
+  };
 
   const clearBed = () => {
     if (beatRaf) { cancelAnimationFrame(beatRaf); beatRaf = 0; }
     nodes.forEach((n) => {
-      try { if (n.stop) n.stop(); } catch {}
+      try { if (n.stop) n.stop(0); } catch {}
       try { n.disconnect(); } catch {}
     });
     nodes = [];
-    if (audioEl) {
-      try { audioEl.pause(); audioEl.src = ""; } catch {}
-      audioEl = null;
-    }
+    muteBed();
+    liveAudio.forEach(killEl);
+    liveAudio.clear();
+    if (audioEl) { killEl(audioEl); audioEl = null; }
+    try {
+      document.querySelectorAll("audio").forEach((el) => killEl(el));
+    } catch {}
+    objectUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} });
+    objectUrls.clear();
   };
 
   const brown = (c, seconds = 3) => {
@@ -185,9 +222,12 @@ window.ALIGN_SOUND = (() => {
   };
 
   const startStation = async (id) => {
-    const c = await ensure();
-    if (!c) return;
+    const token = ++playToken;
+    const c = await ensure(true);
+    if (!c || token !== playToken) return;
     clearBed();
+    if (token !== playToken) return;
+    openBed();
     const dest = bedGain;
     const flt = c.createBiquadFilter();
     flt.type = "lowpass";
@@ -252,6 +292,7 @@ window.ALIGN_SOUND = (() => {
       beatRaf = requestAnimationFrame(pulse);
     }
 
+    if (token !== playToken) { clearBed(); return; }
     kind = "station";
     currentId = id;
     title = (STATIONS.find((s) => s.id === id) || {}).name || "Station";
@@ -267,14 +308,20 @@ window.ALIGN_SOUND = (() => {
       if (t && (t.storage_path || t.source_url)) return playUrl(t);
       return;
     }
-    await ensure();
+    const token = ++playToken;
+    await ensure(true);
+    if (token !== playToken) return;
     clearBed();
+    if (token !== playToken) return;
     const url = URL.createObjectURL(blob);
+    objectUrls.add(url);
     const el = new Audio();
     el.src = url;
     el.loop = true;
     el.volume = load().volume;
+    liveAudio.add(el);
     try { await el.play(); } catch {}
+    if (token !== playToken) { killEl(el); return; }
     audioEl = el;
     el.addEventListener("ended", () => { /* looped */ }, { once: true });
     kind = "track";
@@ -297,14 +344,19 @@ window.ALIGN_SOUND = (() => {
       return;
     }
     if (!url) return;
-    await ensure();
+    const token = ++playToken;
+    await ensure(true);
+    if (token !== playToken) return;
     clearBed();
+    if (token !== playToken) return;
     const el = new Audio();
     el.src = url;
     el.loop = true;
     el.preload = "auto";
     el.volume = load().volume;
+    liveAudio.add(el);
     try { await el.play(); } catch {}
+    if (token !== playToken) { killEl(el); return; }
     audioEl = el;
     kind = item.is_public ? "library" : "track";
     currentId = item.id;
@@ -342,17 +394,26 @@ window.ALIGN_SOUND = (() => {
   };
 
   const pause = () => {
-    if (!playing) return;
-    if (audioEl) audioEl.pause();
-    else if (ctx) ctx.suspend().catch(() => {});
     playing = false;
+    liveAudio.forEach((el) => { try { el.pause(); } catch {} });
+    if (audioEl) {
+      try { audioEl.pause(); } catch {}
+    }
+    muteBed();
     emit();
   };
 
   const resume = async () => {
     if (playing) return;
+    await ensure(true);
     if (audioEl) {
-      try { await audioEl.play(); playing = true; emit(); } catch {}
+      try {
+        audioEl.muted = false;
+        audioEl.volume = load().volume;
+        await audioEl.play();
+        playing = true;
+        emit();
+      } catch {}
       return;
     }
     if (kind === "track" && currentId && blobs.has(currentId)) {
@@ -367,12 +428,12 @@ window.ALIGN_SOUND = (() => {
   };
 
   const stop = () => {
+    playToken += 1;
     playing = false;
     kind = "";
     currentId = "";
     title = "Sound";
     clearBed();
-    if (ctx && ctx.state === "running") { /* keep ctx for sfx */ }
     emit();
   };
 
@@ -412,7 +473,7 @@ window.ALIGN_SOUND = (() => {
 
   const sfx = (name) => {
     if (!load().sfxOn) return;
-    ensure().then(() => {
+    ensure(true).then(() => {
       if (name === "tick") tone(880, 0.07, "sine", 0.05);
       else if (name === "beep") tone(920, 0.11, "sine", 0.05);
       else if (name === "start") { tone(392, 0.12, "sine", 0.06); setTimeout(() => tone(523, 0.16, "sine", 0.05), 90); }
