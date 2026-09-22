@@ -419,7 +419,7 @@
           <div class="ai-reply">
             ${state.ai.busy ? `<p class="hint">Thinking…</p>` : ""}
             ${state.ai.error ? `<div class="err">${escapeHtml(state.ai.error)}</div>` : ""}
-            ${state.ai.reply ? escapeHtml(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">${(window.ALIGN_AI && ALIGN_AI.hasKeys()) ? "Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down." : "Add a free Gemini or Groq key in You → Intelligence."}</p>` : "")}
+            ${state.ai.reply ? escapeHtml(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down.</p>` : "")}
           </div>
           ${state.ai.provider ? `<div class="ai-via">${escapeHtml((state.ai.provider === "groq" ? "Groq" : "Gemini") + " · " + state.ai.model)}</div>` : ""}
           <div class="ai-row">
@@ -1645,15 +1645,6 @@
               <button class="${AI().load().prefer==="groq"?"on":""}" data-act="ai-prefer" data-p="groq">Groq</button>
             </div>
           </div>
-          <button class="btn ghost" data-act="ai-test" style="height:44px">Test connection</button>
-          <p class="hint">Optional on this device only — used if Vercel isn’t set yet.</p>
-          <div class="field"><label>Gemini API key</label>
-            <input id="ai-gemini" type="password" autocomplete="off" placeholder="AIza…" value="${escapeAttr((AI().keysOf().gemini) || "")}" />
-          </div>
-          <div class="field"><label>Groq API key</label>
-            <input id="ai-groq" type="password" autocomplete="off" placeholder="gsk_…" value="${escapeAttr((AI().keysOf().groq) || "")}" />
-          </div>
-
           <div class="set-label">Library</div>
           <div class="set-stack">
             <button class="setting" data-go="library">
@@ -2554,10 +2545,6 @@
         }
       });
     }
-    const ag = document.getElementById("ai-gemini");
-    if (ag) ag.addEventListener("change", () => AI().save({ gemini: ag.value.trim() }));
-    const aq = document.getElementById("ai-groq");
-    if (aq) aq.addEventListener("change", () => AI().save({ groq: aq.value.trim() }));
     const setVol = (e) => {
       if (window.ALIGN_SOUND) ALIGN_SOUND.setVolume(Number(e.target.value) / 100);
     };
@@ -3245,9 +3232,6 @@
       if (window.ALIGN_SOUND) ALIGN_SOUND.removeTrack(id);
       if (state.session && AlignDB.configured()) AlignDB.deleteSoundRemote(row).catch(() => {});
       render();
-    } else if (act === "ai-test") {
-      state.ai.open = true;
-      runAi("Reply with exactly: ALIGN is ready. Then name which model you are, in one short clause.");
     } else if (act === "open-verse") {
       openVerseTutor(false);
     } else if (act === "verse-next") {
