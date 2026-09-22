@@ -1,0 +1,185 @@
+# ALIGN — go live
+
+Frontend on **Vercel** via **GitHub**. Backend stays on **Supabase**.
+
+You already have a Supabase project:
+
+- URL: `https://sqwwjrddpjkenkhpyntg.supabase.co`
+- Dashboard: [sqwwjrddpjkenkhpyntg](https://supabase.com/dashboard/project/sqwwjrddpjkenkhpyntg)
+
+The anon key is already in `config.js`. Never put the **service role** key in the app.
+
+---
+
+## What talks to what
+
+| Piece | Where it lives |
+| --- | --- |
+| The app (HTML/CSS/JS, PWA) | GitHub → Vercel |
+| Accounts, workouts, mornings, books metadata | Supabase database |
+| PDF files | Supabase Storage bucket `reading` |
+| Wake-up push (optional) | Supabase Edge Function `send-push` |
+| Server-side AI (optional) | Supabase Edge Function `ai` |
+| Gemini / Groq keys for in-app AI | You → AI on the phone (or the `ai` function secrets) |
+
+No Node build. Vercel just serves this folder.
+
+---
+
+## 1. Put the app on GitHub
+
+On your computer, in this project folder:
+
+```bash
+git init
+git add .
+git commit -m "ALIGN — morning OS"
+```
+
+Then on GitHub: **New repository** (private is fine). Do not tick “add a README”. Copy the remote URL and:
+
+```bash
+git remote add origin https://github.com/YOUR_USER/align.git
+git branch -M main
+git push -u origin main
+```
+
+---
+
+## 2. Host the frontend on Vercel
+
+1. Go to [vercel.com](https://vercel.com) and sign in with **GitHub**.
+2. **Add New… → Project** → import the `align` repo.
+3. Settings:
+   - **Framework Preset:** Other
+   - **Root Directory:** `.` (the folder with `index.html`)
+   - **Build Command:** leave empty
+   - **Output Directory:** leave empty
+4. **Deploy**.
+
+You get a URL like `https://align-xxxxx.vercel.app`.
+
+Open it. You should see ALIGN. Accounts will work after the SQL and Auth steps below.
+
+**Custom domain (optional):** Vercel → Project → Settings → Domains.
+
+---
+
+## 3. Point Supabase Auth at Vercel
+
+Dashboard → **Authentication** → **URL Configuration**:
+
+1. **Site URL:** `https://YOUR-APP.vercel.app`  
+   (your real Vercel URL, no trailing slash)
+2. **Redirect URLs** — add all of these:
+
+```
+https://YOUR-APP.vercel.app/**
+https://YOUR-APP.vercel.app/
+http://localhost:8080/**
+http://localhost:8080/
+```
+
+3. **Authentication → Providers → Email:** on.  
+   For easier testing, turn **Confirm email** off.
+
+Without the Vercel URL in Redirect URLs, magic links and sign-up will bounce.
+
+---
+
+## 4. Run the SQL (backend tables)
+
+Dashboard → **SQL Editor** → New query. Run these **in order**, one file at a time. Paste the whole file, **Run**.
+
+You already ran `sql/schema.sql` (fitness). If you’re not sure, run it again — it is safe to re-run.
+
+| Order | File | What it creates |
+| --- | --- | --- |
+| 1 | `sql/schema.sql` | profiles, workouts, push, notification prefs |
+| 2 | `sql/schema-life.sql` | mornings, day plans, journals, bible cursor |
+| 3 | `sql/schema-books.sql` | books, reading log, private Storage bucket `reading` |
+
+If a policy “already exists” warning appears, ignore it. Real errors (red) mean stop and read the message.
+
+After `schema-books.sql`, confirm:
+
+- **Table Editor** shows `books` and `reading_log`
+- **Storage** shows a private bucket named `reading`
+
+---
+
+## 5. Use the app
+
+1. Open the Vercel URL on your phone.
+2. **You → Create account** (or sign in).
+3. **You → Wake nudge** if you want the 4am / 5am call (needs notifications allowed).
+4. **You → AI** — paste a [Gemini](https://aistudio.google.com/apikey) key and/or a [Groq](https://console.groq.com/keys) key, then **Test both**. Keys stay on the phone. One is enough; two gives failover.
+5. **Word → Books** — upload a PDF. After the first save it reads offline.
+6. iPhone: Share → **Add to Home Screen**. Android: the install banner, or Chrome → Add to Home screen.
+
+---
+
+## 6. Optional — edge functions (push + server AI)
+
+Only if you want server-sent wake-ups, or AI keys kept off the phone.
+
+Install the [Supabase CLI](https://supabase.com/docs/guides/cli) and log in:
+
+```bash
+npm i -g supabase
+supabase login
+supabase link --project-ref sqwwjrddpjkenkhpyntg
+```
+
+### Push (`send-push`)
+
+Secrets from `supabase/.env.example` (do not put these in Vercel or `config.js`):
+
+```bash
+supabase secrets set VAPID_PUBLIC_KEY="BHQs0Wo3QmVAFpW5a7raJqABOk98BLfrBH_4eRUOAUgIHxIybOFlotKQlwLsST-JYfHtx7klDmNNJMchJpcUYBo"
+supabase secrets set VAPID_PRIVATE_KEY="YOUR_PRIVATE_FROM_ENV_EXAMPLE"
+supabase secrets set VAPID_SUBJECT="mailto:you@yourdomain.com"
+supabase functions deploy send-push
+```
+
+Then Dashboard → Edge Functions → `send-push` → **Schedules**: POST hourly with `{ "mode": "daily" }`.
+
+The app still works without this. The wake toggle on the phone uses a local notification if the function isn’t deployed.
+
+### Server AI (`ai`)
+
+```bash
+supabase secrets set GEMINI_API_KEY="your_gemini_key"
+supabase secrets set GROQ_API_KEY="your_groq_key"
+supabase functions deploy ai
+```
+
+You do **not** need this if you already pasted keys in You → AI.
+
+---
+
+## 7. Local preview (optional)
+
+From this folder:
+
+```bash
+python3 -m http.server 8080
+```
+
+Open `http://localhost:8080`. Same Supabase backend.
+
+---
+
+## Checklist
+
+- [ ] Code on GitHub
+- [ ] Vercel deploy succeeds (ALIGN splash / Today)
+- [ ] Auth Site URL + Redirect URLs include the Vercel domain
+- [ ] `schema.sql` run
+- [ ] `schema-life.sql` run
+- [ ] `schema-books.sql` run (Storage bucket `reading` exists)
+- [ ] Create account from the live URL
+- [ ] Gemini and/or Groq key in You → AI
+- [ ] Add to Home Screen on the phone
+
+That’s the whole setup. GitHub holds the app. Vercel serves it. Supabase is the backend.

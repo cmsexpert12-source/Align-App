@@ -1,0 +1,5 @@
+# Minimal config so `supabase functions deploy send-push` works.
+# Auth is handled inside the function (user JWT for tests, cron secret for daily).
+
+[functions.send-push]
+verify_jwt = false
