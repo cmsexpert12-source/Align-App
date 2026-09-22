@@ -419,7 +419,7 @@
           <div class="ai-reply">
             ${state.ai.busy ? `<p class="hint">Thinking…</p>` : ""}
             ${state.ai.error ? `<div class="err">${escapeHtml(state.ai.error)}</div>` : ""}
-            ${state.ai.reply ? escapeHtml(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down.</p>` : "")}
+            ${state.ai.reply ? formatAiReply(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down.</p>` : "")}
           </div>
           ${state.ai.provider ? `<div class="ai-via">${escapeHtml((state.ai.provider === "groq" ? "Groq" : "Gemini") + " · " + state.ai.model)}</div>` : ""}
           <div class="ai-row">
@@ -2379,6 +2379,64 @@
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
   const escapeAttr = escapeHtml;
+
+  const formatAiReply = (raw) => {
+    let t = String(raw || "").replace(/\r\n/g, "\n").trim();
+    t = t.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    t = t.replace(/^```[\w-]*\n([\s\S]*?)\n```$/, "$1").trim();
+    const inline = (s) => escapeHtml(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
+    const out = [];
+    String(t).split(/\n{2,}/).forEach((chunk) => {
+      const lines = chunk.split("\n").map((l) => l.replace(/\s+$/, ""));
+      if (!lines.some(Boolean)) return;
+      let buf = [];
+      let listType = null;
+      let items = [];
+      const flushP = () => {
+        if (!buf.length) return;
+        out.push("<p>" + buf.map(inline).join("<br>") + "</p>");
+        buf = [];
+      };
+      const flushL = () => {
+        if (!listType) return;
+        out.push("<" + listType + ">" + items.map((x) => "<li>" + x + "</li>").join("") + "</" + listType + ">");
+        listType = null;
+        items = [];
+      };
+      lines.forEach((l) => {
+        if (!l.trim()) return;
+        const ol = l.match(/^\s*\d+\.\s+(.+)$/);
+        const ul = l.match(/^\s*[-*•]\s+(.+)$/);
+        const hd = l.match(/^\s*#{1,3}\s+(.+)$/);
+        const title = l.match(/^\s*\*\*(.+?)\*\*:?\s*$/);
+        if (ol) {
+          flushP();
+          if (listType !== "ol") flushL();
+          listType = "ol";
+          items.push(inline(ol[1]));
+          return;
+        }
+        if (ul) {
+          flushP();
+          if (listType !== "ul") flushL();
+          listType = "ul";
+          items.push(inline(ul[1]));
+          return;
+        }
+        flushL();
+        if (hd) { flushP(); out.push("<h4>" + inline(hd[1]) + "</h4>"); return; }
+        if (title) { flushP(); out.push("<h4>" + inline(title[1]) + "</h4>"); return; }
+        buf.push(l);
+      });
+      flushL();
+      flushP();
+    });
+    return out.join("") || "<p></p>";
+  };
 
   /* ---------- RENDER / EVENTS ---------- */
   const render = () => {

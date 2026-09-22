@@ -992,9 +992,23 @@ img { max-width: 100%; display: block; }
   font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap;
 }
 .ai-reply {
-  flex: 1; overflow-y: auto; min-height: 80px; max-height: 240px;
-  font-size: 15px; line-height: 1.55; color: #ebe6da; white-space: pre-wrap;
+  flex: 1; overflow-y: auto; min-height: 80px; max-height: 280px;
+  font-size: 15px; line-height: 1.55; color: #ebe6da;
   padding: 4px 2px 12px;
+}
+.ai-reply p { margin: 0 0 10px; }
+.ai-reply p:last-child { margin-bottom: 0; }
+.ai-reply h4 {
+  margin: 12px 0 6px; font-size: 13px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase; color: #fff;
+}
+.ai-reply h4:first-child { margin-top: 0; }
+.ai-reply ul, .ai-reply ol { margin: 0 0 12px; padding-left: 1.2em; }
+.ai-reply li { margin: 0 0 6px; }
+.ai-reply strong { font-weight: 800; color: #fff; }
+.ai-reply em { font-style: italic; }
+.ai-reply code {
+  font-size: 13px; background: #0e1016; padding: 1px 6px; border-radius: 6px;
 }
 .ai-via { font-size: 11px; color: var(--faint); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
 .ai-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
