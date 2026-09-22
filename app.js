@@ -1106,10 +1106,27 @@
     const prios = (plan.priorities || []).map((x) => String(x || "").trim()).filter(Boolean);
     const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
     const planNote = String(plan.note || "").trim();
-    const planNow = (prios.length || planTasks.length || planNote) ? `
+    const jn = L().journalOf(t.iso);
+    if ((morn.word || morn.devotion) && (assign.read || []).length) {
+      try { S().ensureTodayVerse(t.iso, assign.read, state.readPacks || []); } catch { /* ok */ }
+    }
+    const tv = S().todayVerse(t.iso);
+    const verseLine = String(jn.anchorVerse || "").trim();
+    const verseRef = (tv && S().refOf) ? S().refOf(tv) : "";
+    const verseBody = tv && tv.text ? String(tv.text).trim() : "";
+    const showWord = !!(morn.devotion || morn.word || verseLine || verseBody);
+    const wordToday = showWord ? `
+        <div class="dash-card word-today">
+          <div class="section-h"><h4>Today’s Word</h4><button class="linkish" data-act="open-step" data-step="${morn.word ? "word" : "devotion"}">Open</button></div>
+          ${verseLine ? `<p class="word-verse">${escapeHtml(verseLine)}</p>${jn.anchorSource ? `<p class="word-src">${escapeHtml(jn.anchorSource)}</p>` : ""}` : ""}
+          ${verseBody ? `<p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}</span> ` : ""}${escapeHtml(verseBody)}</p>` : ""}
+          ${jn.devotion ? `<p class="word-note">${escapeHtml(jn.devotion)}</p>` : ""}
+        </div>` : "";
+    const planNow = (prios.length || planTasks.length || planNote || morn.plan || state.planJustSaved) ? `
         <div class="plan-now">
+          ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
-          ${prios.map((text, i) => `<div class="plan-pri"><span>${i + 1}</span><p>${escapeHtml(text)}</p></div>`).join("")}
+          ${prios.length ? prios.map((text, i) => `<div class="plan-pri"><span>${i + 1}</span><p>${escapeHtml(text)}</p></div>`).join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
           ${planTasks.map((tk) => `<div class="plan-task ${tk.done ? "done" : ""}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</div>`).join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
         </div>` : "";
@@ -1185,6 +1202,7 @@
           <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
           <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
         </div>
+        ${wordToday}
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
@@ -2431,7 +2449,13 @@
       state.view = "exercise";
       render();
     }));
-    app.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => handle(b.dataset.act, b)));
+    app.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", (e) => {
+      if (b.dataset.act === "ai-close" || (b.dataset.act === "sheet-no" && b.classList.contains("sheet-bg"))) {
+        if (e.target !== b) return;
+      }
+      e.stopPropagation();
+      handle(b.dataset.act, b);
+    }));
     const name = $("#name-input");
     if (name) name.addEventListener("input", e => { state.profile.name = e.target.value; });
     const ae = $("#auth-email");
@@ -3024,6 +3048,10 @@
       const iso = today().iso;
       const j = L().journalOf(iso);
       j.devotion = (document.getElementById("devotion-note") || {}).value || j.devotion;
+      if (state.spurgeonAm && state.spurgeonAm.v) {
+        j.anchorVerse = state.spurgeonAm.v;
+        j.anchorSource = "Spurgeon · Morning";
+      }
       L().saveJournal(iso, j);
       AlignDB.saveJournal(iso, j).catch(() => {});
       completeStep("devotion");
@@ -3065,9 +3093,9 @@
       const res = await AlignDB.saveDayPlan(iso, p, { now: true });
       completeStep("plan");
       state.planJustSaved = true;
-      state.view = "dayplan";
+      state.view = "home";
       const cloud = !!(state.session && res && res.ok && res.data !== null);
-      toast(cloud ? "Plan saved" : (res && res.ok === false ? "Saved on this device — will sync" : "Plan saved on this device"));
+      toast(cloud ? "Plan saved — on Today" : (res && res.ok === false ? "Saved on this device — on Today" : "Plan saved — on Today"));
       render();
     } else if (act === "edit-dayplan") {
       state.planJustSaved = false;
