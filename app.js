@@ -373,12 +373,12 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "player", "rest", "drill", "sound"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound"].includes(state.view);
   };
 
   const overlays = () => {
     const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill"].includes(state.view);
-    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library"].includes(state.view);
+    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
     const hideNow = nowHidden();
@@ -915,7 +915,7 @@
     if (view === "home") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
     if (view === "word" || view === "library") return "word";
-    if (view === "profile") return "profile";
+    if (view === "profile" || view === "sound") return "profile";
     return null;
   };
 
@@ -1202,6 +1202,20 @@
           <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
           <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
         </div>
+        ${(() => {
+          const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", id: "" };
+          const line = snd.playing
+            ? ("Playing · " + (snd.title || "Sound"))
+            : (snd.id ? ((snd.title || "Sound") + " · paused") : "Stations, library, or your own audio — in ALIGN.");
+          return `
+        <div class="sound-now">
+          <button class="now-play" data-act="sound-toggle" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
+          <button class="sound-now-meta" data-go="sound">
+            <h4>${escapeHtml(snd.playing || snd.id ? (snd.title || "Sound") : "Sound")}</h4>
+            <p>${escapeHtml(line)}</p>
+          </button>
+        </div>`;
+        })()}
         ${wordToday}
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
@@ -1680,14 +1694,14 @@
     const library = snd.library || [];
     const signed = !!state.session;
     return `
-      <div class="screen full has-cta">
-        <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
+      <div class="screen">
+        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Sound</div>
           <h1>Stay in ALIGN.</h1>
           <p>Open recordings in the library. Your own files upload to your account.</p>
         </div>
-        <div class="scroll-body" style="padding:0 16px 20px">
+        <div class="scroll-body" style="padding:0 16px calc(var(--nav-h) + 24px)">
           <div class="set-label" style="padding-top:0">ALIGN library</div>
           <p class="hint" style="margin-top:0">Public-domain field recordings (PDsounds via Wikimedia). Stored on your ALIGN database after you run the sounds SQL.</p>
           <div class="station-grid">
@@ -3259,6 +3273,14 @@
       if (chip) runAi(chip[1]);
     } else if (act === "ai-prefer") {
       AI().save({ prefer: el.dataset.p });
+      render();
+    } else if (act === "sound-toggle") {
+      if (window.ALIGN_SOUND) {
+        const snap = ALIGN_SOUND.snapshot();
+        if (snap.playing) ALIGN_SOUND.pause();
+        else if (snap.id) ALIGN_SOUND.resume();
+        else ALIGN_SOUND.playStation("rise");
+      }
       render();
     } else if (act === "sound-station") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
