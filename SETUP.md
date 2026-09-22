@@ -20,7 +20,7 @@ The anon key is already in `config.js`. Never put the **service role** key in th
 | PDF files | Supabase Storage bucket `reading` |
 | Wake-up push (optional) | Supabase Edge Function `send-push` |
 | Server-side AI (optional) | Supabase Edge Function `ai` |
-| Gemini / Groq keys for in-app AI | You → AI on the phone (or the `ai` function secrets) |
+| Gemini / Groq keys for in-app AI | **Vercel env vars** `GEMINI_API_KEY` / `GROQ_API_KEY` (route `/api/ai`) |
 
 No Node build. Vercel just serves this folder.
 
@@ -113,9 +113,14 @@ After `schema-books.sql`, confirm:
 1. Open the Vercel URL on your phone.
 2. **You → Create account** (or sign in).
 3. **You → Wake nudge** if you want the 4am / 5am call (needs notifications allowed).
-4. **You → AI** — paste a [Gemini](https://aistudio.google.com/apikey) key and/or a [Groq](https://console.groq.com/keys) key, then **Test both**. Keys stay on the phone. One is enough; two gives failover.
+4. **AI keys on Vercel** (not on the phone). In the Vercel project: **Settings → Environment Variables**. Add:
+   - `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey)
+   - `GROQ_API_KEY` from [Groq Console](https://console.groq.com/keys)
+   
+   Environment: Production and Preview. Then **Redeploy**. One key is enough; two gives failover. Open **You → Intelligence → Test connection**.
 5. **Word → Books** — upload a PDF. After the first save it reads offline.
-6. iPhone: Share → **Add to Home Screen**. Android: the install banner, or Chrome → Add to Home screen.
+6. **You → Sound** — play a station through the morning, or add audio from this phone. Cues mark steps and rest.
+7. iPhone: Share → **Add to Home Screen**. Android: the install banner, or Chrome → Add to Home screen.
 
 ---
 
@@ -154,7 +159,7 @@ supabase secrets set GROQ_API_KEY="your_groq_key"
 supabase functions deploy ai
 ```
 
-You do **not** need this if you already pasted keys in You → AI.
+You do **not** need this if keys are already on Vercel (`/api/ai`).
 
 ---
 
@@ -179,7 +184,9 @@ Open `http://localhost:8080`. Same Supabase backend.
 - [ ] `schema-life.sql` run
 - [ ] `schema-books.sql` run (Storage bucket `reading` exists)
 - [ ] Create account from the live URL
-- [ ] Gemini and/or Groq key in You → AI
+- [ ] `GEMINI_API_KEY` and/or `GROQ_API_KEY` set in Vercel, then redeploy
+- [ ] You → Intelligence → Test connection
+- [ ] You → Sound plays a station
 - [ ] Add to Home Screen on the phone
 
 That’s the whole setup. GitHub holds the app. Vercel serves it. Supabase is the backend.

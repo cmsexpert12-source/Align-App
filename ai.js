@@ -55,12 +55,45 @@ window.ALIGN_AI = (() => {
     return { gemini: a.gemini || b.gemini, groq: a.groq || b.groq, prefer: a.prefer };
   };
 
+  let server = { ready: false, gemini: false, groq: false, checked: false };
+
+  const probe = async () => {
+    try {
+      const r = await fetch("/api/ai", { method: "GET", cache: "no-store" });
+      const data = await r.json().catch(() => ({}));
+      server = {
+        ready: !!(data && data.ready),
+        gemini: !!(data && data.gemini),
+        groq: !!(data && data.groq),
+        checked: true
+      };
+    } catch {
+      server = { ready: false, gemini: false, groq: false, checked: true };
+    }
+    return server;
+  };
+
   const hasKeys = () => {
     const k = keysOf();
-    return !!(k.gemini || k.groq);
+    return !!(server.ready || k.gemini || k.groq);
   };
 
   let lastOk = null;
+
+  const callServer = async (system, user, prefer) => {
+    const res = await timeoutFetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: user, system, prefer })
+    }, 28000);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.text) {
+      const err = new Error(data.error || ("AI " + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return { text: data.text, provider: data.provider, model: data.model };
+  };
 
   const timeoutFetch = (url, opts, ms = 18000) => {
     const ctrl = new AbortController();
@@ -195,5 +228,5 @@ window.ALIGN_AI = (() => {
     return p + " · " + (res.model || "");
   };
 
-  return { load, save, keysOf, hasKeys, ask, last: () => lastOk, label, BASE };
+  return { load, save, keysOf, hasKeys, ask, probe, server: () => server, last: () => lastOk, label, BASE };
 })();

@@ -368,7 +368,19 @@
     const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
+    const hideNow = ["splash", "onboard", "auth", "setup", "sound"].includes(state.view);
+    const nowBar = hideNow ? "" : `
+      <div class="now-bar ${withNav ? "up" : "low"}">
+        <button class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
+        <button class="now-meta" data-go="sound">
+          <b>${escapeHtml(snd.playing ? snd.title : "Play through the morning")}</b>
+          <span>${snd.playing ? "Playing in ALIGN" : "Stations · your music"}</span>
+        </button>
+        <input class="now-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" data-act="sound-vol" aria-label="Volume" />
+      </div>`;
     return `
+    ${nowBar}
     ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
     ${state.sheet ? `
       <div class="sheet-bg" data-act="sheet-no">
@@ -814,6 +826,7 @@
     d.flash = ok ? "ok" : "no";
     d.picked = i;
     buzz(ok ? 12 : 28);
+    sfx(ok ? "ok" : "no");
     render();
     setTimeout(() => {
       if (!state.drill || state.drill !== d) return;
@@ -1576,14 +1589,22 @@
           </div>
           <button class="btn ghost" data-act="test-push" style="height:44px">Send a test</button>
 
+          <div class="set-label">Sound</div>
+          <button class="setting" data-go="sound">
+            <div class="grow"><h4>Play through the morning</h4><p>Stations in the app, or your own audio. Cues when a step lands.</p></div>
+          </button>
+
           <div class="set-label">Intelligence</div>
-          <p class="hint" style="margin-top:0">ALIGN briefs the morning, scales a session, or asks one question on the Word. Free Gemini, then Groq. Keys stay on this phone.</p>
-          <div class="field"><label>Gemini API key</label>
-            <input id="ai-gemini" type="password" autocomplete="off" placeholder="AIza…" value="${escapeAttr((AI().keysOf().gemini) || "")}" />
-          </div>
-          <div class="field"><label>Groq API key</label>
-            <input id="ai-groq" type="password" autocomplete="off" placeholder="gsk_…" value="${escapeAttr((AI().keysOf().groq) || "")}" />
-          </div>
+          ${(() => {
+            const srv = AI().server ? AI().server() : { ready: false, checked: false };
+            const line = !srv.checked
+              ? "Checking Vercel…"
+              : srv.ready
+                ? ("Vercel · " + [srv.gemini ? "Gemini" : "", srv.groq ? "Groq" : ""].filter(Boolean).join(" + ") + ". Keys stay on the server.")
+                : "Add GEMINI_API_KEY and GROQ_API_KEY in Vercel → Settings → Environment Variables, then redeploy.";
+            return `<p class="hint" style="margin-top:0">${escapeHtml(line)}</p>
+              <div class="cloud ${srv.ready?"on":""}" style="margin:0 0 12px">${srv.ready ? "Server ready" : "Waiting on Vercel keys"}</div>`;
+          })()}
           <div class="field"><label>Prefer</label>
             <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
               <button class="${AI().load().prefer==="auto"?"on":""}" data-act="ai-prefer" data-p="auto">Auto</button>
@@ -1592,6 +1613,13 @@
             </div>
           </div>
           <button class="btn ghost" data-act="ai-test" style="height:44px">Test connection</button>
+          <p class="hint">Optional on this device only — used if Vercel isn’t set yet.</p>
+          <div class="field"><label>Gemini API key</label>
+            <input id="ai-gemini" type="password" autocomplete="off" placeholder="AIza…" value="${escapeAttr((AI().keysOf().gemini) || "")}" />
+          </div>
+          <div class="field"><label>Groq API key</label>
+            <input id="ai-groq" type="password" autocomplete="off" placeholder="gsk_…" value="${escapeAttr((AI().keysOf().groq) || "")}" />
+          </div>
 
           <div class="set-label">Library</div>
           <div class="set-stack">
@@ -1616,6 +1644,56 @@
             : `<button class="btn" style="margin-top:18px" data-go="auth">Create account</button>`
           }
           <div class="ver">ALIGN</div>
+        </div>
+      </div>
+    `;
+  };
+
+  const viewSound = () => {
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { stations: [], tracks: [], volume: 0.42, sfxOn: true, playing: false, id: "", kind: "" };
+    const stations = snd.stations || [];
+    const tracks = snd.tracks || [];
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">Sound</div>
+          <h1>Stay in ALIGN.</h1>
+          <p>Stations for the morning, or audio from this phone. No other app.</p>
+        </div>
+        <div class="scroll-body" style="padding:0 16px 20px">
+          <div class="set-label" style="padding-top:0">Stations</div>
+          <div class="station-grid">
+            ${stations.map((s) => `
+              <button class="station ${snd.kind==="station" && snd.id===s.id && snd.playing ? "on" : ""}" data-act="sound-station" data-id="${s.id}">
+                <h4>${escapeHtml(s.name)}</h4>
+                <p>${escapeHtml(s.sub)}</p>
+              </button>`).join("")}
+          </div>
+          <div class="set-label">Your music</div>
+          <p class="hint" style="margin-top:0">Worship, sermons, playlists you already have — they stay on this phone.</p>
+          <input id="sound-files" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple hidden />
+          <button class="btn ghost" style="height:44px" data-act="sound-add">Add audio</button>
+          <div class="track-list">
+            ${tracks.length ? tracks.map((t) => `
+              <div class="setting">
+                <button class="grow" data-act="sound-track" data-id="${t.id}" style="text-align:left">
+                  <h4>${escapeHtml(t.name)}</h4>
+                  <p>${snd.kind==="track" && snd.id===t.id && snd.playing ? "Playing" : "On this phone"}</p>
+                </button>
+                <button class="linkish" data-act="sound-remove" data-id="${t.id}">Remove</button>
+              </div>`).join("") : `<p class="hint">Nothing added yet.</p>`}
+          </div>
+          <div class="set-label">Cues</div>
+          <div class="setting">
+            <div class="grow"><h4>Sound feedback</h4><p>A short tone when a step, set, or rest lands.</p></div>
+            <button class="toggle ${snd.sfxOn?"on":""}" data-act="sound-sfx"><i></i></button>
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label>Volume</label>
+            <input id="sound-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" />
+          </div>
+          ${snd.playing ? `<button class="btn ghost" style="height:44px;margin-top:8px" data-act="sound-stop">Stop</button>` : ""}
         </div>
       </div>
     `;
@@ -2299,7 +2377,8 @@
       book: viewBook,
       reader: viewReader,
       verse: viewVerse,
-      drill: viewDrill
+      drill: viewDrill,
+      sound: viewSound
     };
     const tab = tabFor(state.view);
     app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
@@ -2432,17 +2511,9 @@
 
   const buzz = (ms = 18) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
 
-  const beep = () => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine"; o.frequency.value = 880;
-      g.gain.value = 0.04;
-      o.connect(g); g.connect(ctx.destination);
-      o.start(); o.stop(ctx.currentTime + 0.12);
-    } catch {}
-  };
+  const beep = () => { try { window.ALIGN_SOUND && ALIGN_SOUND.sfx("beep"); } catch {} };
+  const tickSound = () => { try { window.ALIGN_SOUND && ALIGN_SOUND.sfx("tick"); } catch {} };
+  const sfx = (name) => { try { window.ALIGN_SOUND && ALIGN_SOUND.sfx(name); } catch {} };
 
   const clearTick = () => { if (state.tick) { clearInterval(state.tick); state.tick = null; } };
 
@@ -2464,6 +2535,7 @@
     };
     state.view = "player";
     if (ex.kind === "time") startTimer();
+    sfx("start");
     render();
   };
 
@@ -2641,7 +2713,7 @@
     } else if (act === "start-day") {
       startWorkout(el.dataset.day);
     } else if (act === "complete-ex") {
-      buzz(); completeCurrent("done");
+      buzz(); sfx("ok"); completeCurrent("done");
     } else if (act === "pause-ex") {
       const w = state.workout;
       w.paused = !w.paused;
@@ -2859,6 +2931,7 @@
         AlignDB.saveJournal(iso, j).catch(() => {});
       }
       completeStep(step);
+      sfx("done");
       toast(step === "go" ? (L().clocksFor(today().date).sunday ? "Go to church." : "Go well.") : "Logged.");
       state.view = "home";
       render();
@@ -3045,6 +3118,30 @@
     } else if (act === "ai-prefer") {
       AI().save({ prefer: el.dataset.p });
       render();
+    } else if (act === "sound-station") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
+      render();
+    } else if (act === "sound-track") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.playTrack(el.dataset.id);
+      render();
+    } else if (act === "sound-pause") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.pause();
+      render();
+    } else if (act === "sound-resume") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.resume();
+      render();
+    } else if (act === "sound-stop") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.stop();
+      render();
+    } else if (act === "sound-sfx") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.setSfx(!ALIGN_SOUND.snapshot().sfxOn);
+      render();
+    } else if (act === "sound-add") {
+      const inp = document.getElementById("sound-files");
+      if (inp) inp.click();
+    } else if (act === "sound-remove") {
+      if (window.ALIGN_SOUND) ALIGN_SOUND.removeTrack(el.dataset.id);
+      render();
     } else if (act === "ai-test") {
       state.ai.open = true;
       runAi("Reply with exactly: ALIGN is ready. Then name which model you are, in one short clause.");
@@ -3121,6 +3218,25 @@
 
   const boot = async () => {
     registerSW();
+    if (window.ALIGN_AI && ALIGN_AI.probe) ALIGN_AI.probe().then(() => {
+      if (state.view === "profile" || state.ai.open) render();
+    }).catch(() => {});
+    if (window.ALIGN_SOUND && ALIGN_SOUND.loadTracks) ALIGN_SOUND.loadTracks().then(() => {}).catch(() => {});
+    if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
+      if (["splash", "onboard"].includes(state.view)) return;
+      const bar = app.querySelector(".now-bar b");
+      const snap = ALIGN_SOUND.snapshot();
+      if (bar) {
+        bar.textContent = snap.playing ? snap.title : "Play through the morning";
+        const sub = app.querySelector(".now-bar span");
+        if (sub) sub.textContent = snap.playing ? "Playing in ALIGN" : "Stations · your music";
+        const play = app.querySelector(".now-play");
+        if (play) {
+          play.textContent = snap.playing ? "❚❚" : "▶";
+          play.dataset.act = snap.playing ? "sound-pause" : "sound-resume";
+        }
+      }
+    });
     window.addEventListener("online", () => { state.offline = false; if (state.view !== "splash") render(); });
     window.addEventListener("offline", () => { state.offline = true; if (state.view !== "splash") render(); });
     render();

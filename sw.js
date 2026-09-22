@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v18";
+const CACHE = "align-v19";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const ASSETS = [
   "./scripture.js",
   "./books.js",
   "./ai.js",
+  "./sound.js",
   "./db.js",
   "./config.js",
   "./manifest.webmanifest",
@@ -40,6 +41,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/")) return;
 
   event.respondWith(
     caches.match(req).then((cached) => {
