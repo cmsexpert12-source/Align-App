@@ -1152,19 +1152,21 @@
         </div>
         ${state.offline ? `<div class="offline">You’re offline. The morning still works on this device.</div>` : ""}
         ${install}
-        <div class="week-strip">${weekDots}</div>
-        <div class="pulse">
-          <div class="pulse-top">
-            <div class="pulse-num">${mStreak}</div>
-            <div>
-              <h4>Day streak</h4>
-              <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
+        <div class="home-week">
+          <div class="week-strip">${weekDots}</div>
+          <div class="pulse">
+            <div class="pulse-top">
+              <div class="pulse-num">${mStreak}</div>
+              <div>
+                <h4>Day streak</h4>
+                <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
+              </div>
             </div>
-          </div>
-          <div class="pulse-stats">
-            <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
-            <div><b>${pulse.sessions}</b><span>Sessions</span></div>
-            <div><b>${pulse.chapters}</b><span>Chapters</span></div>
+            <div class="pulse-stats">
+              <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
+              <div><b>${pulse.sessions}</b><span>Sessions</span></div>
+              <div><b>${pulse.chapters}</b><span>Chapters</span></div>
+            </div>
           </div>
         </div>
         <div class="clocks">
