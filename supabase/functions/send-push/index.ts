@@ -12,15 +12,42 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 
-const DAYS = [
-  { id: "sun-push", name: "Push Engine", minutes: 28 },
-  { id: "mon-core", name: "Core & Hips", minutes: 26 },
-  { id: "tue-pull", name: "Pull & Posture", minutes: 28 },
-  { id: "wed-legs", name: "Legs Found", minutes: 30 },
-  { id: "thu-core", name: "Core Control", minutes: 24 },
-  { id: "fri-upper", name: "Upper Mix", minutes: 28 },
-  { id: "sat-recover", name: "Recover & Move", minutes: 16 }
+const WAKE_NOTES = [
+  [
+    ["ALIGN · Church morning", "Rise at 4:00. Walk the light path. One chapter. Out by 5:45 — the first appointment is His."],
+    ["ALIGN · The house is waiting", "This hour is already decided. Twelve minutes. One chapter. Leave on time. Go to church."]
+  ],
+  [
+    ["ALIGN · Begin again", "A new week does not need a new you. It needs the same order. Rise. Train. Pray. Word. Go."],
+    ["ALIGN · The day is a gift", "You are up. Body first, while the mind is quiet. Then prayer. Then the Word. Then the day."]
+  ],
+  [
+    ["ALIGN · Quiet strength", "Strength is built in the dark, before anyone is watching. Walk the path. Stay here until you step out."],
+    ["ALIGN · Don't skip the quiet", "Train. Pray. Open Scripture. Three true priorities. The rest of the day will take its place."]
+  ],
+  [
+    ["ALIGN · Midweek, still yours", "The week does not own this hour. You do. One faithful morning is worth more than a late start."],
+    ["ALIGN · Keep the order", "Rise. Move. Pray. Word. Plan. Ready. Go. Don't decide the morning twice."]
+  ],
+  [
+    ["ALIGN · Faithfulness before sunrise", "What you repeat in the dark becomes who you are in the light. Open ALIGN. Walk the path."],
+    ["ALIGN · Guard this hour", "The Word is waiting. So is the work. Start with the body, then the soul, then the plan."]
+  ],
+  [
+    ["ALIGN · Finish the week well", "One more morning in order. Don't let Friday steal the quiet. Train. Pray. Read. Then go."],
+    ["ALIGN · End as you began", "Awake. Trained. In the Word. Ready. Finish the work week the way you started it."]
+  ],
+  [
+    ["ALIGN · Recover, don't drift", "Rest is part of the path — not a skip. Move gently. Pray. Read. Keep the morning."],
+    ["ALIGN · Still a morning", "Saturday is still a gift. Rise. Recover well. Stay with the Word. Don't give the hour away."]
+  ]
 ];
+
+function wakeNote(date = new Date()) {
+  const bank = WAKE_NOTES[date.getDay()] || WAKE_NOTES[1];
+  const pair = bank[date.getDate() % bank.length];
+  return { title: pair[0], body: pair[1] };
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -35,10 +62,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function todayWorkout() {
-  const dow = new Date().getDay();
-  return DAYS[dow];
-}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -76,10 +100,10 @@ Deno.serve(async (req) => {
       .select("endpoint, p256dh, auth")
       .eq("user_id", userData.user.id);
 
-    const day = todayWorkout();
+    const note = wakeNote();
     const payload = JSON.stringify({
-      title: "ALIGN",
-      body: `Test ping. Today is ${day.name} · ${day.minutes} min.`,
+      title: note.title,
+      body: note.body,
       tag: "align-test"
     });
     const results = await sendAll(subs || [], payload);
@@ -112,15 +136,15 @@ Deno.serve(async (req) => {
     .select("endpoint, p256dh, auth, user_id")
     .in("user_id", dueIds);
 
-  const day = todayWorkout();
+  const note = wakeNote();
   const payload = JSON.stringify({
-    title: "ALIGN · " + day.name,
-    body: `It's training time. ${day.minutes} minutes. Open the app and start.`,
+    title: note.title,
+    body: note.body,
     tag: "align-daily"
   });
 
   const results = await sendAll(subs || [], payload);
-  return json({ ok: true, ...results, workout: day.name });
+  return json({ ok: true, ...results, title: note.title });
 });
 
 async function sendAll(

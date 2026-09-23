@@ -259,9 +259,9 @@
   };
 
   const sendTestPush = async () => {
-    const day = todayDay();
-    const title = "ALIGN";
-    const body = `${day.name} · ${day.minutes} min. The morning is waiting.`;
+    const note = L().wakeNote(today().date);
+    const title = note.title;
+    const body = note.body;
     if (state.session && AlignDB.configured() && AlignDB.client()) {
       try {
         const sb = AlignDB.client();

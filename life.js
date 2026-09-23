@@ -39,6 +39,45 @@ window.ALIGN_LIFE = (() => {
 
   const isEvening = (date = new Date()) => date.getHours() >= 20 || date.getHours() < 2;
 
+  /* Wake-call copy. Day-specific, whole morning — not a gym ping. */
+  const WAKE_NOTES = [
+    [ // Sunday
+      ["ALIGN · Church morning", "Rise at 4:00. Walk the light path. One chapter. Out by 5:45 — the first appointment is His."],
+      ["ALIGN · The house is waiting", "This hour is already decided. Twelve minutes. One chapter. Leave on time. Go to church."]
+    ],
+    [ // Monday
+      ["ALIGN · Begin again", "A new week does not need a new you. It needs the same order. Rise. Train. Pray. Word. Go."],
+      ["ALIGN · The day is a gift", "You are up. Body first, while the mind is quiet. Then prayer. Then the Word. Then the day."]
+    ],
+    [ // Tuesday
+      ["ALIGN · Quiet strength", "Strength is built in the dark, before anyone is watching. Walk the path. Stay here until you step out."],
+      ["ALIGN · Don't skip the quiet", "Train. Pray. Open Scripture. Three true priorities. The rest of the day will take its place."]
+    ],
+    [ // Wednesday
+      ["ALIGN · Midweek, still yours", "The week does not own this hour. You do. One faithful morning is worth more than a late start."],
+      ["ALIGN · Keep the order", "Rise. Move. Pray. Word. Plan. Ready. Go. Don't decide the morning twice."]
+    ],
+    [ // Thursday
+      ["ALIGN · Faithfulness before sunrise", "What you repeat in the dark becomes who you are in the light. Open ALIGN. Walk the path."],
+      ["ALIGN · Guard this hour", "The Word is waiting. So is the work. Start with the body, then the soul, then the plan."]
+    ],
+    [ // Friday
+      ["ALIGN · Finish the week well", "One more morning in order. Don't let Friday steal the quiet. Train. Pray. Read. Then go."],
+      ["ALIGN · End as you began", "Awake. Trained. In the Word. Ready. Finish the work week the way you started it."]
+    ],
+    [ // Saturday
+      ["ALIGN · Recover, don't drift", "Rest is part of the path — not a skip. Move gently. Pray. Read. Keep the morning."],
+      ["ALIGN · Still a morning", "Saturday is still a gift. Rise. Recover well. Stay with the Word. Don't give the hour away."]
+    ]
+  ];
+
+  const wakeNote = (date = new Date()) => {
+    const d = date instanceof Date ? date : new Date(date);
+    const bank = WAKE_NOTES[d.getDay()] || WAKE_NOTES[1];
+    const pair = bank[d.getDate() % bank.length];
+    return { title: pair[0], body: pair[1] };
+  };
+
   const EVENING = [
     { id: "evening", title: "Evening Word", sub: "Spurgeon for the night. Then test the day’s chapters.", icon: "word" },
     { id: "nightquiz", title: "Night test", sub: "Same reading. Misses first. Then lights out.", icon: "drill" },
@@ -257,7 +296,7 @@ window.ALIGN_LIFE = (() => {
 
   return {
     BOOKS, STEPS, EVENING, ACTS,
-    clocksFor, isEvening, chapterTarget, stepsFor,
+    clocksFor, isEvening, chapterTarget, stepsFor, wakeNote,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
