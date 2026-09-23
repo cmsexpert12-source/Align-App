@@ -824,6 +824,8 @@ img { max-width: 100%; display: block; }
   min-height: 0;
 }
 .path-step.now { border-color: color-mix(in srgb, var(--lime) 45%, transparent); background: color-mix(in srgb, var(--lime) 8%, var(--surface)); }
+.path-step.lock { opacity: .48; }
+.path-step.lock .path-ico { color: var(--faint); }
 .path-step.done { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; overflow: hidden; }
 .path:empty, .path-done:empty { display: none !important; }
 .path-step h4 { font-size: 15px; font-weight: 700; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

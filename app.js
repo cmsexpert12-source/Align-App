@@ -682,24 +682,58 @@
     return `${m}:${s}`;
   };
 
+  const stepIsDone = (s, iso) => {
+    iso = iso || today().iso;
+    const id = typeof s === "string" ? s : (s && s.id);
+    if (!id) return false;
+    if (id === "evening" || id === "nightquiz" || id === "lights") {
+      return !!L().morningOf(iso)[id];
+    }
+    const m = L().morningOf(iso);
+    if (id === "move") return !!(m.move || completedOn(iso));
+    if (id === "read") {
+      const due = B().dueToday(iso, "morning");
+      if (!due.length) return true;
+      return due.every((b) => B().loggedToday(iso, b.id));
+    }
+    return !!m[id];
+  };
+
+  const currentStep = () => pathSteps().find((s) => !stepIsDone(s)) || null;
+
+  const canComplete = (id) => {
+    if (!id) return false;
+    if (id === "evening" || id === "nightquiz" || id === "lights") return true;
+    if (stepIsDone(id)) return true;
+    const cur = currentStep();
+    return !!(cur && cur.id === id);
+  };
+
+  const canOpenStep = (id) => {
+    if (!id) return true;
+    if (id === "evening" || id === "nightquiz" || id === "lights") return true;
+    if (stepIsDone(id)) return true;
+    const cur = currentStep();
+    return !!(cur && cur.id === id);
+  };
+
+  const gateStep = (id) => {
+    if (canOpenStep(id)) return true;
+    const cur = currentStep();
+    toast(cur ? ("Finish " + cur.title + " first.") : "The morning path is done.");
+    return false;
+  };
+
   const completeStep = (id) => {
     const iso = today().iso;
+    if (!canComplete(id)) {
+      const cur = currentStep();
+      if (cur && cur.id !== id) toast("Finish " + cur.title + " first.");
+      return L().morningOf(iso);
+    }
     const steps = L().setStep(iso, id, true);
     AlignDB.saveMorning(iso, steps).catch(() => {});
     return steps;
-  };
-
-  const currentStep = () => {
-    const m = L().morningOf(today().iso);
-    const moveDone = !!completedOn(today().iso);
-    return pathSteps().find((s) => {
-      if (s.id === "move" && moveDone) return false;
-      if (s.id === "read") {
-        const due = B().dueToday(today().iso, "morning");
-        return due.some((b) => !B().loggedToday(today().iso, b.id));
-      }
-      return !m[s.id];
-    }) || null;
   };
 
   let lifeTick = null;
@@ -1216,7 +1250,7 @@
     const best = bestMorningStreak();
 
     const stepRow = (s, done, now, act, extra = "") => `
-      <button class="path-step ${done?"done":""} ${now?"now":""}" ${act}>
+      <button class="path-step ${done?"done":""} ${now?"now":""} ${!done && !now?"lock":""}" ${act}>
         <div class="path-ico">${done ? "✓" : now ? "→" : stepIcon(s.icon || s.id)}</div>
         <div class="path-copy">
           <h4>${s.title}</h4>
@@ -1305,7 +1339,12 @@
           const open = rows.filter((r) => !r.done);
           return `
         ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
-        ${open.length ? `<div class="path">${open.map((r) => stepRow({ ...r.s, sub: subFor(r.s) }, false, r.now, `data-act="open-step" data-step="${r.s.id}"`)).join("")}</div>` : ""}`;
+        ${open.length ? `<div class="path">${open.map((r) => stepRow(
+            { ...r.s, sub: r.now ? subFor(r.s) : ("After " + (cur ? cur.title : "the last step")) },
+            false,
+            r.now,
+            r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
+          )).join("")}</div>` : ""}`;
         })()}
       </div>
     `;
@@ -2570,6 +2609,10 @@
     }));
     app.querySelectorAll("[data-go-day]").forEach(b => b.addEventListener("click", () => {
       const d = days.find(x => x.dow === Number(b.dataset.goDay));
+      if (d && d.dow === today().dow && !canOpenStep("move")) {
+        gateStep("move");
+        return;
+      }
       state.selectedDay = d.id;
       state.view = "ready";
       render();
@@ -2929,8 +2972,11 @@
       state.view = "home";
       render();
     } else if (act === "start-today") {
+      if (!gateStep("move")) return;
       startWorkout(todayDay().id);
     } else if (act === "start-day") {
+      const day = days.find((x) => x.id === el.dataset.day);
+      if (day && day.dow === today().dow && !gateStep("move")) return;
       startWorkout(el.dataset.day);
     } else if (act === "complete-ex") {
       buzz(); sfx("ok"); completeCurrent("done");
@@ -3104,9 +3150,13 @@
         kind: "signout"
       };
       render();
+    } else if (act === "locked-step") {
+      const cur = currentStep();
+      toast(cur ? ("Finish " + cur.title + " first.") : "The morning path is done.");
     } else if (act === "open-step") {
       const step = el.dataset.step;
       const iso = today().iso;
+      if (!gateStep(step)) return;
       if (step === "rise") {
         completeStep("rise");
         toast("Good morning.");
@@ -3159,10 +3209,20 @@
       } else if (step === "go") {
         state.view = "go";
         render();
+      } else if (step === "read") {
+        const due = B().dueToday(iso, "morning");
+        const unread = due.filter((b) => !B().loggedToday(iso, b.id));
+        const first = unread[0] || due[0];
+        if (first) openReader(first.id);
+        else toast("No sitting due today.");
       }
     } else if (act === "complete-step") {
       const step = el.dataset.step;
       const iso = today().iso;
+      if (!canComplete(step)) {
+        gateStep(step);
+        return;
+      }
       if (step === "pray") {
         state.prayOn = false;
         const j = L().journalOf(iso);
