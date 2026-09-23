@@ -570,6 +570,8 @@ window.AlignDB = (() => {
     days.forEach((iso) => {
       if (mornings[iso]) enqueue("morning", iso, { iso, steps: mornings[iso] });
       if (plans[iso]) enqueue("plan", iso, { iso, plan: plans[iso] });
+    });
+    Object.keys(journals || {}).forEach((iso) => {
       if (journals[iso]) enqueue("journal", iso, { iso, payload: journals[iso] });
     });
     const bible = readJSON("align-bible", null);

@@ -206,7 +206,7 @@ window.ALIGN_LIFE = (() => {
     return all[iso];
   };
 
-  const emptyJournal = () => ({ prayer: "", devotion: "", word: "", praySeconds: 0, diary: "" });
+  const emptyJournal = () => ({ prayer: "", devotion: "", word: "", praySeconds: 0, diary: "", notes: [] });
 
   const journalOf = (iso) => {
     const all = loadJSON(LS_J, {});
@@ -393,6 +393,7 @@ window.ALIGN_LIFE = (() => {
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
-    planOf, savePlan, journalOf, saveJournal, journalsAll, verseOfDay
+    planOf, savePlan, journalOf, saveJournal, journalsAll,
+    notesList, noteById, emptyNote, upsertNote, deleteNote, verseOfDay
   };
 })();

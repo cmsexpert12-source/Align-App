@@ -2204,8 +2204,17 @@
       body: bodyEl ? bodyEl.value : (prev.body || ""),
       created_at: prev.created_at
     });
-    AlignDB.saveJournal(note.date, L().journalOf(note.date));
+    AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
     return note;
+  };
+
+  const pushJournalNow = async (iso) => {
+    const payload = L().journalOf(iso);
+    try {
+      return await AlignDB.saveJournal(iso, payload, { now: true });
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || "Could not save" };
+    }
   };
 
   const viewJournal = () => {
@@ -3188,7 +3197,7 @@
         const n = id && L().noteById ? L().noteById(id) : null;
         const iso = (n && n.date) || state.journalIso || today().iso;
         if (id && L().deleteNote) L().deleteNote(id);
-        AlignDB.saveJournal(iso, L().journalOf(iso)).catch(() => {});
+        await pushJournalNow(iso);
         state.journalNoteId = "";
         state.view = "journal";
         toast("Note deleted");
