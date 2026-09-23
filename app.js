@@ -75,7 +75,8 @@
     readPacks: [],
     planJustSaved: false,
     journalIso: "",
-    journalNoteId: ""
+    journalNoteId: "",
+    showHow: false
   };
 
   /* ---------- SVG poses ---------- */
@@ -1517,6 +1518,16 @@
     `;
   };
 
+  const ytEmbed = (id, title) => {
+    if (!id) return "";
+    const src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id)
+      + "?rel=0&modestbranding=1&playsinline=1";
+    const label = String(title || "How to").replace(/[&<>"]/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]
+    ));
+    return `<div class="yt-card"><iframe src="${src}" title="${label}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+  };
+
   const viewExercise = () => {
     const ex = exercises[state.selectedExercise];
     if (!ex) return viewHome();
@@ -1530,10 +1541,12 @@
           <h1>${ex.name}</h1>
           <p>${ex.muscles.join(" · ")}</p>
         </div>
+        ${ex.yt ? ytEmbed(ex.yt, "How to " + ex.name) : `
         <div style="display:flex;justify-content:center;padding:8px 0 16px">
           <div class="big-ico">${pose(ex.svg)}</div>
-        </div>
+        </div>`}
         <ul class="cues">${ex.cues.map(c => `<li>${c}</li>`).join("")}</ul>
+        ${ex.yt ? `<p class="hint" style="padding:0 20px 28px">Watch how. Then the cues. Stay in ALIGN.</p>` : ""}
       </div>
     `;
   };
@@ -1576,6 +1589,8 @@
               <button data-act="adj" data-d="1">+</button>
             </div>
           ` : ""}
+          ${ex.yt ? `<button class="btn ghost how-btn" data-act="toggle-how">${state.showHow ? "Hide guide" : "Watch how"}</button>` : ""}
+          ${state.showHow && ex.yt ? ytEmbed(ex.yt, "How to " + ex.name) : ""}
         </div>
         <div class="player-actions">
           <button class="btn p" data-act="complete-ex">${isTime ? "Done" : "Done"}</button>
@@ -3065,6 +3080,7 @@
   const enterExercise = (index) => {
     const it = itemsOf(state.workout)[index];
     const ex = exercises[it.id];
+    state.showHow = false;
     state.workout.index = index;
     state.workout.paused = false;
     state.workout.remaining = ex.kind === "time" ? it.target : 0;
@@ -3193,6 +3209,9 @@
       const day = days.find((x) => x.id === el.dataset.day);
       if (day && day.dow === today().dow && !gateStep("move")) return;
       startWorkout(el.dataset.day);
+    } else if (act === "toggle-how") {
+      state.showHow = !state.showHow;
+      render();
     } else if (act === "complete-ex") {
       buzz(); sfx("ok"); completeCurrent("done");
     } else if (act === "pause-ex") {

@@ -376,6 +376,78 @@ window.ALIGN_DATA = (() => {
     ]
   };
 
+  /* Free YouTube how-tos — play in-app. Short form demos, not workouts. */
+  const YT = {
+    "jumping-jacks": "F_rq04M0x5M",
+    "arm-circles": "hne3nHGXPRM",
+    "inchworms": "D6rkvz2cnKs",
+    "burpees": "dZgVxmf6jkA",
+    "push-ups": "IODxDxX7oi4",
+    "knee-push-ups": "1nAsgpufzhc",
+    "diamond-push-ups": "jaxbEHLC4qU",
+    "wide-arm-push-ups": "L-JD0xyXh74",
+    "staggered-push-ups": "L-JD0xyXh74",
+    "decline-push-ups": "L-JD0xyXh74",
+    "hindu-push-ups": "mvNcSF-nXg4",
+    "spiderman-push-ups": "t-NQ_xHHeVk",
+    "pike-push-ups": "XckEEwa1BPI",
+    "reverse-push-ups": "mvNcSF-nXg4",
+    "hover-push-up": "Ng-iiDUd_fs",
+    "supine-push-up": "Mz2pZdK_U5g",
+    "floor-tricep-dips": "KJk2oeaMNA4",
+    "push-up-rotation": "E2JCx1pzX0U",
+    "back-bow-pulls": "zF0eyYXbG20",
+    "floor-y-raises": "X1yMJldLGIo",
+    "reverse-snow-angels": "X1yMJldLGIo",
+    "hyperextension": "zF0eyYXbG20",
+    "superman-hold": "44ScXWFaVBs",
+    "prone-t-raises": "X1yMJldLGIo",
+    "bird-dog": "wiFNA3sqjCA",
+    "towel-rows": "SwaQJctxcGk",
+    "squats": "DlS-GAF8Edg",
+    "sumo-squats": "DlS-GAF8Edg",
+    "reverse-lunges": "94AXT7D3bKY",
+    "glute-bridge": "Mz2pZdK_U5g",
+    "sl-glute-bridge": "c6UXqFii7NA",
+    "wall-sit": "JaZNYM3zAP0",
+    "calf-raises": "Mz2pZdK_U5g",
+    "donkey-kicks": "DtSfBsdIlJo",
+    "good-mornings": "61zbhuRiwQg",
+    "standing-kickbacks": "DtSfBsdIlJo",
+    "fire-hydrants": "DtSfBsdIlJo",
+    "sit-ups": "1fbU_MkV7NE",
+    "crunches-raised": "1fbU_MkV7NE",
+    "bicycle-crunches": "VaL7XWK3MVE",
+    "russian-twist": "wkD8rjkodUI",
+    "mountain-climber": "PaR6Z7D5fl4",
+    "leg-raises": "l4kQd9eWclE",
+    "crossover-crunch": "VaL7XWK3MVE",
+    "v-up": "LPsepk-C-d4",
+    "plank": "pSHjTRCQxIw",
+    "side-plank": "PtqBJhdxqPI",
+    "side-bridges": "DXQ9YKHtcsk",
+    "dead-bug": "XcYtWYMz39w",
+    "hollow-hold": "44ScXWFaVBs",
+    "reclined-oblique": "wkD8rjkodUI",
+    "shoulder-stretch": "B9uY01NoqBg",
+    "cobra-stretch": "n6jrC6WeF84",
+    "chest-stretch": "B9uY01NoqBg",
+    "cat-cow": "y39PrKY_4JM",
+    "childs-pose": "3ccamYgDXHI",
+    "side-lying-stretch": "uRRwljV-Nlk",
+    "lumbar-twist": "y39PrKY_4JM",
+    "hip-flexor": "tsGPYSQbZx4",
+    "forward-fold": "goN4rWbQUn4",
+    "quad-stretch": "Td-9CSgSFhs",
+    "worlds-greatest": "w4n6iZeYS9w",
+    "down-dog": "j97SSGsnCAQ",
+    "hamstring-stretch": "goN4rWbQUn4",
+    "breathing": "u0th_ktl1UI"
+  };
+  Object.keys(YT).forEach((id) => {
+    if (exercises[id]) exercises[id].yt = YT[id];
+  });
+
   const restAfter = (ex) => {
     if (ex.pattern === "mobility") return 8;
     if (ex.pattern === "warmup") return 10;
