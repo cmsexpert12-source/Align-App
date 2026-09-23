@@ -2,8 +2,8 @@
    GEMINI_API_KEY and/or GROQ_API_KEY in Project → Settings → Environment Variables. */
 
 const GEMINI_MODELS = [
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash"
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash"
 ];
 const GROQ_MODELS = [
   "llama-3.1-8b-instant",

@@ -2,8 +2,8 @@
 window.ALIGN_AI = (() => {
   const LS = "align-ai-keys";
   const GEMINI_MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash"
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash"
   ];
   const GROQ_MODELS = [
     "llama-3.1-8b-instant",
