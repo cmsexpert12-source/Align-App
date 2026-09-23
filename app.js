@@ -329,6 +329,7 @@
       if (Life && Life.mergeByTime) Life.mergeByTime(jAll, life.data.journals, (r) => r.payload || {});
       else (life.data.journals || []).forEach((r) => { jAll[r.date] = r.payload || jAll[r.date]; });
       localStorage.setItem("align-journal", JSON.stringify(jAll));
+      if (Life && Life.mergeNotesRemote) Life.mergeNotesRemote(life.data.notes || []);
       if (life.data.bible && Life) {
         const c = Life.bibleCursor();
         const remoteLog = life.data.bible.log || [];
@@ -1263,10 +1264,10 @@
     const diaryText = String(jn.diary || "").trim();
     const diaryNow = `
         <div class="plan-now">
-          <div class="section-h"><h4>Journal</h4><button class="linkish" data-act="journal-today">${diaryText ? "Open" : "Write"}</button></div>
+          <div class="section-h"><h4>Journal</h4><button class="linkish" data-go="journal">${diaryText ? "Open" : "Write"}</button></div>
           <p class="plan-note-preview">${diaryText
             ? escapeHtml(clipText(diaryText, 160))
-            : "A notepad. Write anything — not the devotion."}</p>
+            : "A notepad. As many notes as you want — not the devotion."}</p>
         </div>`;
 
     const subFor = (s) => {
@@ -2204,14 +2205,16 @@
       body: bodyEl ? bodyEl.value : (prev.body || ""),
       created_at: prev.created_at
     });
+    if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
     AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
     return note;
   };
 
-  const pushJournalNow = async (iso) => {
-    const payload = L().journalOf(iso);
+  const pushNoteNow = async (note) => {
+    if (!note) return { ok: true };
     try {
-      return await AlignDB.saveJournal(iso, payload, { now: true });
+      if (AlignDB.saveNote) await AlignDB.saveNote(note, { now: true });
+      return await AlignDB.saveJournal(note.date, L().journalOf(note.date), { now: true });
     } catch (e) {
       return { ok: false, error: (e && e.message) || "Could not save" };
     }
@@ -2225,7 +2228,7 @@
           <div class="greet">Journal<h2>Notepad.</h2></div>
           <button class="icon-btn add" data-act="journal-new" title="New note">+</button>
         </div>
-        <p class="plan-kicker">A pad. Write anything. It saves as you type — not the devotion.</p>
+        <p class="plan-kicker">A pad. Tap + for another note — as many as you want, any day. Not the devotion.</p>
         ${notes.length ? `<div class="journal-list">${notes.map((n) => `
           <button class="journal-row" data-act="journal-open" data-id="${n.id}">
             <div>
@@ -3197,7 +3200,8 @@
         const n = id && L().noteById ? L().noteById(id) : null;
         const iso = (n && n.date) || state.journalIso || today().iso;
         if (id && L().deleteNote) L().deleteNote(id);
-        await pushJournalNow(iso);
+        if (id && AlignDB.deleteNoteRemote) AlignDB.deleteNoteRemote(id).catch(() => {});
+        AlignDB.saveJournal(iso, L().journalOf(iso)).catch(() => {});
         state.journalNoteId = "";
         state.view = "journal";
         toast("Note deleted");
@@ -3425,19 +3429,15 @@
     } else if (act === "journal-new") {
       const note = L().emptyNote(today().iso);
       L().upsertNote(note);
+      if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
       AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
       openNote(note);
     } else if (act === "journal-today") {
-      const notes = (L().notesList && L().notesList()) || [];
-      const todayIso = today().iso;
-      const existing = notes.find((n) => n.date === todayIso);
-      if (existing) openNote(existing);
-      else {
-        const note = L().emptyNote(todayIso);
-        L().upsertNote(note);
-        AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
-        openNote(note);
-      }
+      const note = L().emptyNote(today().iso);
+      L().upsertNote(note);
+      if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
+      AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
+      openNote(note);
     } else if (act === "journal-open") {
       const n = L().noteById && L().noteById(el.dataset.id);
       if (n) openNote(n);
@@ -3445,7 +3445,17 @@
       const note = saveOpenNote();
       if (note && !String(note.title || "").trim() && !String(note.body || "").trim()) {
         L().deleteNote(note.id);
+        if (AlignDB.deleteNoteRemote) AlignDB.deleteNoteRemote(note.id).catch(() => {});
         AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
+        state.view = "journal";
+        render();
+        return;
+      }
+      if (note) {
+        const res = await pushNoteNow(note);
+        if (!state.session) toast("Saved on this device. Sign in to keep it in the cloud.");
+        else if (res && res.ok === false) toast(res.error || "Could not reach your account. It is on this device.");
+        else toast("Saved to Notes.");
       }
       state.view = "journal";
       render();

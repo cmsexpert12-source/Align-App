@@ -401,6 +401,38 @@ window.AlignDB = (() => {
     return { message: table + ": " + String(msg) };
   };
 
+  const restDelete = async (table, query) => {
+    const c = readCfg();
+    if (!c.url || !c.anonKey) return { message: "Supabase is not configured" };
+    const auth = await refreshAuth(false);
+    if (!auth.token) return { message: "Sign in to save to the cloud" };
+    const base = String(c.url).replace(/\/$/, "");
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch { /* ignore */ } }, 12000);
+    try {
+      const r = await fetch(base + "/rest/v1/" + table + "?" + query, {
+        method: "DELETE",
+        headers: {
+          apikey: c.anonKey,
+          Authorization: "Bearer " + auth.token,
+          Prefer: "return=minimal"
+        },
+        signal: ctrl ? ctrl.signal : undefined
+      });
+      clearTimeout(timer);
+      if (r.status === 200 || r.status === 204) return null;
+      let msg = "HTTP " + r.status;
+      try {
+        const j = await r.json();
+        msg = (j && (j.message || j.error || j.hint)) || msg;
+      } catch { /* keep */ }
+      return { message: table + ": " + msg };
+    } catch (e) {
+      clearTimeout(timer);
+      return { message: (e && e.message) || "Network failed" };
+    }
+  };
+
   const clientUpsert = async (table, row, conflict) => {
     const sb = client();
     if (!sb) return restUpsert(table, row, conflict);
@@ -436,6 +468,19 @@ window.AlignDB = (() => {
       err = await restUpsert("journals", {
         user_id: userId, date: p.iso, payload: p.payload || {}, updated_at: now
       }, "user_id,date");
+    } else if (item.kind === "note") {
+      err = await restUpsert("notes", {
+        user_id: userId,
+        id: p.id,
+        date: p.date,
+        title: p.title || "",
+        body: p.body || "",
+        created_at: p.created_at || now,
+        updated_at: now
+      }, "user_id,id");
+    } else if (item.kind === "note-del") {
+      err = await restDelete("notes", "id=eq." + encodeURIComponent(p.id) + "&user_id=eq." + userId);
+      if (err && missingTable(err)) err = null;
     } else if (item.kind === "bible") {
       err = await restUpsert("bible_state", {
         user_id: userId,
@@ -630,6 +675,12 @@ window.AlignDB = (() => {
   const saveJournal = async (iso, payload, opts) =>
     queueAndFlush("journal", iso, { iso, payload }, opts || { delay: 450 });
 
+  const saveNote = async (note, opts) =>
+    queueAndFlush("note", note && note.id, note || {}, opts || { delay: 450 });
+
+  const deleteNoteRemote = async (id, opts) =>
+    queueAndFlush("note-del", "del-" + id, { id }, opts || { now: true });
+
   const saveBible = async (cursor, opts) =>
     queueAndFlush("bible", "bible", cursor || {}, opts || { delay: 0 });
 
@@ -640,18 +691,21 @@ window.AlignDB = (() => {
     const sb = client();
     const userId = await uidOf();
     if (!sb || !userId) return ok(null);
-    const [m, p, j, b, a] = await Promise.all([
+    const [m, p, j, b, a, n] = await Promise.all([
       sb.from("mornings").select("date, steps, updated_at").eq("user_id", userId),
       sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId),
       sb.from("journals").select("date, payload, updated_at").eq("user_id", userId),
       sb.from("bible_state").select("book, chapter, log, updated_at").eq("user_id", userId).maybeSingle(),
-      sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle()
+      sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle(),
+      sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId)
     ]);
     if (m.error && missingTable(m.error)) return ok(null);
+    const notes = (n.error && missingTable(n.error)) ? [] : (n.data || []);
     return ok({
       mornings: (m.data || []).map((r) => ({ date: r.date, steps: r.steps, updated_at: r.updated_at })),
       plans: (p.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
       journals: (j.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
+      notes,
       bible: b.data || null,
       scripture: (a.data && a.data.scripture) || null,
       scriptureAt: (a.data && a.data.updated_at) || null
@@ -814,7 +868,7 @@ window.AlignDB = (() => {
     session, onAuth, signUp, signIn, magicLink, resetPassword, signOut,
     upsertProfile, fetchProfile, saveWorkout, fetchWorkouts,
     savePushSub, deletePushSub, savePrefs, fetchPrefs, testConnection,
-    saveMorning, saveDayPlan, saveJournal, saveBible, saveScripture, pullLife,
+    saveMorning, saveDayPlan, saveJournal, saveNote, deleteNoteRemote, saveBible, saveScripture, pullLife,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,

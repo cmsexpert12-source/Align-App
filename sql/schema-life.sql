@@ -25,6 +25,18 @@ create table if not exists public.journals (
   primary key (user_id, date)
 );
 
+create table if not exists public.notes (
+  user_id uuid not null references auth.users on delete cascade,
+  id text not null,
+  date date not null,
+  title text not null default '',
+  body text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+create index if not exists notes_user_updated_idx on public.notes (user_id, updated_at desc);
+
 create table if not exists public.bible_state (
   user_id uuid primary key references auth.users on delete cascade,
   book text not null default 'Genesis',
@@ -42,6 +54,7 @@ create table if not exists public.app_state (
 alter table public.mornings enable row level security;
 alter table public.day_plans enable row level security;
 alter table public.journals enable row level security;
+alter table public.notes enable row level security;
 alter table public.bible_state enable row level security;
 
 drop policy if exists "mornings self" on public.mornings;

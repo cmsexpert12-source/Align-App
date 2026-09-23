@@ -222,6 +222,8 @@ window.ALIGN_LIFE = (() => {
   };
   const journalsAll = () => loadJSON(LS_J, {});
 
+  const LS_N = "align-notes";
+
   const noteId = () => "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   const hydrateNotes = (iso, j) => {
@@ -247,17 +249,51 @@ window.ALIGN_LIFE = (() => {
     return [];
   };
 
-  const notesList = () => {
-    const all = loadJSON(LS_J, {});
-    const out = [];
-    Object.keys(all).forEach((iso) => {
-      hydrateNotes(iso, all[iso]).forEach((n) => out.push({ ...n, date: iso }));
+  const readNotes = () => {
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem(LS_N) || "[]") || []; } catch { list = []; }
+    if (!Array.isArray(list)) list = [];
+    const byId = {};
+    list.forEach((n) => { if (n && n.id) byId[n.id] = n; });
+    const journals = loadJSON(LS_J, {});
+    Object.keys(journals).forEach((iso) => {
+      hydrateNotes(iso, journals[iso]).forEach((n) => {
+        const row = { ...n, date: iso };
+        const cur = byId[row.id];
+        if (!cur) byId[row.id] = row;
+        else if (ts(row.updated_at) > ts(cur.updated_at)) byId[row.id] = { ...cur, ...row };
+      });
     });
-    out.sort((a, b) => ts(b.updated_at || b.created_at) - ts(a.updated_at || a.created_at));
-    return out;
+    return Object.keys(byId).map((k) => byId[k]);
   };
 
+  const writeNotes = (arr) => {
+    const list = (arr || []).slice().sort((a, b) => ts(b.updated_at || b.created_at) - ts(a.updated_at || a.created_at));
+    saveJSON(LS_N, list);
+    return list;
+  };
+
+  const notesList = () => readNotes().sort((a, b) => ts(b.updated_at || b.created_at) - ts(a.updated_at || a.created_at));
+
   const noteById = (id) => notesList().find((n) => n.id === id) || null;
+
+  const mirrorDay = (iso) => {
+    const dayNotes = notesList().filter((n) => n.date === iso);
+    const j = journalOf(iso);
+    j.notes = dayNotes.map((n) => ({
+      id: n.id,
+      title: n.title || "",
+      body: n.body || "",
+      created_at: n.created_at || "",
+      updated_at: n.updated_at || ""
+    }));
+    const latest = dayNotes[0];
+    j.diary = latest
+      ? [latest.title, latest.body].filter((x) => String(x || "").trim()).join("\n")
+      : "";
+    saveJournal(iso, j);
+    return j;
+  };
 
   const emptyNote = (iso) => ({
     id: noteId(),
@@ -268,46 +304,53 @@ window.ALIGN_LIFE = (() => {
     updated_at: new Date().toISOString()
   });
 
-  const persistNotes = (iso, pages) => {
-    const j = journalOf(iso);
-    j.notes = (pages || []).map((n) => ({
-      id: n.id,
-      title: String(n.title || ""),
-      body: String(n.body || ""),
-      created_at: n.created_at || "",
-      updated_at: n.updated_at || ""
-    }));
-    const latest = j.notes.slice().sort((a, b) => ts(b.updated_at) - ts(a.updated_at))[0];
-    j.diary = latest
-      ? [latest.title, latest.body].filter((x) => String(x || "").trim()).join("\n")
-      : "";
-    return saveJournal(iso, j);
-  };
-
   const upsertNote = (note) => {
     const iso = note.date || String(note.created_at || "").slice(0, 10);
-    const j = journalOf(iso);
-    const pages = hydrateNotes(iso, j);
     const row = {
       id: note.id || noteId(),
+      date: iso,
       title: String(note.title || ""),
       body: String(note.body || ""),
       created_at: note.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    const i = pages.findIndex((n) => n.id === row.id);
-    if (i >= 0) pages[i] = row;
-    else pages.unshift(row);
-    persistNotes(iso, pages);
-    return { ...row, date: iso };
+    const list = readNotes();
+    const i = list.findIndex((n) => n.id === row.id);
+    if (i >= 0) list[i] = Object.assign({}, list[i], row);
+    else list.unshift(row);
+    writeNotes(list);
+    mirrorDay(iso);
+    return row;
   };
 
   const deleteNote = (id) => {
     const n = noteById(id);
-    if (!n) return null;
-    const pages = hydrateNotes(n.date, journalOf(n.date)).filter((x) => x.id !== id);
-    persistNotes(n.date, pages);
-    return n.date;
+    writeNotes(readNotes().filter((x) => x.id !== id));
+    if (n && n.date) mirrorDay(n.date);
+    return n ? n.date : null;
+  };
+
+  const mergeNotesRemote = (rows) => {
+    const byId = {};
+    readNotes().forEach((n) => { if (n && n.id) byId[n.id] = n; });
+    (rows || []).forEach((r) => {
+      if (!r || !r.id) return;
+      const remote = {
+        id: r.id,
+        date: r.date,
+        title: r.title || "",
+        body: r.body || "",
+        created_at: r.created_at || "",
+        updated_at: r.updated_at || ""
+      };
+      const local = byId[remote.id];
+      if (!local || ts(remote.updated_at) > ts(local.updated_at)) byId[remote.id] = remote;
+    });
+    const out = writeNotes(Object.keys(byId).map((k) => byId[k]));
+    const days = {};
+    out.forEach((n) => { if (n.date) days[n.date] = true; });
+    Object.keys(days).forEach(mirrorDay);
+    return out;
   };
 
   const mergeByTime = (localMap, rows, pick) => {
@@ -394,6 +437,6 @@ window.ALIGN_LIFE = (() => {
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
     planOf, savePlan, journalOf, saveJournal, journalsAll,
-    notesList, noteById, emptyNote, upsertNote, deleteNote, verseOfDay
+    notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay
   };
 })();
