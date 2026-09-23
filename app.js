@@ -1656,6 +1656,7 @@
             <input id="prof-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
           </div>
           <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
+          ${signed ? `<button class="btn" style="height:44px;margin-top:8px" data-act="sync-now">Save to cloud now</button>` : ""}
 
           <div class="set-label">Morning hours</div>
           <div class="sched-card">
@@ -3028,6 +3029,20 @@
       state.profile.name = (n || "").trim();
       save();
       if (state.session) await AlignDB.upsertProfile(state.profile.name);
+      render();
+    } else if (act === "sync-now") {
+      if (!window.AlignDB) { toast("Cloud is not ready"); return; }
+      const iso = today().iso;
+      toast("Saving…");
+      const r = await AlignDB.syncNow({
+        iso,
+        morning: L().morningOf(iso),
+        plan: L().planOf(iso),
+        journal: L().journalOf(iso),
+        bible: L().bibleCursor(),
+        scripture: S().load()
+      });
+      toast(r && r.ok ? "Saved to your account." : ((r && r.error) || "Could not save"));
       render();
     } else if (act === "toggle-push") {
       if (state.prefs.enabled) {

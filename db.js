@@ -247,39 +247,80 @@ window.AlignDB = (() => {
     flushTimer = setTimeout(() => { flush(); }, ms);
   };
 
-  const pushRow = async (item) => {
+  const authToken = async () => {
     const sb = client();
+    if (!sb) return "";
+    try {
+      const { data } = await sb.auth.getSession();
+      return (data && data.session && data.session.access_token) || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const restUpsert = async (table, row, conflict) => {
+    const c = readCfg();
+    if (!c.url || !c.anonKey) return { message: "Supabase is not configured" };
+    const token = await authToken();
+    if (!token) return { message: "Sign in to save to the cloud" };
+    const base = String(c.url).replace(/\/$/, "");
+    const qs = conflict ? ("?on_conflict=" + encodeURIComponent(conflict)) : "";
+    let r;
+    try {
+      r = await fetch(base + "/rest/v1/" + table + qs, {
+        method: "POST",
+        headers: {
+          apikey: c.anonKey,
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify(row)
+      });
+    } catch (e) {
+      return { message: (e && e.message) || "Network failed" };
+    }
+    if (r.status === 200 || r.status === 201 || r.status === 204) return null;
+    let msg = "HTTP " + r.status;
+    try {
+      const j = await r.json();
+      msg = (j && (j.message || j.error_description || j.error || j.hint)) || msg;
+    } catch { /* keep msg */ }
+    return { message: String(msg) };
+  };
+
+  const pushRow = async (item) => {
     const userId = await uidOf();
-    if (!sb || !userId) return { keep: true };
+    if (!userId) return { keep: true, error: "Sign in to save to the cloud" };
     const now = new Date().toISOString();
     const p = item.payload || {};
-    let error = null;
+    let err = null;
     if (item.kind === "morning") {
-      ({ error } = await sb.from("mornings").upsert({
+      err = await restUpsert("mornings", {
         user_id: userId, date: p.iso, steps: p.steps || {}, updated_at: now
-      }));
+      }, "user_id,date");
     } else if (item.kind === "plan") {
-      ({ error } = await sb.from("day_plans").upsert({
+      err = await restUpsert("day_plans", {
         user_id: userId, date: p.iso, payload: p.plan || {}, updated_at: now
-      }));
+      }, "user_id,date");
     } else if (item.kind === "journal") {
-      ({ error } = await sb.from("journals").upsert({
+      err = await restUpsert("journals", {
         user_id: userId, date: p.iso, payload: p.payload || {}, updated_at: now
-      }));
+      }, "user_id,date");
     } else if (item.kind === "bible") {
-      ({ error } = await sb.from("bible_state").upsert({
+      err = await restUpsert("bible_state", {
         user_id: userId,
         book: p.book || "Genesis",
         chapter: p.chapter || 1,
         log: p.log || [],
         updated_at: now
-      }));
+      }, "user_id");
     } else if (item.kind === "scripture") {
-      ({ error } = await sb.from("app_state").upsert({
+      err = await restUpsert("app_state", {
         user_id: userId, scripture: p || {}, updated_at: now
-      }));
+      }, "user_id");
     } else if (item.kind === "workout") {
-      ({ error } = await sb.from("workouts").insert({
+      err = await restUpsert("workouts", {
         user_id: userId,
         date: p.date,
         day_id: p.dayId,
@@ -287,40 +328,65 @@ window.AlignDB = (() => {
         completed: p.completed,
         total: p.total,
         log: p.log || []
-      }));
+      }, "user_id,date,day_id");
+      if (err && /on conflict|unique|constraint|no unique/i.test(err.message || "")) {
+        const sb = client();
+        if (sb) {
+          const ins = await sb.from("workouts").insert({
+            user_id: userId,
+            date: p.date,
+            day_id: p.dayId,
+            minutes: p.minutes,
+            completed: p.completed,
+            total: p.total,
+            log: p.log || []
+          });
+          err = ins.error ? { message: ins.error.message } : null;
+        }
+      }
     } else {
       return { keep: false };
     }
-    if (!error) return { keep: false };
-    if (missingTable(error)) return { keep: false };
-    return { keep: true, error: error.message };
+    if (!err) return { keep: false };
+    return { keep: true, error: err.message };
   };
 
   const flush = async () => {
     if (flushing) return ok(true);
     const q = readOut();
     if (!q.length) return ok(true);
-    const sb = client();
-    if (!sb || !(await uidOf())) return ok(null);
+    if (!window.supabase || !window.supabase.createClient) {
+      lastErr = "Database library did not load";
+      return fail(lastErr);
+    }
+    if (!configured()) {
+      lastErr = "Supabase is not configured";
+      return fail(lastErr);
+    }
+    const token = await authToken();
+    if (!token) {
+      lastErr = "Sign in to save to the cloud";
+      return fail(lastErr);
+    }
     flushing = true;
     const left = [];
-    let lastErr = null;
+    let err = null;
     for (const item of q) {
       try {
         const res = await pushRow(item);
         if (res.keep) {
           left.push(item);
-          if (res.error) lastErr = res.error;
+          if (res.error) err = res.error;
         }
       } catch (e) {
         left.push(item);
-        lastErr = e && e.message ? e.message : String(e);
+        err = e && e.message ? e.message : String(e);
       }
     }
     writeOut(left);
     flushing = false;
     if (left.length) {
-      lastErr = lastErr || "Waiting to sync";
+      lastErr = err || "Waiting to sync";
       return fail(lastErr);
     }
     lastErr = "";
@@ -328,11 +394,20 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
-  const queueAndFlush = (kind, key, payload, now) => {
+  const queueAndFlush = (kind, key, payload) => {
     enqueue(kind, key, payload);
-    if (now) return flush();
-    scheduleFlush();
-    return Promise.resolve(ok(true));
+    return flush();
+  };
+
+  const syncNow = async (bundle) => {
+    if (bundle && bundle.iso) {
+      if (bundle.morning) enqueue("morning", bundle.iso, { iso: bundle.iso, steps: bundle.morning });
+      if (bundle.plan) enqueue("plan", bundle.iso, { iso: bundle.iso, plan: bundle.plan });
+      if (bundle.journal) enqueue("journal", bundle.iso, { iso: bundle.iso, payload: bundle.journal });
+      if (bundle.bible) enqueue("bible", "bible", bundle.bible);
+      if (bundle.scripture) enqueue("scripture", "scripture", bundle.scripture);
+    }
+    return flush();
   };
 
   const saveMorning = async (iso, steps, opts) =>
@@ -578,7 +653,7 @@ window.AlignDB = (() => {
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
-    flush, pendingCount, status
+    flush, pendingCount, status, syncNow
   };
 })();
 
