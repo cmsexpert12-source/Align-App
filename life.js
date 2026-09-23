@@ -206,12 +206,14 @@ window.ALIGN_LIFE = (() => {
   };
 
   const LS_SP = "align-spurgeon-day";
-  let spurgeon = null;
-  const loadSpurgeon = async () => {
-    if (spurgeon) return spurgeon;
-    const res = await fetch("./data/spurgeon.json");
-    spurgeon = await res.json();
-    return spurgeon;
+  const spurgeonMonth = {};
+  const loadSpurgeonMonth = async (m) => {
+    if (spurgeonMonth[m]) return spurgeonMonth[m];
+    const res = await fetch("./data/spurgeon/" + m + ".json");
+    if (!res.ok) throw new Error("Could not load devotion");
+    const list = await res.json();
+    spurgeonMonth[m] = list;
+    return list;
   };
 
   const todaySpurgeon = async (which, date = new Date()) => {
@@ -223,11 +225,10 @@ window.ALIGN_LIFE = (() => {
       const cached = JSON.parse(localStorage.getItem(LS_SP) || "null");
       if (cached && cached.key === key && cached[t]) return cached[t];
     } catch { /* ignore */ }
-    const list = await loadSpurgeon();
+    const list = await loadSpurgeonMonth(m);
     const am = list.find((x) => x.m === m && x.d === d && x.t === "am") || list.find((x) => x.m === m && x.d === d) || null;
     const pm = list.find((x) => x.m === m && x.d === d && x.t === "pm") || am;
     try { localStorage.setItem(LS_SP, JSON.stringify({ key, am, pm })); } catch { /* quota */ }
-    spurgeon = null;
     return t === "pm" ? pm : am;
   };
 
@@ -257,7 +258,7 @@ window.ALIGN_LIFE = (() => {
   return {
     BOOKS, STEPS, EVENING, ACTS,
     clocksFor, isEvening, chapterTarget, stepsFor,
-    loadSpurgeon, todaySpurgeon, fetchODB,
+    todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,

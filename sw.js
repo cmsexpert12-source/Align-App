@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v35";
+const CACHE = "align-v36";
 const ASSETS = [
   "./",
   "./index.html",
@@ -16,10 +16,11 @@ const ASSETS = [
   "./vendor/supabase.js",
   "./manifest.webmanifest",
   "./assets/icon-192.png",
-  "./assets/icon-512.png",
   "./assets/apple-touch-icon.png",
   "./assets/favicon-32.png"
 ];
+
+const skipPut = (pathname) => /\/data\/spurgeon\.json$/.test(pathname);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -37,43 +38,29 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+const staleWhileRevalidate = (req) =>
+  caches.open(CACHE).then((cache) =>
+    cache.match(req).then((cached) => {
+      const fetching = fetch(req)
+        .then((res) => {
+          if (res && res.ok && res.type === "basic") {
+            const path = new URL(req.url).pathname;
+            if (!skipPut(path)) cache.put(req, res.clone());
+          }
+          return res;
+        })
+        .catch(() => cached || caches.match("./index.html"));
+      return cached || fetching;
+    })
+  );
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
-
-  const shell = /\.(?:js|css|html|webmanifest)$/.test(url.pathname) || /\/$/.test(url.pathname) || /index\.html$/.test(url.pathname);
-  if (shell) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(req).then((c) => c || caches.match("./index.html")))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const fetched = fetch(req)
-        .then((res) => {
-          if (res && res.ok && res.type === "basic") {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached || caches.match("./index.html"));
-      return cached || fetched;
-    })
-  );
+  event.respondWith(staleWhileRevalidate(req));
 });
 
 self.addEventListener("sync", (event) => {

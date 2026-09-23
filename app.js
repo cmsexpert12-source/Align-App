@@ -1017,7 +1017,7 @@
     const step = state.onboard;
     const bodies = [
       `
-        <img class="hero-art" src="./assets/hero-onboard.png" alt="" />
+        <img class="hero-art" src="./assets/hero-onboard.jpg" alt="" />
         <div class="kicker">Morning OS</div>
         <h1>The morning,<br>in one place.</h1>
         <p class="lead">Wake, train, pray, Word, plan, go. Training is a step — not the whole product. Stay in ALIGN until you’re out the door.</p>
@@ -1520,7 +1520,7 @@
     return `
       <div class="screen full done">
         <div class="done-hero">
-          <img class="done-burst" src="./assets/done-burst.png" alt="" />
+          <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
           <div class="kicker">Session logged</div>
           <h1>${day.name}<br>done.</h1>
           <p class="lead" style="color:var(--muted)">Back to the path. Word is next if you haven’t opened it.</p>
@@ -1634,7 +1634,6 @@
             </div>` : ""}
             <button class="btn ${state.authBusy?"busy":""}" data-act="auth-submit">${
               state.authBusy ? "Working…" : tab === "signup" ? "Create account" : tab === "magic" ? "Email me a link" : "Sign in"
-            }</== "magic" ? "Email me a link" : "Sign in"
             }</button>
             <div style="display:flex;justify-content:space-between;margin-top:14px">
               <button class="linkish" data-act="auth-tab" data-tab="${tab==="magic"?"signin":"magic"}">${tab==="magic"?"Use password":"Magic link instead"}</button>
@@ -2324,7 +2323,7 @@
     <div class="screen full">
       <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
       <div class="done-hero" style="padding:24px 22px">
-        <img class="done-burst" src="./assets/done-burst.png" alt="" />
+        <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
         <div class="kicker">${sunday ? "Leave by 5:45" : "The morning is complete"}</div>
         <h1>${sunday ? "Go<br>to church." : "Begin<br>the day."}</h1>
         <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "Train. Pray. Word. Plan. Ready. You don’t need another app until evening."}</p>

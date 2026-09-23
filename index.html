@@ -16,20 +16,34 @@
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700&family=Fraunces:opsz,wght@9..144,500&family=Syne:wght@800&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700&family=Fraunces:opsz,wght@9..144,500&family=Syne:wght@800&display=swap" /></noscript>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    html,body{margin:0;height:100%;background:#07080b;color:#f4f1ea}
+    .boot{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,sans-serif}
+    .boot .mark{width:84px;height:84px;border-radius:26px;background:#d6ff3f;display:grid;place-items:center}
+    .boot h1{font-size:22px;letter-spacing:.28em;margin:22px 0 0;font-weight:800}
+    .boot p{color:#9a9aa8;font-size:13px;margin-top:8px;letter-spacing:.04em}
+  </style>
 </head>
 <body>
-  <div class="app" id="app"></div>
-  <script src="vendor/supabase.js"></script>
-  <script src="config.js"></script>
-  <script src="data.js"></script>
-  <script src="life.js"></script>
-  <script src="scripture.js"></script>
-  <script src="books.js"></script>
-  <script src="ai.js"></script>
-  <script src="sound.js"></script>
-  <script src="db.js"></script>
-  <script src="app.js"></script>
+  <div class="app" id="app">
+    <div class="boot">
+      <div class="mark"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12 L8 3 L14 12" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+      <h1>ALIGN</h1>
+      <p>The morning, in one place</p>
+    </div>
+  </div>
+  <script defer src="vendor/supabase.js"></script>
+  <script defer src="config.js"></script>
+  <script defer src="data.js"></script>
+  <script defer src="life.js"></script>
+  <script defer src="scripture.js"></script>
+  <script defer src="books.js"></script>
+  <script defer src="ai.js"></script>
+  <script defer src="sound.js"></script>
+  <script defer src="db.js"></script>
+  <script defer src="app.js"></script>
 </body>
 </html>
