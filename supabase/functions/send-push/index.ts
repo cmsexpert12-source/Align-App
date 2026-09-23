@@ -13,63 +13,77 @@ import webpush from "npm:web-push@3.6.7";
 
 const WAKE_NOTES = [
   [
-    ["ALIGN · Church morning", "Rise at 4:00. Walk the light path. One chapter. Out by 5:45 — the first appointment is His."],
-    ["ALIGN · The house is waiting", "This hour is already decided. Twelve minutes. One chapter. Leave on time. Go to church."]
+    ["ALIGN · Go to Him first", "4:00. Twelve minutes. One chapter. Out by 5:45. The first appointment of the week is His — keep it."],
+    ["ALIGN · The house is waiting", "This hour is already holy. Rise. Walk the light path. Leave on time. Be the first one faithful."],
+    ["ALIGN · Sunday is a vow", "Don't give this morning to delay. One chapter. Dressed. Out. Church is where the week begins."]
   ],
   [
-    ["ALIGN · Begin again", "A new week does not need a new you. It needs the same order. Rise. Train. Pray. Word. Go."],
-    ["ALIGN · The day is a gift", "You are up. Body first, while the mind is quiet. Then prayer. Then the Word. Then the day."]
+    ["ALIGN · Become who you said", "A new week does not need a new you. It needs you awake, in the Word, already in motion."],
+    ["ALIGN · Win the morning", "You are up. The quiet is a gift. Body. Prayer. Scripture. Then the day cannot steal you."],
+    ["ALIGN · Fire, not feeling", "Rise. Train. Pray. Open the Word. Go. The man who wins Monday does not negotiate the rest of the week."]
   ],
   [
-    ["ALIGN · Quiet strength", "Strength is built in the dark, before anyone is watching. Walk the path. Stay here until you step out."],
-    ["ALIGN · Don't skip the quiet", "Train. Pray. Open Scripture. Three true priorities. The rest of the day will take its place."]
+    ["ALIGN · Built in the dark", "Strength is made before anyone is watching. Get up. Walk the path. The man you want is forged in this hour."],
+    ["ALIGN · Don't skip the quiet", "The world can wait. Train. Pray. Open Scripture. Three true things. Everything else finds its place."],
+    ["ALIGN · Stay in the fight", "This is how lives change — not in public, in the dark, on a Tuesday, when no one claps."]
   ],
   [
-    ["ALIGN · Midweek, still yours", "The week does not own this hour. You do. One faithful morning is worth more than a late start."],
-    ["ALIGN · Keep the order", "Rise. Move. Pray. Word. Plan. Ready. Go. Don't decide the morning twice."]
+    ["ALIGN · Midweek, still yours", "The week does not own you. This hour does. One faithful morning outweighs a late start and a loud day."],
+    ["ALIGN · Don't decide twice", "Rise. Move. Pray. Word. Plan. Ready. Go. The path is already chosen. Walk it like it is life."],
+    ["ALIGN · Keep the flame", "Halfway is where most men fade. Not you. Open ALIGN. Finish the morning. Become."]
   ],
   [
-    ["ALIGN · Faithfulness before sunrise", "What you repeat in the dark becomes who you are in the light. Open ALIGN. Walk the path."],
-    ["ALIGN · Guard this hour", "The Word is waiting. So is the work. Start with the body, then the soul, then the plan."]
+    ["ALIGN · What you repeat, you become", "What you do in the dark becomes who you are in the light. Don't break the streak of your soul."],
+    ["ALIGN · Guard this hour", "The Word is waiting. So is the work. Body, then soul, then the plan — and you will stand."],
+    ["ALIGN · Faithfulness looks like this", "No audience. No mood. Just 5:00, the path, and the God who meets you here."]
   ],
   [
-    ["ALIGN · Finish the week well", "One more morning in order. Don't let Friday steal the quiet. Train. Pray. Read. Then go."],
-    ["ALIGN · End as you began", "Awake. Trained. In the Word. Ready. Finish the work week the way you started it."]
+    ["ALIGN · Finish like you began", "One more morning in order. Don't let Friday steal the quiet. Train. Pray. Read. Then go and finish well."],
+    ["ALIGN · End on the path", "Awake. Trained. In the Word. Ready. Close the work week the same way you opened it — faithful."],
+    ["ALIGN · Don't coast", "The last weekday still belongs to Him. Rise. Walk it. Leave nothing lazy on the table."]
   ],
   [
-    ["ALIGN · Recover, don't drift", "Rest is part of the path — not a skip. Move gently. Pray. Read. Keep the morning."],
-    ["ALIGN · Still a morning", "Saturday is still a gift. Rise. Recover well. Stay with the Word. Don't give the hour away."]
+    ["ALIGN · Recover on purpose", "Rest is not a skip. It is strength. Rise. Move gently. Pray. Stay with the Word. Don't drift."],
+    ["ALIGN · Saturday still counts", "This morning is still a gift. Keep it. The man who is faithful on Saturday is ready for Sunday."],
+    ["ALIGN · Don't give it away", "Sleep was for last night. This hour is for the soul. Open ALIGN. Keep the vow."]
   ]
 ];
 
 const LIGHTS_NOTES = [
   [
-    ["ALIGN · Guard the night", "Ten minutes. Lights out at midnight. Rise is 4:00. The first appointment is His."],
-    ["ALIGN · Sleep is part of the path", "Put it down. Four hours. Church morning is already decided."]
+    ["ALIGN · Guard midnight", "Ten minutes. Lights out. Rise is 4:00. Church is already on the path. Sleep like the first appointment is His."],
+    ["ALIGN · Put heaven first", "Put it down. Four hours. Tomorrow's faithfulness starts with this yes. The house is waiting."],
+    ["ALIGN · Close it for Him", "Sunday morning is a vow. Protect 4:00. Phone down. Lights out. Go to Him first."]
   ],
   [
-    ["ALIGN · The morning is decided", "Ten minutes. Lights out at 1:00. What you protect tonight, you walk at 5:00."],
-    ["ALIGN · Close it well", "The feed will still be there. Your 5:00 will not, if you steal from it now."]
+    ["ALIGN · Protect 5:00", "Ten minutes. Lights out at 1:00. What you refuse tonight, you become at sunrise."],
+    ["ALIGN · The feed can wait", "The feed will still be there. Your 5:00 will not. Close it. Sleep. Win tomorrow before it starts."],
+    ["ALIGN · Choose the man", "One more scroll costs the morning. Lights out. Be the man who keeps the hour."]
   ],
   [
-    ["ALIGN · Quiet strength starts now", "Ten minutes. Lights out at 1:00. Strength is built in the dark — including sleep."],
-    ["ALIGN · Don't bargain", "One more hour costs the morning. Lights out. Rise is 5:00."]
+    ["ALIGN · Strength sleeps too", "Ten minutes. Lights out at 1:00. The dark is where strength is built — including the courage to stop."],
+    ["ALIGN · Don't steal sunrise", "One more hour costs the man you're becoming. Lights out. Rise is 5:00. Keep the vow."],
+    ["ALIGN · Lay it down", "The fight for tomorrow is won in bed, on time. Put the phone down. Rest like it is holy."]
   ],
   [
-    ["ALIGN · Midweek, still yours", "Ten minutes. Lights out at 1:00. The week does not own this sleep. You do."],
-    ["ALIGN · Keep the order", "Rest is not a skip. It is how tomorrow's path stays possible."]
+    ["ALIGN · This sleep is yours", "Ten minutes. Lights out at 1:00. The week does not get this hour. You do. Guard it."],
+    ["ALIGN · Tomorrow is calling", "Rest is not a skip. It is how a faithful morning stays possible. Put it down."],
+    ["ALIGN · Midweek, still a vow", "Don't bargain. 1:00. Sleep. 5:00 will make you if you let it."]
   ],
   [
-    ["ALIGN · Guard this hour", "Ten minutes. Lights out at 1:00. What you repeat in the dark becomes who you are in the light."],
-    ["ALIGN · Don't give it away", "The morning is waiting. Sleep like it matters — because it does."]
+    ["ALIGN · Become in the dark", "Ten minutes. Lights out at 1:00. What you repeat tonight becomes who you are at 5:00. Choose well."],
+    ["ALIGN · Don't give it away", "The morning is waiting to make you. Sleep like it is holy — because it is."],
+    ["ALIGN · Keep the streak", "Faithfulness is a night and a morning. Close the day. Don't leak the hour."]
   ],
   [
-    ["ALIGN · Finish the week well", "Ten minutes. Lights out at 1:00. Don't let Friday steal the quiet of Saturday's rise."],
-    ["ALIGN · End as you began", "The work week is not owed your sleep. Lights out. Recover."]
+    ["ALIGN · Don't let Friday win", "Ten minutes. Lights out at 1:00. Don't spend Saturday's rise on tonight's noise. Close it. Recover."],
+    ["ALIGN · Finish the night well", "The work week is not owed your sleep. Lights out. Tomorrow you rise on purpose."],
+    ["ALIGN · Protect the rest", "Friday wants one more hour. The path wants 5:00. Choose the path."]
   ],
   [
-    ["ALIGN · Recover, don't drift", "Ten minutes. Lights out at 1:00. Rest is part of the path. Keep the morning."],
-    ["ALIGN · Still a night that matters", "Saturday sleep still belongs to 5:00. Put the phone down."]
+    ["ALIGN · Recover, don't drift", "Ten minutes. Lights out at 1:00. Rest is part of the path. Keep 5:00. Keep Sunday."],
+    ["ALIGN · Still a holy night", "Saturday sleep still belongs to the morning. Put the phone down. Keep the vow."],
+    ["ALIGN · Don't leak Sunday", "What you watch now, you carry at 4:00. Lights out. Be ready for Him."]
   ]
 ];
 
