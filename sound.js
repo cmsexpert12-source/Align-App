@@ -48,10 +48,19 @@ window.ALIGN_SOUND = (() => {
   let currentId = "";
   let title = "Sound";
   let audioEl = null;
+  let playToken = 0;
+  const liveAudio = new Set();
+  const objectUrls = new Set();
   let tracks = []; // {id,name,...} local + mine
   let library = FALLBACK_LIB.slice();
   const blobs = new Map();
-  const uid = () => (crypto.randomUUID && crypto.randomUUID()) || ("t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const uid = () => {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  };
   const listeners = new Set();
   const emit = () => listeners.forEach((fn) => { try { fn(snapshot()); } catch {} });
 
@@ -177,9 +186,6 @@ window.ALIGN_SOUND = (() => {
     liveAudio.forEach(killEl);
     liveAudio.clear();
     if (audioEl) { killEl(audioEl); audioEl = null; }
-    try {
-      document.querySelectorAll("audio").forEach((el) => killEl(el));
-    } catch {}
     objectUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} });
     objectUrls.clear();
   };
@@ -223,7 +229,13 @@ window.ALIGN_SOUND = (() => {
 
   const startStation = async (id) => {
     const token = ++playToken;
-    const c = await ensure(true);
+    let c;
+    try {
+      c = await ensure(true);
+      if (c && c.state === "suspended") await c.resume();
+    } catch {
+      c = null;
+    }
     if (!c || token !== playToken) return;
     clearBed();
     if (token !== playToken) return;
@@ -318,12 +330,23 @@ window.ALIGN_SOUND = (() => {
     const el = new Audio();
     el.src = url;
     el.loop = true;
+    el.playsInline = true;
+    el.preload = "auto";
     el.volume = load().volume;
     liveAudio.add(el);
-    try { await el.play(); } catch {}
-    if (token !== playToken) { killEl(el); return; }
+    let started = false;
+    try {
+      await el.play();
+      started = true;
+    } catch {
+      try {
+        if (ctx && ctx.state === "suspended") await ctx.resume();
+        await el.play();
+        started = true;
+      } catch { started = false; }
+    }
+    if (!started || token !== playToken) { killEl(el); if (token === playToken) await startStation(load().station); return; }
     audioEl = el;
-    el.addEventListener("ended", () => { /* looped */ }, { once: true });
     kind = "track";
     currentId = id;
     title = (tracks.find((t) => t.id === id) || {}).name || "Track";
@@ -352,11 +375,26 @@ window.ALIGN_SOUND = (() => {
     const el = new Audio();
     el.src = url;
     el.loop = true;
+    el.playsInline = true;
     el.preload = "auto";
     el.volume = load().volume;
     liveAudio.add(el);
-    try { await el.play(); } catch {}
-    if (token !== playToken) { killEl(el); return; }
+    let started = false;
+    try {
+      await el.play();
+      started = true;
+    } catch {
+      try {
+        if (ctx && ctx.state === "suspended") await ctx.resume();
+        await el.play();
+        started = true;
+      } catch { started = false; }
+    }
+    if (!started || token !== playToken) {
+      killEl(el);
+      if (token === playToken) await startStation(item.mood || load().station);
+      return;
+    }
     audioEl = el;
     kind = item.is_public ? "library" : "track";
     currentId = item.id;
@@ -406,14 +444,24 @@ window.ALIGN_SOUND = (() => {
   const resume = async () => {
     if (playing) return;
     await ensure(true);
+    if (ctx && ctx.state === "suspended") {
+      try { await ctx.resume(); } catch {}
+    }
     if (audioEl) {
       try {
         audioEl.muted = false;
         audioEl.volume = load().volume;
         await audioEl.play();
         playing = true;
+        openBed();
         emit();
-      } catch {}
+        return;
+      } catch { /* rebuild below */ }
+    }
+    if (kind === "station" && nodes.length) {
+      openBed();
+      playing = true;
+      emit();
       return;
     }
     if (kind === "track" && currentId && blobs.has(currentId)) {

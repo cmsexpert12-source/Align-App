@@ -12,7 +12,13 @@ window.ALIGN_BOOKS = (() => {
   };
   const saveJSON = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
-  const uid = () => (crypto.randomUUID && crypto.randomUUID()) || ("b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const uid = () => {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  };
 
   let idbP = null;
   const idb = () => {

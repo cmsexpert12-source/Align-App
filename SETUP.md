@@ -89,7 +89,7 @@ Without the Vercel URL in Redirect URLs, magic links and sign-up will bounce.
 
 ## 4. Run the SQL (backend tables)
 
-Dashboard → **SQL Editor** → New query. Open **`sql/align.sql`**, paste the whole file, **Run**. That is the only script. It is safe to run again.
+Dashboard → **SQL Editor** → New query. Open **`sql/align.sql`**, paste the whole file, **Run**. That is the only script. It is safe to run again (includes table grants so the app can write).
 
 It creates accounts, mornings, Word, plans, books, sound, Storage buckets `reading` and `sounds`, and the public sound library.
 

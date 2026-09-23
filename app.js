@@ -344,6 +344,7 @@
       }
     }
     try {
+      if (state.profile && state.profile.name) AlignDB.upsertProfile(state.profile.name);
       if (AlignDB.seedLocal) AlignDB.seedLocal();
       await AlignDB.flush();
     } catch { /* retry on next online */ }

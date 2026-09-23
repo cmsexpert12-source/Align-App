@@ -289,3 +289,22 @@ insert into public.sounds (id, user_id, title, artist, source, license, mood, so
   ('11111111-1111-4111-8111-111111111117', null, 'Breeze, birds, geese', 'PDsounds', 'wikimedia', 'Public domain', 'train',
     'https://commons.wikimedia.org/wiki/Special:FilePath/Breeze_birds_and_geese.ogg', true)
 on conflict (id) do nothing;
+
+-- Writes need these grants (safe to re-run).
+grant usage on schema public to anon, authenticated;
+grant select on table public.sounds to anon, authenticated;
+grant all on table
+  public.profiles,
+  public.workouts,
+  public.push_subscriptions,
+  public.notification_prefs,
+  public.mornings,
+  public.day_plans,
+  public.journals,
+  public.bible_state,
+  public.app_state,
+  public.books,
+  public.reading_log,
+  public.sounds
+to authenticated;
+grant all on all sequences in schema public to authenticated;

@@ -134,19 +134,8 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
-  const upsertProfile = async (displayName) => {
-    const sb = client();
-    if (!sb) return fail("Not connected");
-    const userId = await uidOf();
-    if (!userId) return fail("Not signed in");
-    const { error } = await sb.from("profiles").upsert({
-      id: userId,
-      display_name: displayName || "",
-      updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
-    return ok(true);
-  };
+  const upsertProfile = async (displayName) =>
+    queueAndFlush("profile", "profile", { display_name: displayName || "" }, { delay: 0 });
 
   const fetchProfile = async () => {
     const sb = client();
@@ -210,18 +199,7 @@ window.AlignDB = (() => {
 
   const savePrefs = async (prefs) => {
     localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
-    const sb = client();
-    if (!sb) return ok(prefs);
-    const userId = await uidOf();
-    if (!userId) return ok(prefs);
-    const { error } = await sb.from("notification_prefs").upsert({
-      user_id: userId,
-      enabled: !!prefs.enabled,
-      reminder_hour: Number(prefs.hour) || 7,
-      reminder_minute: Number(prefs.minute) || 0,
-      updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
+    queueAndFlush("prefs", "prefs", prefs || {}, { delay: 0 });
     return ok(prefs);
   };
 
@@ -377,7 +355,7 @@ window.AlignDB = (() => {
     const auth = await refreshAuth(false);
     if (!auth.token) return { message: "Sign in to save to the cloud" };
     const base = String(c.url).replace(/\/$/, "");
-    const qs = conflict ? ("?on_conflict=" + encodeURIComponent(conflict)) : "";
+    const qs = conflict ? ("?on_conflict=" + String(conflict).replace(/\s+/g, "")) : "";
     const once = async (tok) => {
       const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
       const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch { /* ignore */ } }, 12000);
@@ -388,6 +366,7 @@ window.AlignDB = (() => {
             apikey: c.anonKey,
             Authorization: "Bearer " + tok,
             "Content-Type": "application/json",
+            Accept: "application/json",
             Prefer: "resolution=merge-duplicates,return=minimal"
           },
           body: JSON.stringify(row),
@@ -419,7 +398,24 @@ window.AlignDB = (() => {
       if (r.status >= 400 && r.status !== 401) msg = msg;
     } catch { /* keep msg */ }
     if (r.status === 401) return { message: "Sign in to save to the cloud" };
-    return { message: String(msg) };
+    return { message: table + ": " + String(msg) };
+  };
+
+  const clientUpsert = async (table, row, conflict) => {
+    const sb = client();
+    if (!sb) return restUpsert(table, row, conflict);
+    try {
+      const opts = conflict ? { onConflict: conflict } : {};
+      const { error } = await withTimeout(sb.from(table).upsert(row, opts), 12000, "write timeout");
+      if (!error) return null;
+      const restErr = await restUpsert(table, row, conflict);
+      if (!restErr) return null;
+      return { message: table + ": " + (error.message || restErr.message) };
+    } catch (e) {
+      const restErr = await restUpsert(table, row, conflict);
+      if (!restErr) return null;
+      return { message: table + ": " + ((e && e.message) || restErr.message) };
+    }
   };
 
   const pushRow = async (item) => {
@@ -586,10 +582,30 @@ window.AlignDB = (() => {
       hist.slice(-24).forEach((row) => {
         if (row && row.date) enqueue("workout", (row.date || "") + "|" + (row.dayId || ""), row);
       });
+      enqueue("profile", "profile", { display_name: (v1 && v1.profile && v1.profile.name) || "" });
+    } catch { /* ignore */ }
+    const prefs = readJSON("align-notif-prefs", null);
+    if (prefs) enqueue("prefs", "prefs", prefs);
+    try {
+      const books = readJSON("align-books", []);
+      (books || []).slice(0, 40).forEach((b) => {
+        if (b && b.id) enqueue("book", b.id, b);
+      });
+      const log = readJSON("align-reading-log", {});
+      Object.keys(log || {}).slice(0, 40).forEach((key) => {
+        const row = log[key];
+        const parts = String(key).split("|");
+        const iso = parts[0];
+        const bookId = parts.slice(1).join("|");
+        if (iso && bookId) enqueue("reading", iso + "|" + bookId, {
+          iso, bookId, fromPage: row && (row.from || row.from_page), toPage: row && (row.to || row.to_page)
+        });
+      });
     } catch { /* ignore */ }
   };
 
   const syncNow = async (bundle) => {
+    seedLocal();
     if (bundle && bundle.iso) {
       if (bundle.morning) enqueue("morning", bundle.iso, { iso: bundle.iso, steps: bundle.morning });
       if (bundle.plan) enqueue("plan", bundle.iso, { iso: bundle.iso, plan: bundle.plan });
@@ -662,28 +678,8 @@ window.AlignDB = (() => {
   };
 
   const upsertBookMeta = async (book) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const row = {
-      id: book.id,
-      user_id: userId,
-      title: book.title,
-      author: book.author || "",
-      filename: book.filename || "",
-      storage_path: book.storage_path || "",
-      bytes: book.bytes || 0,
-      pages: book.pages || 0,
-      current_page: book.current_page || 1,
-      slot: book.slot || "evening",
-      days: book.days || [1, 2, 3, 4, 5, 6],
-      pages_per_day: book.pages_per_day || 8,
-      enabled: book.enabled !== false,
-      updated_at: new Date().toISOString()
-    };
-    const { error } = await sb.from("books").upsert(row);
-    if (error) return fail(error);
-    return ok(true);
+    if (!book || !book.id) return ok(null);
+    return queueAndFlush("book", book.id, book, { delay: 0 });
   };
 
   const uploadBookFile = async (bookId, blob) => {
@@ -719,21 +715,8 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
-  const saveReadingLog = async (iso, bookId, fromPage, toPage) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
-    const { error } = await sb.from("reading_log").upsert({
-      user_id: userId,
-      book_id: bookId,
-      date: iso,
-      from_page: fromPage,
-      to_page: toPage,
-      updated_at: new Date().toISOString()
-    });
-    if (error) return fail(error);
-    return ok(true);
-  };
+  const saveReadingLog = async (iso, bookId, fromPage, toPage) =>
+    queueAndFlush("reading", iso + "|" + bookId, { iso, bookId, fromPage, toPage }, { delay: 0 });
 
   const fetchSounds = async () => {
     const sb = client();
@@ -754,12 +737,9 @@ window.AlignDB = (() => {
   };
 
   const upsertSoundMeta = async (row) => {
-    const sb = client();
-    const userId = await uidOf();
-    if (!sb || !userId) return ok(null);
+    if (!row || !row.id) return ok(null);
     const rec = {
       id: row.id,
-      user_id: userId,
       title: row.title,
       artist: row.artist || "",
       source: row.source || "upload",
@@ -769,12 +749,9 @@ window.AlignDB = (() => {
       storage_path: row.storage_path || null,
       filename: row.filename || "",
       mime: row.mime || "",
-      bytes: row.bytes || 0,
-      is_public: false,
-      updated_at: new Date().toISOString()
+      bytes: row.bytes || 0
     };
-    const { error } = await sb.from("sounds").upsert(rec);
-    if (error) return fail(error);
+    queueAndFlush("sound", row.id, rec, { delay: 0 });
     return ok(rec);
   };
 
