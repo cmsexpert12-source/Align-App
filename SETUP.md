@@ -89,23 +89,16 @@ Without the Vercel URL in Redirect URLs, magic links and sign-up will bounce.
 
 ## 4. Run the SQL (backend tables)
 
-Dashboard → **SQL Editor** → New query. Run these **in order**, one file at a time. Paste the whole file, **Run**.
+Dashboard → **SQL Editor** → New query. Open **`sql/align.sql`**, paste the whole file, **Run**. That is the only script. It is safe to run again.
 
-You already ran `sql/schema.sql` (fitness). If you’re not sure, run it again — it is safe to re-run.
-
-| Order | File | What it creates |
-| --- | --- | --- |
-| 1 | `sql/schema.sql` | profiles, workouts, push, notification prefs |
-| 2 | `sql/schema-life.sql` | mornings, day plans, journals, bible cursor |
-| 3 | `sql/schema-books.sql` | books, reading log, private Storage bucket `reading` |
-| 4 | `sql/schema-sounds.sql` | public sound library + your uploads, Storage bucket `sounds` |
+It creates accounts, mornings, Word, plans, books, sound, Storage buckets `reading` and `sounds`, and the public sound library.
 
 If a policy “already exists” warning appears, ignore it. Real errors (red) mean stop and read the message.
 
-After `schema-books.sql`, confirm:
+Confirm after Run:
 
-- **Table Editor** shows `books` and `reading_log`
-- **Storage** shows a private bucket named `reading`
+- **Table Editor** shows `mornings`, `app_state`, `books`, `sounds`
+- **Storage** shows private buckets `reading` and `sounds`
 
 ---
 
