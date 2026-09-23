@@ -469,15 +469,19 @@ window.AlignDB = (() => {
         user_id: userId, date: p.iso, payload: p.payload || {}, updated_at: now
       }, "user_id,date");
     } else if (item.kind === "note") {
-      err = await restUpsert("notes", {
-        user_id: userId,
-        id: p.id,
-        date: p.date,
-        title: p.title || "",
-        body: p.body || "",
-        created_at: p.created_at || now,
-        updated_at: now
-      }, "user_id,id");
+      if (!p.id) err = null;
+      else {
+        err = await restUpsert("notes", {
+          user_id: userId,
+          id: p.id,
+          date: p.date,
+          title: p.title || "",
+          body: p.body || "",
+          created_at: p.created_at || now,
+          updated_at: now
+        }, "user_id,id");
+        if (err && missingTable(err)) err = null;
+      }
     } else if (item.kind === "note-del") {
       err = await restDelete("notes", "id=eq." + encodeURIComponent(p.id) + "&user_id=eq." + userId);
       if (err && missingTable(err)) err = null;
@@ -700,7 +704,7 @@ window.AlignDB = (() => {
       sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId)
     ]);
     if (m.error && missingTable(m.error)) return ok(null);
-    const notes = (n.error && missingTable(n.error)) ? [] : (n.data || []);
+    const notes = (!n || (n.error && missingTable(n.error))) ? [] : (n.data || []);
     return ok({
       mornings: (m.data || []).map((r) => ({ date: r.date, steps: r.steps, updated_at: r.updated_at })),
       plans: (p.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),

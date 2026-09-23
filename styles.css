@@ -1600,6 +1600,23 @@ img { max-width: 100%; display: block; }
   padding: 4px 20px calc(16px + var(--safe-b));
   gap: 8px;
 }
+.journal-write.full {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.journal-pad {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 20px calc(24px + var(--safe-b));
+  gap: 10px;
+}
+.journal-pad .diary-box {
+  flex: 1;
+  min-height: 42vh;
+}
 .icon-btn.add {
   background: var(--lime-dim);
   border-color: rgba(214,255,63,.28);

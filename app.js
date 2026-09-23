@@ -2192,55 +2192,56 @@
     });
   };
 
+  const cloudNote = (note) => {
+    if (!note || !window.AlignDB) return;
+    try { if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {}); } catch { /* local is enough */ }
+    try { AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {}); } catch { /* local is enough */ }
+  };
+
   const saveOpenNote = () => {
     const id = state.journalNoteId;
     if (!id || !L().upsertNote) return null;
-    const titleEl = document.getElementById("note-title");
-    const bodyEl = document.getElementById("diary-note");
-    const prev = L().noteById(id) || { id, date: state.journalIso || today().iso, created_at: new Date().toISOString() };
-    const note = L().upsertNote({
-      id,
-      date: prev.date || state.journalIso || today().iso,
-      title: titleEl ? titleEl.value : (prev.title || ""),
-      body: bodyEl ? bodyEl.value : (prev.body || ""),
-      created_at: prev.created_at
-    });
-    if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
-    AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
-    return note;
-  };
-
-  const pushNoteNow = async (note) => {
-    if (!note) return { ok: true };
     try {
-      if (AlignDB.saveNote) await AlignDB.saveNote(note, { now: true });
-      return await AlignDB.saveJournal(note.date, L().journalOf(note.date), { now: true });
+      const titleEl = document.getElementById("note-title");
+      const bodyEl = document.getElementById("diary-note");
+      const prev = L().noteById(id) || { id, date: state.journalIso || today().iso, created_at: new Date().toISOString() };
+      const note = L().upsertNote({
+        id,
+        date: prev.date || state.journalIso || today().iso,
+        title: titleEl ? titleEl.value : (prev.title || ""),
+        body: bodyEl ? bodyEl.value : (prev.body || ""),
+        created_at: prev.created_at
+      });
+      cloudNote(note);
+      return note;
     } catch (e) {
-      return { ok: false, error: (e && e.message) || "Could not save" };
+      console.warn(e);
+      return null;
     }
   };
 
   const viewJournal = () => {
-    const notes = (L().notesList && L().notesList()) || [];
+    let notes = [];
+    try { notes = (L().notesList && L().notesList()) || []; } catch { notes = []; }
     return `
       <div class="screen home journal">
         <div class="topbar">
           <div class="greet">Journal<h2>Notepad.</h2></div>
-          <button class="icon-btn add" data-act="journal-new" title="New note">+</button>
+          <button type="button" class="icon-btn add" data-act="journal-new" title="New note">+</button>
         </div>
-        <p class="plan-kicker">A pad. Tap + for another note — as many as you want, any day. Not the devotion.</p>
+        <p class="plan-kicker">Tap + for a new page. Write as many as you want. Not the devotion.</p>
         ${notes.length ? `<div class="journal-list">${notes.map((n) => `
-          <button class="journal-row" data-act="journal-open" data-id="${n.id}">
+          <button type="button" class="journal-row" data-act="journal-open" data-id="${escapeAttr(n.id)}">
             <div>
               <h4>${escapeHtml(noteTitleOf(n))}</h4>
-              <p>${escapeHtml(clipText((n.title && n.body) ? n.body : String(n.body || "").split("\n").slice(1).join(" ") || n.body || "", 90) || prettyIso(n.date))}</p>
+              <p>${escapeHtml(clipText(n.title && n.body ? n.body : (n.body || ""), 90) || prettyIso(n.date))}</p>
             </div>
             <span aria-hidden="true">›</span>
           </button>`).join("")}</div>` : `
-        <button class="journal-hero" data-act="journal-new">
+        <button type="button" class="journal-hero" data-act="journal-new">
           <div class="tag">Notepad</div>
           <h3>New note</h3>
-          <p>Tap and write. Add as many notes as you want.</p>
+          <p>Tap and write. Add another with + whenever you want.</p>
           <span class="journal-cta">Start writing</span>
         </button>`}
       </div>
@@ -2249,20 +2250,21 @@
 
   const viewJournalWrite = () => {
     const id = state.journalNoteId;
-    const n = (L().noteById && id) ? L().noteById(id) : null;
+    let n = null;
+    try { n = (L().noteById && id) ? L().noteById(id) : null; } catch { n = null; }
     const title = n ? n.title : "";
     const body = n ? n.body : "";
     const when = n && n.date ? prettyIso(n.date) : "Today";
     return `
-      <div class="screen full has-cta journal-write">
+      <div class="screen full journal-write">
         <div class="back-row">
-          <button class="icon-btn" data-act="journal-done">${chev()}</button>
+          <button type="button" class="icon-btn" data-act="journal-done">${chev()}</button>
           <div class="journal-when">${escapeHtml(when)}</div>
-          <button class="linkish" data-act="journal-delete">Delete</button>
+          <button type="button" class="linkish" data-act="journal-delete">Delete</button>
         </div>
-        <div class="scroll-body journal-body pad">
-          <input id="note-title" class="note-title" type="text" maxlength="80" placeholder="Title" autocomplete="off" autocorrect="off" value="${escapeAttr(title)}" />
-          <textarea class="diary-box pad" id="diary-note" placeholder="Start writing…">${escapeHtml(body)}</textarea>
+        <div class="journal-pad">
+          <input id="note-title" class="note-title" type="text" maxlength="80" placeholder="Title" autocomplete="off" autocorrect="on" value="${escapeAttr(title)}" />
+          <textarea class="diary-box" id="diary-note" placeholder="Start writing…">${escapeHtml(body)}</textarea>
         </div>
       </div>
     `;
@@ -3426,37 +3428,27 @@
       toast("Amen.");
       state.view = "home";
       render();
-    } else if (act === "journal-new") {
-      const note = L().emptyNote(today().iso);
-      L().upsertNote(note);
-      if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
-      AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
-      openNote(note);
-    } else if (act === "journal-today") {
-      const note = L().emptyNote(today().iso);
-      L().upsertNote(note);
-      if (AlignDB.saveNote) AlignDB.saveNote(note).catch(() => {});
-      AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
-      openNote(note);
+    } else if (act === "journal-new" || act === "journal-today") {
+      try {
+        const note = L().emptyNote(today().iso);
+        L().upsertNote(note);
+        cloudNote(note);
+        openNote(note);
+      } catch (e) {
+        console.warn(e);
+        toast("Could not open a new note.");
+      }
     } else if (act === "journal-open") {
-      const n = L().noteById && L().noteById(el.dataset.id);
-      if (n) openNote(n);
+      try {
+        const n = L().noteById && L().noteById(el.dataset.id);
+        if (n) openNote(n);
+        else toast("That note is gone.");
+      } catch (e) {
+        console.warn(e);
+        toast("Could not open that note.");
+      }
     } else if (act === "journal-done") {
-      const note = saveOpenNote();
-      if (note && !String(note.title || "").trim() && !String(note.body || "").trim()) {
-        L().deleteNote(note.id);
-        if (AlignDB.deleteNoteRemote) AlignDB.deleteNoteRemote(note.id).catch(() => {});
-        AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
-        state.view = "journal";
-        render();
-        return;
-      }
-      if (note) {
-        const res = await pushNoteNow(note);
-        if (!state.session) toast("Saved on this device. Sign in to keep it in the cloud.");
-        else if (res && res.ok === false) toast(res.error || "Could not reach your account. It is on this device.");
-        else toast("Saved to Notes.");
-      }
+      saveOpenNote();
       state.view = "journal";
       render();
     } else if (act === "journal-delete") {
