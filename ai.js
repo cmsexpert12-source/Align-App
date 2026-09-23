@@ -3,15 +3,11 @@ window.ALIGN_AI = (() => {
   const LS = "align-ai-keys";
   const GEMINI_MODELS = [
     "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-flash-latest"
+    "gemini-2.0-flash"
   ];
   const GROQ_MODELS = [
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b",
-    "llama-3.1-8b-instant"
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-20b"
   ];
 
   const BASE = [
@@ -56,21 +52,33 @@ window.ALIGN_AI = (() => {
   };
 
   let server = { ready: false, gemini: false, groq: false, checked: false };
+  let probing = null;
+
+  const timeoutFetch = (url, opts, ms = 12000) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+  };
 
   const probe = async () => {
-    try {
-      const r = await fetch("/api/ai", { method: "GET", cache: "no-store" });
-      const data = await r.json().catch(() => ({}));
-      server = {
-        ready: !!(data && data.ready),
-        gemini: !!(data && data.gemini),
-        groq: !!(data && data.groq),
-        checked: true
-      };
-    } catch {
-      server = { ready: false, gemini: false, groq: false, checked: true };
-    }
-    return server;
+    if (probing) return probing;
+    probing = (async () => {
+      try {
+        const r = await timeoutFetch("/api/ai", { method: "GET", cache: "no-store" }, 4000);
+        const data = await r.json().catch(() => ({}));
+        server = {
+          ready: !!(data && data.ready),
+          gemini: !!(data && data.gemini),
+          groq: !!(data && data.groq),
+          checked: true
+        };
+      } catch {
+        server = { ready: false, gemini: false, groq: false, checked: true };
+      }
+      probing = null;
+      return server;
+    })();
+    return probing;
   };
 
   let lastOk = null;
@@ -80,7 +88,7 @@ window.ALIGN_AI = (() => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: user, system, prefer })
-    }, 28000);
+    }, 14000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.text) {
       const err = new Error(data.error || ("AI " + res.status));
@@ -90,32 +98,40 @@ window.ALIGN_AI = (() => {
     return { text: data.text, provider: data.provider, model: data.model };
   };
 
-  const timeoutFetch = (url, opts, ms = 18000) => {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), ms);
-    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
-  };
-
   const callGemini = async (key, model, system, user) => {
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" +
       encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key);
-    const res = await timeoutFetch(url, {
+    const payload = {
+      system_instruction: { parts: [{ text: system }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 320,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
+    };
+    let res = await timeoutFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.55, maxOutputTokens: 512 }
-      })
-    });
-    const data = await res.json().catch(() => ({}));
+      body: JSON.stringify(payload)
+    }, 8000);
+    let data = await res.json().catch(() => ({}));
+    if (!res.ok && /thinking|unknown name|invalid/i.test(JSON.stringify(data))) {
+      delete payload.generationConfig.thinkingConfig;
+      res = await timeoutFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }, 8000);
+      data = await res.json().catch(() => ({}));
+    }
     if (!res.ok) {
       const err = new Error((data.error && data.error.message) || ("Gemini " + res.status));
       err.status = res.status;
       throw err;
     }
     const parts = ((((data.candidates || [])[0] || {}).content || {}).parts) || [];
-    const text = parts.map((p) => p.text || "").join("").trim();
+    const text = parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim();
     if (!text) {
       const err = new Error("Gemini returned empty");
       err.status = 503;
@@ -133,14 +149,14 @@ window.ALIGN_AI = (() => {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.55,
-        max_tokens: 512,
+        temperature: 0.5,
+        max_tokens: 320,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
         ]
       })
-    });
+    }, 8000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error((data.error && (data.error.message || data.error)) || ("Groq " + res.status));
@@ -162,7 +178,7 @@ window.ALIGN_AI = (() => {
     if (e && e.name === "AbortError") return true;
     if (s === 429 || s === 404 || s === 400 || s === 503 || s === 500 || s === 502) return true;
     if (m.includes("not found") || m.includes("decommission") || m.includes("unavailable")) return true;
-    if (m.includes("failed to fetch") || m.includes("network") || m.includes("load failed")) return true;
+    if (m.includes("failed to fetch") || m.includes("network") || m.includes("load failed") || m.includes("empty")) return true;
     return false;
   };
 
@@ -172,8 +188,11 @@ window.ALIGN_AI = (() => {
       err.code = "no-key";
       throw err;
     }
+    const list = lastOk && lastOk.provider === label.toLowerCase()
+      ? [lastOk.model, ...models.filter((m) => m !== lastOk.model)]
+      : models;
     let last = null;
-    for (const model of models) {
+    for (const model of list) {
       try {
         return await fn(key, model, system, user);
       } catch (e) {
@@ -192,15 +211,26 @@ window.ALIGN_AI = (() => {
     return !server.checked;
   };
 
+  const friendly = (e) => {
+    if (e && e.name === "AbortError") return "That took too long. Try again.";
+    const m = String((e && e.message) || "");
+    if (/abort|timed out|timeout/i.test(m)) return "That took too long. Try again.";
+    if (/503|not reachable|no-keys/i.test(m)) return "ALIGN AI is not reachable. Check Vercel keys and redeploy.";
+    return m || "Both Gemini and Groq failed.";
+  };
+
   const ask = async ({ prompt, context, extraSystem }) => {
     const keys = keysOf();
-    const system = [BASE, extraSystem || "", context || ""].filter(Boolean).join("\n\n");
+    const system = [BASE, extraSystem || "", context || ""].filter(Boolean).join("\n\n").slice(0, 6000);
+    const user = String(prompt || "").trim().slice(0, 4000);
     const prefer = keys.prefer;
 
-    if (!server.checked) await probe();
+    if (!server.checked) {
+      try { await probe(); } catch { /* ignore */ }
+    }
 
     try {
-      const res = await callServer(system, prompt, prefer);
+      const res = await callServer(system, user, prefer);
       lastOk = { provider: res.provider, model: res.model };
       server.ready = true;
       if (res.provider === "gemini") server.gemini = true;
@@ -208,8 +238,7 @@ window.ALIGN_AI = (() => {
       return res;
     } catch (e) {
       if (!keys.gemini && !keys.groq) {
-        const msg = (e && e.message) ? e.message : "ALIGN AI is not reachable. Check Vercel keys and redeploy.";
-        const err = new Error(msg);
+        const err = new Error(friendly(e));
         err.code = "no-keys";
         throw err;
       }
@@ -224,8 +253,8 @@ window.ALIGN_AI = (() => {
     for (const p of order) {
       try {
         const res = p === "gemini"
-          ? await tryProvider("Gemini", callGemini, GEMINI_MODELS, keys.gemini, system, prompt)
-          : await tryProvider("Groq", callGroq, GROQ_MODELS, keys.groq, system, prompt);
+          ? await tryProvider("Gemini", callGemini, GEMINI_MODELS, keys.gemini, system, user)
+          : await tryProvider("Groq", callGroq, GROQ_MODELS, keys.groq, system, user);
         lastOk = { provider: res.provider, model: res.model };
         return res;
       } catch (e) {

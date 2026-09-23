@@ -645,21 +645,25 @@
     state.ai.busy = true;
     state.ai.error = "";
     state.ai.open = true;
-    render();
+    try { render(); } catch { /* keep sheet */ }
     focusAi();
     try {
       const res = await AI().ask({ prompt: q, context: aiContext() });
-      state.ai.reply = res.text;
-      state.ai.provider = res.provider;
-      state.ai.model = res.model;
+      state.ai.reply = (res && res.text) || "";
+      state.ai.provider = (res && res.provider) || "";
+      state.ai.model = (res && res.model) || "";
     } catch (e) {
       state.ai.reply = "";
       state.ai.provider = "";
       state.ai.model = "";
-      state.ai.error = (e && e.message) || "Both Gemini and Groq failed.";
+      const m = String((e && e.message) || "");
+      state.ai.error = /abort|timed out|timeout/i.test(m) || (e && e.name === "AbortError")
+        ? "That took too long. Try again."
+        : (m || "Both Gemini and Groq failed.");
+    } finally {
+      state.ai.busy = false;
     }
-    state.ai.busy = false;
-    render();
+    try { render(); } catch { /* keep sheet */ }
     focusAi();
   };
 
@@ -2725,6 +2729,7 @@
   const escapeAttr = escapeHtml;
 
   const formatAiReply = (raw) => {
+    try {
     let t = String(raw || "").replace(/\r\n/g, "\n").trim();
     t = t.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
     t = t.replace(/^```[\w-]*\n([\s\S]*?)\n```$/, "$1").trim();
@@ -2780,6 +2785,9 @@
       flushP();
     });
     return out.join("") || "<p></p>";
+    } catch {
+      return "<p>" + escapeHtml(String(raw || "")).replace(/\n/g, "<br>") + "</p>";
+    }
   };
 
   /* ---------- RENDER / EVENTS ---------- */
