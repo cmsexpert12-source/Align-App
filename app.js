@@ -73,7 +73,8 @@
     drill: null,
     drillMode: "morning",
     readPacks: [],
-    planJustSaved: false
+    planJustSaved: false,
+    journalIso: ""
   };
 
   /* ---------- SVG poses ---------- */
@@ -405,12 +406,12 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill"].includes(state.view);
-    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite"].includes(state.view);
+    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
     const hideNow = nowHidden();
@@ -523,6 +524,10 @@
     if (v === "evening" || v === "lights") return [
       ["Wind down", "A short thought to close the day. No new tasks."]
     ];
+    if (v === "journal" || v === "journalwrite") return [
+      ["A way in", "Ask me one honest question about how today went. Do not write the entry for me."],
+      ["Name it", "Give me three short prompts I could write under. Labels only."]
+    ];
     return [
       ["Help here", "Help me with whatever this screen is for. Keep it short."]
     ];
@@ -562,6 +567,15 @@
       const pri = (plan.priorities || []).filter(Boolean);
       if (pri.length) lines.push("Priorities already set: " + pri.join(" · ") + ".");
       if (plan.note) lines.push("Day notes: " + String(plan.note).slice(0, 400));
+    } catch { /* ignore */ }
+    try {
+      const iso = state.journalIso || t.iso;
+      const diary = String((L().journalOf(iso) || {}).diary || "").trim();
+      if (state.view === "journal" || state.view === "journalwrite") {
+        lines.push("This is the life journal — how the day went — not the devotion takeaway.");
+        if (diary) lines.push("Journal so far: " + diary.slice(0, 500));
+        else lines.push("The journal page is still empty.");
+      }
     } catch { /* ignore */ }
     return lines.join("\n");
   };
@@ -975,7 +989,8 @@
     home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>`,
     move: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2.2"/><path d="M12 8.5v4.5M8 22l4-9 4 9M5 13h14"/></svg>`,
     word: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3V4z"/><path d="M14 4h5v16h-8"/></svg>`,
-    you: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.2-3.2 3.6-5 7-5s5.8 1.8 7 5"/></svg>`
+    you: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.2-3.2 3.6-5 7-5s5.8 1.8 7 5"/></svg>`,
+    journal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h9l5 5v11H6z"/><path d="M15 4v5h5"/><path d="M9 13h6M9 17h4"/></svg>`
   };
 
   const stepIcon = (name) => {
@@ -994,7 +1009,8 @@
       bell: `<path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" ${s}/><path d="M10 21h4" ${s}/>`,
       key: `<circle cx="8" cy="12" r="3" ${s}/><path d="M11 12h9l-2 2 2 2" ${s}/>`,
       verse: `<path d="M5 5h14v4H5zM5 12h14M5 16h10" ${s}/>`,
-      drill: `<circle cx="12" cy="12" r="8" ${s}/><path d="M12 8v4l3 2" ${s}/>`
+      drill: `<circle cx="12" cy="12" r="8" ${s}/><path d="M12 8v4l3 2" ${s}/>`,
+      journal: `<path d="M6 4h9l5 5v11H6z" ${s}/><path d="M15 4v5h5" ${s}/><path d="M9 13h6M9 17h4" ${s}/>`
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${map[name] || map.move}</svg>`;
   };
@@ -1004,6 +1020,7 @@
       <button data-go="home" class="${active==="home"?"on":""}">${iconNav.home}Today</button>
       <button data-go="plan" class="${active==="plan"?"on":""}">${iconNav.move}Move</button>
       <button data-go="word" class="${active==="word"?"on":""}">${iconNav.word}Word</button>
+      <button data-go="journal" class="${active==="journal"?"on":""}">${iconNav.journal}Journal</button>
       <button data-go="profile" class="${active==="profile"?"on":""}">${iconNav.you}You</button>
     </nav>`;
 
@@ -1011,6 +1028,7 @@
     if (view === "home") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
     if (view === "word" || view === "library") return "word";
+    if (view === "journal") return "journal";
     if (view === "profile" || view === "sound") return "profile";
     return null;
   };
@@ -1115,6 +1133,23 @@
   const markSvg = () => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12 L8 3 L14 12" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
   const isoOf = (d) => new Date(d).toISOString().slice(0, 10);
+
+  const clipText = (s, n) => {
+    const t = String(s || "").replace(/\s+/g, " ").trim();
+    if (t.length <= n) return t;
+    return t.slice(0, n).replace(/\s+\S*$/, "").trim() + "…";
+  };
+
+  const prettyIso = (iso) => {
+    const [y, m, d] = String(iso).split("-").map(Number);
+    const dt = new Date(y, (m || 1) - 1, d || 1);
+    const sameYear = dt.getFullYear() === new Date().getFullYear();
+    return DOW_FULL[dt.getDay()] + " · " + dt.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: sameYear ? undefined : "numeric"
+    });
+  };
 
   const morningDone = (iso) => {
     const m = L().morningOf(iso);
@@ -1226,6 +1261,14 @@
           ${planTasks.map((tk) => `<div class="plan-task ${tk.done ? "done" : ""}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</div>`).join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
         </div>` : "";
+    const diaryText = String(jn.diary || "").trim();
+    const diaryNow = `
+        <div class="plan-now">
+          <div class="section-h"><h4>Journal</h4><button class="linkish" data-act="journal-open" data-iso="${t.iso}">${diaryText ? "Open" : "Write"}</button></div>
+          <p class="plan-note-preview">${diaryText
+            ? escapeHtml(clipText(diaryText, 160))
+            : (evening ? "How did today go? This page is yours — not the devotion." : "Write how the day is going. Separate from the devotion on Word.")}</p>
+        </div>`;
 
     const subFor = (s) => {
       if (s.id === "move") return moveDone ? "Session logged" : `${day.name} · ${day.minutes} min`;
@@ -1314,6 +1357,7 @@
         })()}
         ${wordToday}
         ${planNow}
+        ${diaryNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
           <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
@@ -1747,6 +1791,11 @@
             <div class="grow"><h4>Play through the morning</h4><p>Stations in the app, or your own audio. Cues when a step lands.</p></div>
           </button>
 
+          <div class="set-label">Journal</div>
+          <button class="setting" data-go="journal">
+            <div class="grow"><h4>How the day went</h4><p>A page for the day itself. Not the devotion takeaway.</p></div>
+          </button>
+
           <div class="set-label">Intelligence</div>
           ${(() => {
             const srv = AI().server ? AI().server() : { ready: false, checked: false };
@@ -2115,6 +2164,96 @@
               return `<button ${d.flash ? "disabled" : ""} class="${cls}" data-act="drill-ans" data-i="${i}">${escapeHtml(opt)}</button>`;
             }).join("")}
           </div>
+        </div>
+      </div>
+    `;
+  };
+
+
+  const viewJournal = () => {
+    const t = today();
+    const all = (L().journalsAll && L().journalsAll()) || {};
+    const todayJ = L().journalOf(t.iso);
+    const todayText = String(todayJ.diary || "").trim();
+    const weekStart = startOfWeek(t.date);
+    const weekDots = [0,1,2,3,4,5,6].map((i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const iso = isoOf(d);
+      const isToday = iso === t.iso;
+      const has = String((all[iso] && all[iso].diary) || "").trim();
+      const future = iso > t.iso;
+      return `<button type="button" class="wd${isToday?" today":""}${has?" done":""}" data-act="journal-open" data-iso="${iso}" ${future ? "disabled" : ""} aria-label="${DOW_FULL[i]}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></button>`;
+    }).join("");
+    const past = Object.keys(all)
+      .filter((iso) => iso !== t.iso && String((all[iso] && all[iso].diary) || "").trim())
+      .sort()
+      .reverse()
+      .slice(0, 60);
+    const weekN = [0,1,2,3,4,5,6].reduce((n, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return n + (String((all[isoOf(d)] && all[isoOf(d)].diary) || "").trim() ? 1 : 0);
+    }, 0);
+    return `
+      <div class="screen home journal">
+        <div class="topbar"><div class="greet">Journal<h2>The day, in your words.</h2></div></div>
+        <p class="plan-kicker">Not the devotion. This is how the day went — what happened, what you’re carrying, what you don’t want to lose.</p>
+        <div class="home-week">
+          <div class="week-strip">${weekDots}</div>
+          <div class="pulse">
+            <div class="pulse-top">
+              <div class="pulse-num">${weekN}</div>
+              <div>
+                <h4>This week</h4>
+                <p>${weekN ? weekN + " day" + (weekN === 1 ? "" : "s") + " written." : "Open a page. The week is still empty."}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="journal-hero" data-act="journal-open" data-iso="${t.iso}">
+          <div class="tag">${DOW_FULL[t.dow]}</div>
+          <h3>${todayText ? "Today’s page." : "How did today go?"}</h3>
+          <p>${todayText ? escapeHtml(clipText(todayText, 180)) : "Write while it’s still yours. Saved on this device" + (state.session ? " and your account" : "") + "."}</p>
+          <span class="journal-cta">${todayText ? "Keep writing" : "Open the page"}</span>
+        </button>
+        <div class="section-h" style="padding:0 16px"><h4>Earlier</h4><span>${past.length || ""}</span></div>
+        ${past.length ? `<div class="journal-list">${past.map((iso) => `
+          <button class="journal-row" data-act="journal-open" data-iso="${iso}">
+            <div>
+              <h4>${escapeHtml(prettyIso(iso))}</h4>
+              <p>${escapeHtml(clipText(all[iso].diary, 110))}</p>
+            </div>
+            <span aria-hidden="true">›</span>
+          </button>`).join("")}</div>` : `<p class="hint journal-empty">Pages you finish will live here. Oldest days stay with the account.</p>`}
+      </div>
+    `;
+  };
+
+  const viewJournalWrite = () => {
+    const iso = state.journalIso || today().iso;
+    const j = L().journalOf(iso);
+    const isToday = iso === today().iso;
+    const words = String(j.diary || "").trim() ? String(j.diary).trim().split(/\s+/).length : 0;
+    return `
+      <div class="screen full has-cta journal-write">
+        <div class="back-row"><button class="icon-btn" data-act="journal-done">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">${isToday ? "Today" : prettyIso(iso)}</div>
+          <h1>How the day went.</h1>
+          <p>Not the devotion. Write the day. You can see every line as you type.</p>
+        </div>
+        <div class="scroll-body journal-body">
+          <div class="journal-prompts">
+            <button type="button" data-act="journal-prompt" data-prompt="How it went">How it went</button>
+            <button type="button" data-act="journal-prompt" data-prompt="What I’m carrying">What I’m carrying</button>
+            <button type="button" data-act="journal-prompt" data-prompt="One true thing">One true thing</button>
+          </div>
+          <textarea class="diary-box" id="diary-note" placeholder="What happened. What it felt like. What you don’t want to forget.">${escapeHtml(j.diary || "")}</textarea>
+          <p class="journal-meta">${words ? words + " word" + (words === 1 ? "" : "s") : "The page is empty."}${state.session ? " · Saves to your account." : " · Saves on this device."}</p>
+        </div>
+        <div class="sticky-cta">
+          <button class="btn" data-act="journal-done">${String(j.diary || "").trim() ? "Done" : "Close"}</button>
         </div>
       </div>
     `;
@@ -2602,7 +2741,9 @@
       reader: viewReader,
       verse: viewVerse,
       drill: viewDrill,
-      sound: viewSound
+      sound: viewSound,
+      journal: viewJournal,
+      journalwrite: viewJournalWrite
     };
     const tab = tabFor(state.view);
     app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
@@ -2671,6 +2812,19 @@
       p.note = e.target.value;
       L().savePlan(iso, p);
       AlignDB.saveDayPlan(iso, p);
+    });
+    const diary = $("#diary-note");
+    if (diary) diary.addEventListener("input", e => {
+      const iso = state.journalIso || today().iso;
+      const j = L().journalOf(iso);
+      j.diary = e.target.value;
+      L().saveJournal(iso, j);
+      AlignDB.saveJournal(iso, j);
+      const meta = document.querySelector(".journal-meta");
+      if (meta) {
+        const words = String(e.target.value || "").trim() ? String(e.target.value).trim().split(/\s+/).length : 0;
+        meta.textContent = (words ? words + " word" + (words === 1 ? "" : "s") : "The page is empty.") + (state.session ? " · Saves to your account." : " · Saves on this device.");
+      }
     });
     [0,1,2].forEach((i) => {
       const el = document.getElementById("prio-" + i);
@@ -3261,6 +3415,32 @@
       toast("Amen.");
       state.view = "home";
       render();
+    } else if (act === "journal-open") {
+      const iso = el.dataset.iso || today().iso;
+      if (iso > today().iso) return;
+      state.journalIso = iso;
+      state.view = "journalwrite";
+      render();
+    } else if (act === "journal-done") {
+      const iso = state.journalIso || today().iso;
+      const j = L().journalOf(iso);
+      const box = document.getElementById("diary-note");
+      if (box) j.diary = box.value;
+      L().saveJournal(iso, j);
+      AlignDB.saveJournal(iso, j).catch(() => {});
+      if (String(j.diary || "").trim()) toast("Journal saved");
+      state.view = "journal";
+      render();
+    } else if (act === "journal-prompt") {
+      const box = document.getElementById("diary-note");
+      if (!box) return;
+      const heading = String(el.dataset.prompt || "").trim();
+      if (!heading) return;
+      const cur = box.value;
+      box.value = cur && String(cur).trim() ? (String(cur).replace(/\s*$/, "") + "\n\n" + heading + "\n") : (heading + "\n");
+      box.dispatchEvent(new Event("input"));
+      box.focus();
+      try { box.setSelectionRange(box.value.length, box.value.length); } catch { /* ignore */ }
     } else if (act === "save-devotion") {
       const iso = today().iso;
       const j = L().journalOf(iso);

@@ -206,9 +206,12 @@ window.ALIGN_LIFE = (() => {
     return all[iso];
   };
 
+  const emptyJournal = () => ({ prayer: "", devotion: "", word: "", praySeconds: 0, diary: "" });
+
   const journalOf = (iso) => {
     const all = loadJSON(LS_J, {});
-    if (!all[iso]) all[iso] = { prayer: "", devotion: "", word: "", praySeconds: 0 };
+    if (!all[iso]) all[iso] = emptyJournal();
+    if (all[iso].diary == null) all[iso].diary = "";
     return all[iso];
   };
   const saveJournal = (iso, j) => {
@@ -217,6 +220,7 @@ window.ALIGN_LIFE = (() => {
     saveJSON(LS_J, all);
     return all[iso];
   };
+  const journalsAll = () => loadJSON(LS_J, {});
 
   const mergeByTime = (localMap, rows, pick) => {
     (rows || []).forEach((r) => {
@@ -301,6 +305,6 @@ window.ALIGN_LIFE = (() => {
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
-    planOf, savePlan, journalOf, saveJournal, verseOfDay
+    planOf, savePlan, journalOf, saveJournal, journalsAll, verseOfDay
   };
 })();
