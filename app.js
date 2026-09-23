@@ -456,7 +456,7 @@
           ${state.ai.provider ? `<div class="ai-via">${escapeHtml((state.ai.provider === "groq" ? "Groq" : "Gemini") + " · " + state.ai.model)}</div>` : ""}
           <div class="ai-row">
             <textarea id="ai-input" rows="2" placeholder="Ask about this morning…">${escapeHtml(state.ai.input || "")}</textarea>
-            <button class="btn" style="width:72px;height:44px" data-act="ai-send">${state.ai.busy ? "…" : "Go"}</button>
+            <button class="btn" style="width:72px;height:44px" data-act="ai-send" ${state.ai.busy ? "disabled" : ""}>${state.ai.busy ? "…" : "Go"}</button>
           </div>
         </div>
       </div>` : ""}
@@ -566,14 +566,24 @@
     return lines.join("\n");
   };
 
+  const focusAi = () => {
+    const box = document.getElementById("ai-input");
+    if (box) {
+      box.focus();
+      const n = box.value.length;
+      try { box.setSelectionRange(n, n); } catch { /* ignore */ }
+    }
+  };
+
   const runAi = async (prompt) => {
     const q = String(prompt || "").trim();
-    if (!q) return;
-    state.ai.input = q;
+    if (!q || state.ai.busy) return;
+    state.ai.input = "";
     state.ai.busy = true;
     state.ai.error = "";
     state.ai.open = true;
     render();
+    focusAi();
     try {
       const res = await AI().ask({ prompt: q, context: aiContext() });
       state.ai.reply = res.text;
@@ -587,6 +597,7 @@
     }
     state.ai.busy = false;
     render();
+    focusAi();
   };
 
   const paintPdf = async () => {
@@ -3415,8 +3426,8 @@
       render();
     } else if (act === "ai-send") {
       const elIn = document.getElementById("ai-input");
-      if (elIn) state.ai.input = elIn.value;
-      runAi(state.ai.input);
+      const text = elIn ? elIn.value : state.ai.input;
+      runAi(text);
     } else if (act === "ai-chip") {
       const chip = aiChips()[Number(el.dataset.i)];
       if (chip) runAi(chip[1]);
