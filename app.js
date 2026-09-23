@@ -343,16 +343,10 @@
         } catch { /* keep local SRS */ }
       }
     }
-    try { await AlignDB.flush(); } catch { /* retry on next online */ }
     try {
-      const iso = today().iso;
-      AlignDB.saveMorning(iso, L().morningOf(iso));
-      AlignDB.saveDayPlan(iso, L().planOf(iso));
-      AlignDB.saveJournal(iso, L().journalOf(iso));
-      AlignDB.saveBible(L().bibleCursor());
-      if (window.ALIGN_SCRIPTURE) AlignDB.saveScripture(ALIGN_SCRIPTURE.load());
-      AlignDB.flush();
-    } catch { /* keep going */ }
+      if (AlignDB.seedLocal) AlignDB.seedLocal();
+      await AlignDB.flush();
+    } catch { /* retry on next online */ }
     try {
       const remoteBooks = await AlignDB.fetchBooks();
       if (remoteBooks.ok && remoteBooks.data && remoteBooks.data.length) {
@@ -368,6 +362,33 @@
         ALIGN_SOUND.mergeRemote(remoteSounds.data);
       }
     } catch { /* sounds schema may not be applied yet */ }
+  };
+
+  const cloudCopy = (st, signed) => {
+    if (!signed) return "";
+    st = st || {};
+    if (st.syncing) return "Cloud · saving…";
+    if (st.pending) return "Cloud · saving " + st.pending + "…";
+    if (st.error && /sign in/i.test(st.error)) return "Cloud · sign in to sync";
+    if (st.error) return "Cloud · " + st.error + " · retrying";
+    if (st.lastOk) {
+      const s = Math.round((Date.now() - st.lastOk) / 1000);
+      if (s < 45) return "Cloud · up to date";
+      if (s < 3600) return "Cloud · saved " + Math.max(1, Math.round(s / 60)) + "m ago";
+      return "Cloud · saved";
+    }
+    return "Cloud · on";
+  };
+
+  const paintCloud = () => {
+    const el = document.querySelector("p.cloud");
+    if (!el || !window.AlignDB || !AlignDB.status) return;
+    const st = AlignDB.status();
+    const line = cloudCopy(st, !!state.session);
+    if (!line) return;
+    el.textContent = line;
+    el.classList.toggle("on", !st.error);
+    el.classList.toggle("err", !!st.error);
   };
 
   let toastTimer = null;
@@ -1638,15 +1659,9 @@
               <h3>${escapeHtml(state.profile.name || "ALIGN")}</h3>
               <p>${signed ? escapeHtml(email) : "On this device · create an account to sync"}</p>
               ${(() => {
-                const st = (window.AlignDB && AlignDB.status) ? AlignDB.status() : { pending: 0, error: "" };
-                const line = !signed
-                  ? ""
-                  : st.pending
-                    ? "Cloud · " + st.pending + " waiting to save"
-                    : st.error
-                      ? "Cloud · " + st.error
-                      : "Cloud · writing to your account";
-                return line ? `<p class="cloud ${st.error ? "" : "on"}">${escapeHtml(line)}</p>` : "";
+                const st = (window.AlignDB && AlignDB.status) ? AlignDB.status() : { pending: 0, error: "", lastOk: 0, syncing: false };
+                const line = cloudCopy(st, signed);
+                return line ? `<p class="cloud ${st.error ? "err" : "on"}">${escapeHtml(line)}</p>` : "";
               })()}
             </div>
           </div>
@@ -1656,7 +1671,7 @@
             <input id="prof-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
           </div>
           <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
-          ${signed ? `<button class="btn" style="height:44px;margin-top:8px" data-act="sync-now">Save to cloud now</button>` : ""}
+          ${signed ? `<button class="btn ghost" style="height:44px;margin-top:8px" data-act="sync-now">Sync now</button>` : ""}
 
           <div class="set-label">Morning hours</div>
           <div class="sched-card">
@@ -3513,6 +3528,7 @@
             try { render(); } catch { /* keep UI */ }
           });
         });
+        if (AlignDB.onStatus) AlignDB.onStatus(() => paintCloud());
         const s = await timed(AlignDB.session(), 2500);
         if (s && s.ok && s.data) await timed(applySession(s.data), 4000);
       }

@@ -105,7 +105,7 @@ Confirm after Run:
 ## 5. Use the app
 
 1. Open the Vercel URL on your phone.
-2. **You → Create account** (or sign in). Confirm-email can be off in Auth → Providers → Email so you get a session immediately. The app only writes to Supabase while you are signed in. Use **You → Save to cloud now**, then check Table Editor as the project owner.
+2. **You → Create account** (or sign in). Confirm-email can be off in Auth → Providers → Email so you get a session immediately. While signed in, ALIGN saves to Supabase on its own (and retries if you were offline). Check Table Editor as the project owner.
 3. **You → Wake nudge** if you want the 4am / 5am call (needs notifications allowed).
 4. **AI keys on Vercel** (not on the phone). In the Vercel project: **Settings → Environment Variables**. Add:
    - `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey)

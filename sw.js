@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v32";
+const CACHE = "align-v33";
 const ASSETS = [
   "./",
   "./index.html",
@@ -72,6 +72,15 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => cached || caches.match("./index.html"));
       return cached || fetched;
+    })
+  );
+});
+
+self.addEventListener("sync", (event) => {
+  if (event.tag !== "align-sync") return;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      clients.forEach((c) => c.postMessage({ type: "align-sync" }));
     })
   );
 });

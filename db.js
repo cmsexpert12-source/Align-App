@@ -23,6 +23,17 @@ window.AlignDB = (() => {
 
   let _client = null;
   let _cfgStamp = "";
+  let cachedToken = "";
+  let cachedUid = "";
+  let cachedAt = 0;
+  let lastErr = "";
+  let lastOkAt = 0;
+  let flushing = false;
+  let dirty = false;
+  let flushTimer = null;
+  let retryTimer = null;
+  let backoffMs = 2000;
+  const statusListeners = [];
 
   const client = () => {
     if (!configured()) return null;
@@ -34,6 +45,24 @@ window.AlignDB = (() => {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
       _cfgStamp = stamp;
+      try {
+        _client.auth.onAuthStateChange((event, sess) => {
+          if (sess && sess.access_token && sess.user) {
+            cachedToken = sess.access_token;
+            cachedUid = sess.user.id;
+            cachedAt = Date.now();
+            if (lastErr === "Sign in to save to the cloud") lastErr = "";
+            if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+              scheduleFlush(400);
+            }
+          } else if (event === "SIGNED_OUT") {
+            cachedToken = "";
+            cachedUid = "";
+            cachedAt = 0;
+          }
+          emitStatus();
+        });
+      } catch { /* auth listener optional */ }
     }
     return _client;
   };
@@ -108,10 +137,10 @@ window.AlignDB = (() => {
   const upsertProfile = async (displayName) => {
     const sb = client();
     if (!sb) return fail("Not connected");
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return fail("Not signed in");
+    const userId = await uidOf();
+    if (!userId) return fail("Not signed in");
     const { error } = await sb.from("profiles").upsert({
-      id: u.user.id,
+      id: userId,
       display_name: displayName || "",
       updated_at: new Date().toISOString()
     });
@@ -122,25 +151,25 @@ window.AlignDB = (() => {
   const fetchProfile = async () => {
     const sb = client();
     if (!sb) return ok(null);
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return ok(null);
-    const { data, error } = await sb.from("profiles").select("*").eq("id", u.user.id).maybeSingle();
+    const userId = await uidOf();
+    if (!userId) return ok(null);
+    const { data, error } = await sb.from("profiles").select("*").eq("id", userId).maybeSingle();
     if (error) return fail(error);
     return ok(data);
   };
 
   const saveWorkout = async (row, opts) =>
-    queueAndFlush("workout", (row.date || "") + "|" + (row.dayId || ""), row, opts && opts.now);
+    queueAndFlush("workout", (row.date || "") + "|" + (row.dayId || ""), row, opts || { delay: 0 });
 
   const fetchWorkouts = async () => {
     const sb = client();
     if (!sb) return ok([]);
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return ok([]);
+    const userId = await uidOf();
+    if (!userId) return ok([]);
     const { data, error } = await sb
       .from("workouts")
       .select("date, day_id, minutes, completed, total, log, created_at")
-      .eq("user_id", u.user.id)
+      .eq("user_id", userId)
       .order("date", { ascending: true });
     if (error) return fail(error);
     const mapped = (data || []).map((r) => ({
@@ -157,11 +186,11 @@ window.AlignDB = (() => {
   const savePushSub = async (sub) => {
     const sb = client();
     if (!sb) return fail("Not connected");
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return fail("Not signed in");
+    const userId = await uidOf();
+    if (!userId) return fail("Not signed in");
     const json = sub.toJSON();
     const { error } = await sb.from("push_subscriptions").upsert({
-      user_id: u.user.id,
+      user_id: userId,
       endpoint: json.endpoint,
       p256dh: json.keys.p256dh,
       auth: json.keys.auth,
@@ -183,10 +212,10 @@ window.AlignDB = (() => {
     localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
     const sb = client();
     if (!sb) return ok(prefs);
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return ok(prefs);
+    const userId = await uidOf();
+    if (!userId) return ok(prefs);
     const { error } = await sb.from("notification_prefs").upsert({
-      user_id: u.user.id,
+      user_id: userId,
       enabled: !!prefs.enabled,
       reminder_hour: Number(prefs.hour) || 7,
       reminder_minute: Number(prefs.minute) || 0,
@@ -202,9 +231,9 @@ window.AlignDB = (() => {
     })() || { enabled: false, hour: 5, minute: 0 };
     const sb = client();
     if (!sb) return ok(local);
-    const { data: u } = await sb.auth.getUser();
-    if (!u || !u.user) return ok(local);
-    const { data, error } = await sb.from("notification_prefs").select("*").eq("user_id", u.user.id).maybeSingle();
+    const userId = await uidOf();
+    if (!userId) return ok(local);
+    const { data, error } = await sb.from("notification_prefs").select("*").eq("user_id", userId).maybeSingle();
     if (error) return fail(error);
     if (!data) return ok(local);
     const prefs = { enabled: data.enabled, hour: data.reminder_hour, minute: data.reminder_minute };
@@ -212,85 +241,189 @@ window.AlignDB = (() => {
     return ok(prefs);
   };
 
-  const uidOf = async () => {
-    const sb = client();
-    if (!sb) return null;
+  const LS_OUT = "align-outbox";
+  const LS_OK = "align-sync-ok";
+  try { lastOkAt = Number(localStorage.getItem(LS_OK) || 0) || 0; } catch { /* ignore */ }
+
+  const readJSON = (k, fb) => {
+    try { return JSON.parse(localStorage.getItem(k) || "null") || fb; } catch { return fb; }
+  };
+
+  const sessionFromStorage = () => {
     try {
-      const { data } = await sb.auth.getSession();
-      const id = data && data.session && data.session.user && data.session.user.id;
-      if (id) return id;
-    } catch { /* fall through */ }
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf("sb-") !== 0 || k.indexOf("auth-token") === -1) continue;
+        const raw = JSON.parse(localStorage.getItem(k) || "null");
+        if (!raw) continue;
+        const sess = raw.currentSession || raw.session || raw;
+        if (sess && sess.access_token && sess.user && sess.user.id) return sess;
+      }
+    } catch { /* ignore */ }
     return null;
   };
 
-  const LS_OUT = "align-outbox";
+  const status = () => ({
+    pending: pendingCount(),
+    error: lastErr,
+    lastOk: lastOkAt,
+    signed: !!(cachedUid || (sessionFromStorage() && sessionFromStorage().user)),
+    syncing: flushing
+  });
+
+  const emitStatus = () => {
+    const st = status();
+    statusListeners.forEach((fn) => { try { fn(st); } catch { /* ignore */ } });
+  };
+
+  const onStatus = (fn) => {
+    if (typeof fn === "function") statusListeners.push(fn);
+    return () => {
+      const i = statusListeners.indexOf(fn);
+      if (i >= 0) statusListeners.splice(i, 1);
+    };
+  };
+
+  const setErr = (msg) => { lastErr = msg || ""; emitStatus(); };
+  const setOk = () => {
+    lastErr = "";
+    lastOkAt = Date.now();
+    try { localStorage.setItem(LS_OK, String(lastOkAt)); } catch { /* ignore */ }
+    emitStatus();
+  };
+
+  const withTimeout = (promise, ms, label) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label || "timeout")), ms);
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+
+  const refreshAuth = async (force) => {
+    if (!force && cachedToken && cachedUid && (Date.now() - cachedAt) < 25000) {
+      return { token: cachedToken, uid: cachedUid };
+    }
+    const stored = sessionFromStorage();
+    if (stored && stored.access_token && stored.user) {
+      const exp = Number(stored.expires_at || 0) * 1000;
+      if (!exp || exp > Date.now() + 20000) {
+        cachedToken = stored.access_token;
+        cachedUid = stored.user.id;
+        cachedAt = Date.now();
+        if (!force) return { token: cachedToken, uid: cachedUid };
+      }
+    }
+    const sb = client();
+    if (sb) {
+      try {
+        const { data } = await withTimeout(sb.auth.getSession(), 8000, "session timeout");
+        const sess = data && data.session;
+        if (sess && sess.access_token && sess.user) {
+          cachedToken = sess.access_token;
+          cachedUid = sess.user.id;
+          cachedAt = Date.now();
+        }
+      } catch { /* keep cache */ }
+    }
+    return { token: cachedToken, uid: cachedUid };
+  };
+
+  const uidOf = async () => (await refreshAuth(false)).uid || null;
+  const authToken = async () => (await refreshAuth(false)).token || "";
+
   const readOut = () => {
     try { return JSON.parse(localStorage.getItem(LS_OUT) || "[]") || []; } catch { return []; }
   };
   const writeOut = (arr) => {
-    try { localStorage.setItem(LS_OUT, JSON.stringify((arr || []).slice(-80))); } catch { /* quota */ }
+    try { localStorage.setItem(LS_OUT, JSON.stringify((arr || []).slice(-100))); } catch { /* quota */ }
   };
-  const missingTable = (err) => /does not exist|schema cache|Could not find the table/i.test((err && err.message) || String(err || ""));
+  const pendingCount = () => readOut().length;
+  const missingTable = (err) =>
+    /does not exist|schema cache|Could not find the table/i.test((err && err.message) || String(err || ""));
+
+  const requestBgSync = () => {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then((reg) => {
+          if (reg.sync) reg.sync.register("align-sync").catch(() => {});
+        }).catch(() => {});
+      }
+    } catch { /* unsupported */ }
+  };
+
   const enqueue = (kind, key, payload) => {
     const q = readOut().filter((x) => !(x.kind === kind && x.key === key));
     q.push({ kind, key, payload, t: Date.now() });
     writeOut(q);
   };
-  const pendingCount = () => readOut().length;
 
-  let flushing = false;
-  let flushTimer = null;
-  let lastErr = "";
-  let lastOkAt = 0;
-  const scheduleFlush = (ms = 400) => {
+  const scheduleFlush = (ms) => {
     clearTimeout(flushTimer);
-    flushTimer = setTimeout(() => { flush(); }, ms);
+    flushTimer = setTimeout(() => { flush(); }, Math.max(0, ms == null ? 280 : ms));
   };
 
-  const authToken = async () => {
-    const sb = client();
-    if (!sb) return "";
-    try {
-      const { data } = await sb.auth.getSession();
-      return (data && data.session && data.session.access_token) || "";
-    } catch {
-      return "";
-    }
+  const scheduleRetry = (ms) => {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => { flush(); }, Math.max(800, ms || 2000));
   };
+
+  const retryable = (msg) =>
+    /network|failed to fetch|timeout|offline|HTTP 429|HTTP 5|Load failed|abort|Failed to fetch|TypeError/i.test(String(msg || ""));
 
   const restUpsert = async (table, row, conflict) => {
     const c = readCfg();
     if (!c.url || !c.anonKey) return { message: "Supabase is not configured" };
-    const token = await authToken();
-    if (!token) return { message: "Sign in to save to the cloud" };
+    const auth = await refreshAuth(false);
+    if (!auth.token) return { message: "Sign in to save to the cloud" };
     const base = String(c.url).replace(/\/$/, "");
     const qs = conflict ? ("?on_conflict=" + encodeURIComponent(conflict)) : "";
-    let r;
-    try {
-      r = await fetch(base + "/rest/v1/" + table + qs, {
-        method: "POST",
-        headers: {
-          apikey: c.anonKey,
-          Authorization: "Bearer " + token,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal"
-        },
-        body: JSON.stringify(row)
-      });
-    } catch (e) {
-      return { message: (e && e.message) || "Network failed" };
+    const once = async (tok) => {
+      const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch { /* ignore */ } }, 12000);
+      try {
+        const r = await fetch(base + "/rest/v1/" + table + qs, {
+          method: "POST",
+          headers: {
+            apikey: c.anonKey,
+            Authorization: "Bearer " + tok,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal"
+          },
+          body: JSON.stringify(row),
+          signal: ctrl ? ctrl.signal : undefined
+        });
+        clearTimeout(timer);
+        return r;
+      } catch (e) {
+        clearTimeout(timer);
+        const aborted = e && (e.name === "AbortError" || /abort/i.test(e.message || ""));
+        return { _err: { message: aborted ? "timeout" : ((e && e.message) || "Network failed") } };
+      }
+    };
+    let r = await once(auth.token);
+    if (r && r._err) return r._err;
+    if (r && r.status === 401) {
+      const fresh = await refreshAuth(true);
+      if (fresh.token && fresh.token !== auth.token) {
+        r = await once(fresh.token);
+        if (r && r._err) return r._err;
+      }
     }
+    if (!r || r._err) return (r && r._err) || { message: "Network failed" };
     if (r.status === 200 || r.status === 201 || r.status === 204) return null;
     let msg = "HTTP " + r.status;
     try {
       const j = await r.json();
       msg = (j && (j.message || j.error_description || j.error || j.hint)) || msg;
+      if (r.status >= 400 && r.status !== 401) msg = msg;
     } catch { /* keep msg */ }
+    if (r.status === 401) return { message: "Sign in to save to the cloud" };
     return { message: String(msg) };
   };
 
   const pushRow = async (item) => {
-    const userId = await uidOf();
+    const userId = (await refreshAuth(false)).uid;
     if (!userId) return { keep: true, error: "Sign in to save to the cloud" };
     const now = new Date().toISOString();
     const p = item.payload || {};
@@ -332,16 +465,20 @@ window.AlignDB = (() => {
       if (err && /on conflict|unique|constraint|no unique/i.test(err.message || "")) {
         const sb = client();
         if (sb) {
-          const ins = await sb.from("workouts").insert({
-            user_id: userId,
-            date: p.date,
-            day_id: p.dayId,
-            minutes: p.minutes,
-            completed: p.completed,
-            total: p.total,
-            log: p.log || []
-          });
-          err = ins.error ? { message: ins.error.message } : null;
+          try {
+            const ins = await sb.from("workouts").insert({
+              user_id: userId,
+              date: p.date,
+              day_id: p.dayId,
+              minutes: p.minutes,
+              completed: p.completed,
+              total: p.total,
+              log: p.log || []
+            });
+            err = ins.error ? { message: ins.error.message } : null;
+          } catch (e) {
+            err = { message: (e && e.message) || "Workout insert failed" };
+          }
         }
       }
     } else {
@@ -352,51 +489,104 @@ window.AlignDB = (() => {
   };
 
   const flush = async () => {
-    if (flushing) return ok(true);
+    if (flushing) { dirty = true; return ok(true); }
     const q = readOut();
     if (!q.length) return ok(true);
     if (!window.supabase || !window.supabase.createClient) {
-      lastErr = "Database library did not load";
+      setErr("Database library did not load");
+      scheduleRetry(backoffMs);
       return fail(lastErr);
     }
     if (!configured()) {
-      lastErr = "Supabase is not configured";
+      setErr("Supabase is not configured");
       return fail(lastErr);
     }
-    const token = await authToken();
-    if (!token) {
-      lastErr = "Sign in to save to the cloud";
+    client();
+    const auth = await refreshAuth(false);
+    if (!auth.token || !auth.uid) {
+      setErr("Sign in to save to the cloud");
       return fail(lastErr);
     }
     flushing = true;
+    dirty = false;
+    emitStatus();
     const left = [];
     let err = null;
-    for (const item of q) {
-      try {
-        const res = await pushRow(item);
+    for (let i = 0; i < q.length; i += 4) {
+      const chunk = q.slice(i, i + 4);
+      const results = await Promise.all(chunk.map(async (item) => {
+        try {
+          return { item, res: await pushRow(item) };
+        } catch (e) {
+          return { item, res: { keep: true, error: e && e.message ? e.message : String(e) } };
+        }
+      }));
+      results.forEach(({ item, res }) => {
         if (res.keep) {
           left.push(item);
           if (res.error) err = res.error;
         }
-      } catch (e) {
-        left.push(item);
-        err = e && e.message ? e.message : String(e);
-      }
+      });
     }
     writeOut(left);
     flushing = false;
+    if (dirty) scheduleFlush(60);
     if (left.length) {
-      lastErr = err || "Waiting to sync";
+      setErr(err || "Waiting to sync");
+      if (err !== "Sign in to save to the cloud") {
+        scheduleRetry(backoffMs);
+        backoffMs = Math.min(Math.round(backoffMs * 1.8), 60000);
+      }
       return fail(lastErr);
     }
-    lastErr = "";
-    lastOkAt = Date.now();
+    backoffMs = 2000;
+    setOk();
     return ok(true);
   };
 
-  const queueAndFlush = (kind, key, payload) => {
+  const queueAndFlush = (kind, key, payload, opts) => {
     enqueue(kind, key, payload);
-    return flush();
+    requestBgSync();
+    emitStatus();
+    const o = opts === true ? { now: true } : (opts || {});
+    if (o.now) return flush();
+    scheduleFlush(o.delay != null ? o.delay : 280);
+    return Promise.resolve(ok(true));
+  };
+
+  const isoDays = (n) => {
+    const out = [];
+    const now = new Date();
+    for (let i = 0; i < n; i++) {
+      const x = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const m = String(x.getMonth() + 1).padStart(2, "0");
+      const d = String(x.getDate()).padStart(2, "0");
+      out.push(x.getFullYear() + "-" + m + "-" + d);
+    }
+    return out;
+  };
+
+  const seedLocal = () => {
+    const days = isoDays(16);
+    const mornings = readJSON("align-morning", {});
+    const plans = readJSON("align-plans", {});
+    const journals = readJSON("align-journal", {});
+    days.forEach((iso) => {
+      if (mornings[iso]) enqueue("morning", iso, { iso, steps: mornings[iso] });
+      if (plans[iso]) enqueue("plan", iso, { iso, plan: plans[iso] });
+      if (journals[iso]) enqueue("journal", iso, { iso, payload: journals[iso] });
+    });
+    const bible = readJSON("align-bible", null);
+    if (bible) enqueue("bible", "bible", bible);
+    const scripture = readJSON("align-scripture", null);
+    if (scripture) enqueue("scripture", "scripture", scripture);
+    try {
+      const v1 = readJSON("align-v1", null);
+      const hist = (v1 && v1.history) || [];
+      hist.slice(-24).forEach((row) => {
+        if (row && row.date) enqueue("workout", (row.date || "") + "|" + (row.dayId || ""), row);
+      });
+    } catch { /* ignore */ }
   };
 
   const syncNow = async (bundle) => {
@@ -406,31 +596,27 @@ window.AlignDB = (() => {
       if (bundle.journal) enqueue("journal", bundle.iso, { iso: bundle.iso, payload: bundle.journal });
       if (bundle.bible) enqueue("bible", "bible", bundle.bible);
       if (bundle.scripture) enqueue("scripture", "scripture", bundle.scripture);
+    } else {
+      seedLocal();
     }
+    requestBgSync();
     return flush();
   };
 
   const saveMorning = async (iso, steps, opts) =>
-    queueAndFlush("morning", iso, { iso, steps }, opts && opts.now);
+    queueAndFlush("morning", iso, { iso, steps }, opts || { delay: 0 });
 
   const saveDayPlan = async (iso, plan, opts) =>
-    queueAndFlush("plan", iso, { iso, plan }, opts && opts.now);
+    queueAndFlush("plan", iso, { iso, plan }, opts || { delay: 450 });
 
   const saveJournal = async (iso, payload, opts) =>
-    queueAndFlush("journal", iso, { iso, payload }, opts && opts.now);
+    queueAndFlush("journal", iso, { iso, payload }, opts || { delay: 450 });
 
   const saveBible = async (cursor, opts) =>
-    queueAndFlush("bible", "bible", cursor || {}, opts && opts.now);
+    queueAndFlush("bible", "bible", cursor || {}, opts || { delay: 0 });
 
   const saveScripture = async (payload, opts) =>
-    queueAndFlush("scripture", "scripture", payload || {}, opts && opts.now);
-
-  const status = () => ({
-    pending: pendingCount(),
-    error: lastErr,
-    lastOk: lastOkAt,
-    signed: false
-  });
+    queueAndFlush("scripture", "scripture", payload || {}, opts || { delay: 400 });
 
   const pullLife = async () => {
     const sb = client();
@@ -653,7 +839,7 @@ window.AlignDB = (() => {
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
-    flush, pendingCount, status, syncNow
+    flush, pendingCount, status, syncNow, onStatus, seedLocal
   };
 })();
 
