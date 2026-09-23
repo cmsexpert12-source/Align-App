@@ -33,6 +33,7 @@ window.AlignDB = (() => {
   let flushTimer = null;
   let retryTimer = null;
   let backoffMs = 2000;
+  let hydrated = false;
   const statusListeners = [];
 
   const client = () => {
@@ -52,7 +53,7 @@ window.AlignDB = (() => {
             cachedUid = sess.user.id;
             cachedAt = Date.now();
             if (lastErr === "Sign in to save to the cloud") lastErr = "";
-            if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+            if (hydrated && (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED")) {
               scheduleFlush(400);
             }
           } else if (event === "SIGNED_OUT") {
@@ -359,6 +360,28 @@ window.AlignDB = (() => {
   const retryable = (msg) =>
     /network|failed to fetch|timeout|offline|HTTP 429|HTTP 5|Load failed|abort|Failed to fetch|TypeError/i.test(String(msg || ""));
 
+  const restSelect = async (table, query) => {
+    const c = readCfg();
+    if (!c.url || !c.anonKey) return [];
+    const auth = await refreshAuth(false);
+    if (!auth.token) return [];
+    const base = String(c.url).replace(/\/$/, "");
+    try {
+      const r = await fetch(base + "/rest/v1/" + table + "?" + query, {
+        headers: {
+          apikey: c.anonKey,
+          Authorization: "Bearer " + auth.token,
+          Accept: "application/json"
+        }
+      });
+      if (!r.ok) return [];
+      const data = await r.json().catch(() => []);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  };
+
   const restUpsert = async (table, row, conflict) => {
     const c = readCfg();
     if (!c.url || !c.anonKey) return { message: "Supabase is not configured" };
@@ -467,8 +490,16 @@ window.AlignDB = (() => {
     const p = item.payload || {};
     let err = null;
     if (item.kind === "morning") {
+      let remoteSteps = {};
+      try {
+        const got = await restSelect("mornings", "select=steps&date=eq." + encodeURIComponent(p.iso));
+        remoteSteps = (got && got[0] && got[0].steps) || {};
+      } catch { remoteSteps = {}; }
+      const localSteps = p.steps || {};
+      const merged = Object.assign({}, remoteSteps, localSteps);
+      Object.keys(merged).forEach((k) => { merged[k] = !!(remoteSteps[k] || localSteps[k]); });
       err = await restUpsert("mornings", {
-        user_id: userId, date: p.iso, steps: p.steps || {}, updated_at: now
+        user_id: userId, date: p.iso, steps: merged, updated_at: now
       }, "user_id,date");
     } else if (item.kind === "plan") {
       err = await restUpsert("day_plans", {
@@ -496,11 +527,30 @@ window.AlignDB = (() => {
       err = await restDelete("notes", "id=eq." + encodeURIComponent(p.id) + "&user_id=eq." + userId);
       if (err && missingTable(err)) err = null;
     } else if (item.kind === "bible") {
+      let book = p.book || "Genesis";
+      let chapter = p.chapter || 1;
+      let log = Array.isArray(p.log) ? p.log.slice() : [];
+      try {
+        const got = await restSelect("bible_state", "select=book,chapter,log");
+        const remote = got && got[0];
+        if (remote) {
+          const rlog = Array.isArray(remote.log) ? remote.log : [];
+          const seen = new Set(log.map((x) => String((x && x.id) || "") + "|" + String((x && x.date) || "")));
+          rlog.forEach((x) => {
+            const k = String((x && x.id) || "") + "|" + String((x && x.date) || "");
+            if (!seen.has(k)) { log.push(x); seen.add(k); }
+          });
+          if (rlog.length > (p.log || []).length) {
+            book = remote.book || book;
+            chapter = remote.chapter || chapter;
+          }
+        }
+      } catch { /* keep local */ }
       err = await restUpsert("bible_state", {
         user_id: userId,
-        book: p.book || "Genesis",
-        chapter: p.chapter || 1,
-        log: p.log || [],
+        book,
+        chapter,
+        log,
         updated_at: now
       }, "user_id");
     } else if (item.kind === "scripture") {
@@ -576,6 +626,10 @@ window.AlignDB = (() => {
       setErr("Sign in to save to the cloud");
       return fail(lastErr);
     }
+    if (!hydrated) {
+      scheduleFlush(1200);
+      return ok(true);
+    }
     flushing = true;
     dirty = false;
     emitStatus();
@@ -641,7 +695,10 @@ window.AlignDB = (() => {
     const plans = readJSON("align-plans", {});
     const journals = readJSON("align-journal", {});
     days.forEach((iso) => {
-      if (mornings[iso]) enqueue("morning", iso, { iso, steps: mornings[iso] });
+      const st = mornings[iso];
+      if (st && typeof st === "object" && Object.keys(st).some((k) => k !== "updated_at" && st[k])) {
+        enqueue("morning", iso, { iso, steps: st });
+      }
       if (plans[iso]) enqueue("plan", iso, { iso, plan: plans[iso] });
     });
     Object.keys(journals || {}).forEach((iso) => {
@@ -680,6 +737,7 @@ window.AlignDB = (() => {
   };
 
   const syncNow = async (bundle) => {
+    hydrated = true;
     seedLocal();
     if (bundle && bundle.iso) {
       if (bundle.morning) enqueue("morning", bundle.iso, { iso: bundle.iso, steps: bundle.morning });
@@ -900,7 +958,7 @@ window.AlignDB = (() => {
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
-    flush, pendingCount, status, syncNow, onStatus, seedLocal
+    flush, pendingCount, status, syncNow, onStatus, seedLocal, markHydrated: () => { hydrated = true; scheduleFlush(0); }
   };
 })();
 

@@ -15,9 +15,17 @@
     profile: state.profile, history: state.history, onboardingDone: state.onboardingDone
   }));
 
+  const localIso = (d) => {
+    const x = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(x.getTime())) return "";
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    const day = String(x.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
   const today = () => {
     const d = new Date();
-    return { date: d, iso: d.toISOString().slice(0, 10), dow: d.getDay() };
+    return { date: d, iso: localIso(d), dow: d.getDay() };
   };
 
   const saved = load();
@@ -165,9 +173,9 @@
     let n = 0;
     const d = new Date();
     // if today not done, start from yesterday
-    if (!completedOn(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);
+    if (!completedOn(localIso(d))) d.setDate(d.getDate() - 1);
     for (let i = 0; i < 365; i++) {
-      const iso = d.toISOString().slice(0, 10);
+      const iso = localIso(d);
       if (completedOn(iso)) { n++; d.setDate(d.getDate() - 1); }
       else break;
     }
@@ -330,9 +338,13 @@
     return { ok: true, via: "local" };
   };
 
+  let applying = false;
   const applySession = async (session) => {
     state.session = session;
     if (!session) return;
+    if (applying) return;
+    applying = true;
+    try {
     const emailName = (session.user.email || "").split("@")[0];
     const meta = session.user.user_metadata || {};
     if (!state.profile.name) {
@@ -341,11 +353,15 @@
     }
     const remote = await AlignDB.fetchWorkouts();
     if (remote.ok && remote.data && remote.data.length) {
-      const seen = new Set(state.history.map((h) => h.date + "|" + h.dayId));
+      const byKey = {};
+      state.history.forEach((h) => { if (h) byKey[h.date + "|" + h.dayId] = h; });
       remote.data.forEach((h) => {
         const k = h.date + "|" + h.dayId;
-        if (!seen.has(k)) state.history.push(h);
+        const loc = byKey[k];
+        if (!loc) byKey[k] = h;
+        else if ((h.completed || 0) > (loc.completed || 0) || (h.minutes || 0) > (loc.minutes || 0)) byKey[k] = h;
       });
+      state.history = Object.keys(byKey).map((k) => byKey[k]);
       save();
     }
     const prefs = await AlignDB.fetchPrefs();
@@ -382,9 +398,21 @@
       if (life.data.bible && Life) {
         const c = Life.bibleCursor();
         const remoteLog = life.data.bible.log || [];
-        if (remoteLog.length >= (c.log || []).length) {
-          Life.setBibleCursor({ book: life.data.bible.book, chapter: life.data.bible.chapter, log: remoteLog });
-        }
+        const localLog = c.log || [];
+        const seen = new Set();
+        const log = [];
+        remoteLog.concat(localLog).forEach((x) => {
+          const k = String((x && x.id) || "") + "|" + String((x && x.date) || "");
+          if (seen.has(k)) return;
+          seen.add(k);
+          log.push(x);
+        });
+        const useRemote = remoteLog.length >= localLog.length;
+        Life.setBibleCursor({
+          book: useRemote ? life.data.bible.book : c.book,
+          chapter: useRemote ? life.data.bible.chapter : c.chapter,
+          log
+        });
       }
       if (life.data.scripture) {
         try {
@@ -396,6 +424,7 @@
       }
     }
     try {
+      if (AlignDB.markHydrated) AlignDB.markHydrated();
       if (state.profile && state.profile.name) AlignDB.upsertProfile(state.profile.name);
       if (AlignDB.seedLocal) AlignDB.seedLocal();
       await AlignDB.flush();
@@ -415,6 +444,7 @@
         ALIGN_SOUND.mergeRemote(remoteSounds.data);
       }
     } catch { /* sounds schema may not be applied yet */ }
+    } finally { applying = false; }
   };
 
   const cloudCopy = (st, signed) => {
@@ -1021,7 +1051,7 @@
 
   const weekDoneCount = () => {
     const start = startOfWeek(today().date);
-    const isoStart = start.toISOString().slice(0, 10);
+    const isoStart = localIso(start);
     return state.history.filter((h) => h.date >= isoStart).length;
   };
 
@@ -1185,7 +1215,7 @@
 
   const markSvg = () => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12 L8 3 L14 12" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
-  const isoOf = (d) => new Date(d).toISOString().slice(0, 10);
+  const isoOf = (d) => localIso(d);
 
   const clipText = (s, n) => {
     const t = String(s || "").replace(/\s+/g, " ").trim();
@@ -3860,7 +3890,12 @@
         }
       } catch { /* keep UI */ }
     });
-    window.addEventListener("online", () => { state.offline = false; if (state.view !== "splash") render(); });
+    window.addEventListener("online", () => {
+      state.offline = false;
+      if (state.session) {
+        applySession(state.session).then(() => { if (state.view !== "splash") render(); }).catch(() => {});
+      } else if (state.view !== "splash") render();
+    });
     window.addEventListener("offline", () => { state.offline = true; if (state.view !== "splash") render(); });
     try { render(); } catch (err) { console.warn(err); }
     const splashWatch = setTimeout(leaveSplash, 1200);
@@ -3868,15 +3903,19 @@
     try {
       if (AlignDB.configured()) {
         AlignDB.onAuth((sess) => {
-          timed(applySession(sess), 4000).then(() => {
+          applySession(sess).then(() => {
             if (state.view === "splash") return;
             if (state.view === "auth" && sess) { state.view = "home"; }
             try { render(); } catch { /* keep UI */ }
-          });
+          }).catch(() => {});
         });
         if (AlignDB.onStatus) AlignDB.onStatus(() => paintCloud());
         const s = await timed(AlignDB.session(), 2500);
-        if (s && s.ok && s.data) await timed(applySession(s.data), 4000);
+        if (s && s.ok && s.data) {
+          applySession(s.data).then(() => {
+            if (state.view !== "splash") try { render(); } catch { /* keep UI */ }
+          }).catch(() => {});
+        }
       }
     } catch (err) { console.warn(err); }
     try {
@@ -3885,7 +3924,11 @@
     } catch { /* ignore */ }
     armLocalAlarms();
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") tickAlarms();
+      if (document.visibilityState !== "visible") return;
+      tickAlarms();
+      if (state.session) {
+        applySession(state.session).then(() => { if (state.view !== "splash") render(); }).catch(() => {});
+      }
     });
     const wait = Math.max(0, 900 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
