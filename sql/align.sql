@@ -368,6 +368,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
   expected constant text := 'align-cron-v1-sqwwjrdd';
 begin
@@ -378,7 +379,7 @@ begin
   return query
   with loc as (
     select
-      p.user_id,
+      p.user_id as uid,
       coalesce(nullif(btrim(p.timezone), ''), 'Africa/Lagos') as tz,
       p.last_wake_sent,
       p.last_lights_sent,
@@ -388,17 +389,20 @@ begin
   ),
   stamped as (
     select
-      user_id, tz, last_wake_sent, last_lights_sent,
-      extract(dow from local_ts)::int as dow,
-      extract(hour from local_ts)::int as hr,
-      extract(minute from local_ts)::int as mn,
-      (local_ts)::date as local_date,
-      ((local_ts)::date + 1) as next_date
+      loc.uid,
+      loc.tz,
+      loc.last_wake_sent,
+      loc.last_lights_sent,
+      extract(dow from loc.local_ts)::int as dow,
+      extract(hour from loc.local_ts)::int as hr,
+      extract(minute from loc.local_ts)::int as mn,
+      (loc.local_ts)::date as local_date,
+      ((loc.local_ts)::date + 1) as next_date
     from loc
   ),
   classified as (
     select
-      s.user_id,
+      s.uid,
       s.tz,
       s.last_wake_sent,
       s.last_lights_sent,
