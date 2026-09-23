@@ -1596,22 +1596,43 @@ img { max-width: 100%; display: block; }
   padding: 0 16px 12px;
   gap: 10px;
 }
-.journal-prompts {
-  display: flex;
-  flex-wrap: wrap;
+.journal-body.pad {
+  padding: 4px 20px calc(16px + var(--safe-b));
   gap: 8px;
 }
-.journal-prompts button {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
+.icon-btn.add {
+  background: var(--lime-dim);
+  border-color: rgba(214,255,63,.28);
+  color: var(--lime);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+}
+.journal-when {
+  flex: 1;
+  text-align: center;
   font-size: 12px;
   font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.journal-prompts button:active { border-color: var(--lime); color: var(--lime); }
+.note-title {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 0 12px;
+  font-family: var(--display);
+  font-size: 28px;
+  letter-spacing: -.04em;
+  color: var(--text);
+  caret-color: var(--lime);
+  -webkit-text-fill-color: var(--text);
+  outline: none;
+}
+.note-title::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
 .diary-box {
   width: 100%;
   flex: 1;
@@ -1621,7 +1642,7 @@ img { max-width: 100%; display: block; }
   border-radius: 18px;
   padding: 16px;
   font-size: 17px;
-  line-height: 1.55;
+  line-height: 1.6;
   outline: none;
   resize: none;
   color: var(--text);
@@ -1630,10 +1651,13 @@ img { max-width: 100%; display: block; }
   -webkit-text-fill-color: var(--text);
 }
 .diary-box:focus { border-color: var(--lime); }
-.diary-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
-.journal-meta {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 0;
+.diary-box.pad {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0 24px;
+  min-height: 360px;
 }
+.diary-box.pad:focus { border-color: transparent; }
+.diary-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
 .nav button { font-size: 9.5px; }

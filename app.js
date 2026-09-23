@@ -74,7 +74,8 @@
     drillMode: "morning",
     readPacks: [],
     planJustSaved: false,
-    journalIso: ""
+    journalIso: "",
+    journalNoteId: ""
   };
 
   /* ---------- SVG poses ---------- */
@@ -525,8 +526,8 @@
       ["Wind down", "A short thought to close the day. No new tasks."]
     ];
     if (v === "journal" || v === "journalwrite") return [
-      ["A way in", "Ask me one honest question about how today went. Do not write the entry for me."],
-      ["Name it", "Give me three short prompts I could write under. Labels only."]
+      ["A way in", "Give me one honest question I could write about. Do not write the note for me."],
+      ["Keep going", "From the open note, ask one follow-up. Short."]
     ];
     return [
       ["Help here", "Help me with whatever this screen is for. Keep it short."]
@@ -569,12 +570,10 @@
       if (plan.note) lines.push("Day notes: " + String(plan.note).slice(0, 400));
     } catch { /* ignore */ }
     try {
-      const iso = state.journalIso || t.iso;
-      const diary = String((L().journalOf(iso) || {}).diary || "").trim();
       if (state.view === "journal" || state.view === "journalwrite") {
-        lines.push("This is the life journal — how the day went — not the devotion takeaway.");
-        if (diary) lines.push("Journal so far: " + diary.slice(0, 500));
-        else lines.push("The journal page is still empty.");
+        lines.push("This is the ALIGN notepad — free writing, not the devotion takeaway.");
+        const n = (L().noteById && state.journalNoteId) ? L().noteById(state.journalNoteId) : null;
+        if (n && (n.title || n.body)) lines.push("Open note: " + [n.title, n.body].filter(Boolean).join("\n").slice(0, 500));
       }
     } catch { /* ignore */ }
     return lines.join("\n");
@@ -1264,10 +1263,10 @@
     const diaryText = String(jn.diary || "").trim();
     const diaryNow = `
         <div class="plan-now">
-          <div class="section-h"><h4>Journal</h4><button class="linkish" data-act="journal-open" data-iso="${t.iso}">${diaryText ? "Open" : "Write"}</button></div>
+          <div class="section-h"><h4>Journal</h4><button class="linkish" data-act="journal-today">${diaryText ? "Open" : "Write"}</button></div>
           <p class="plan-note-preview">${diaryText
             ? escapeHtml(clipText(diaryText, 160))
-            : (evening ? "How did today go? This page is yours — not the devotion." : "Write how the day is going. Separate from the devotion on Word.")}</p>
+            : "A notepad. Write anything — not the devotion."}</p>
         </div>`;
 
     const subFor = (s) => {
@@ -1793,7 +1792,7 @@
 
           <div class="set-label">Journal</div>
           <button class="setting" data-go="journal">
-            <div class="grow"><h4>How the day went</h4><p>A page for the day itself. Not the devotion takeaway.</p></div>
+            <div class="grow"><h4>Notepad</h4><p>Write anything. New notes whenever you want. Not the devotion.</p></div>
           </button>
 
           <div class="set-label">Intelligence</div>
@@ -2170,90 +2169,88 @@
   };
 
 
+  const noteTitleOf = (n) => {
+    const title = String((n && n.title) || "").trim();
+    if (title) return title;
+    const first = String((n && n.body) || "").trim().split("\n")[0];
+    return first || "New note";
+  };
+
+  const openNote = (note) => {
+    if (!note) return;
+    state.journalNoteId = note.id;
+    state.journalIso = note.date || today().iso;
+    state.view = "journalwrite";
+    render();
+    requestAnimationFrame(() => {
+      const title = document.getElementById("note-title");
+      const body = document.getElementById("diary-note");
+      const el = (body && !String(note.body || "").trim() && String(note.title || "").trim()) ? body
+        : ((title && !String(note.title || "").trim()) ? title : body);
+      if (el) el.focus();
+    });
+  };
+
+  const saveOpenNote = () => {
+    const id = state.journalNoteId;
+    if (!id || !L().upsertNote) return null;
+    const titleEl = document.getElementById("note-title");
+    const bodyEl = document.getElementById("diary-note");
+    const prev = L().noteById(id) || { id, date: state.journalIso || today().iso, created_at: new Date().toISOString() };
+    const note = L().upsertNote({
+      id,
+      date: prev.date || state.journalIso || today().iso,
+      title: titleEl ? titleEl.value : (prev.title || ""),
+      body: bodyEl ? bodyEl.value : (prev.body || ""),
+      created_at: prev.created_at
+    });
+    AlignDB.saveJournal(note.date, L().journalOf(note.date));
+    return note;
+  };
+
   const viewJournal = () => {
-    const t = today();
-    const all = (L().journalsAll && L().journalsAll()) || {};
-    const todayJ = L().journalOf(t.iso);
-    const todayText = String(todayJ.diary || "").trim();
-    const weekStart = startOfWeek(t.date);
-    const weekDots = [0,1,2,3,4,5,6].map((i) => {
-      const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      const iso = isoOf(d);
-      const isToday = iso === t.iso;
-      const has = String((all[iso] && all[iso].diary) || "").trim();
-      const future = iso > t.iso;
-      return `<button type="button" class="wd${isToday?" today":""}${has?" done":""}" data-act="journal-open" data-iso="${iso}" ${future ? "disabled" : ""} aria-label="${DOW_FULL[i]}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></button>`;
-    }).join("");
-    const past = Object.keys(all)
-      .filter((iso) => iso !== t.iso && String((all[iso] && all[iso].diary) || "").trim())
-      .sort()
-      .reverse()
-      .slice(0, 60);
-    const weekN = [0,1,2,3,4,5,6].reduce((n, i) => {
-      const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      return n + (String((all[isoOf(d)] && all[isoOf(d)].diary) || "").trim() ? 1 : 0);
-    }, 0);
+    const notes = (L().notesList && L().notesList()) || [];
     return `
       <div class="screen home journal">
-        <div class="topbar"><div class="greet">Journal<h2>The day, in your words.</h2></div></div>
-        <p class="plan-kicker">Not the devotion. This is how the day went — what happened, what you’re carrying, what you don’t want to lose.</p>
-        <div class="home-week">
-          <div class="week-strip">${weekDots}</div>
-          <div class="pulse">
-            <div class="pulse-top">
-              <div class="pulse-num">${weekN}</div>
-              <div>
-                <h4>This week</h4>
-                <p>${weekN ? weekN + " day" + (weekN === 1 ? "" : "s") + " written." : "Open a page. The week is still empty."}</p>
-              </div>
-            </div>
-          </div>
+        <div class="topbar">
+          <div class="greet">Journal<h2>Notepad.</h2></div>
+          <button class="icon-btn add" data-act="journal-new" title="New note">+</button>
         </div>
-        <button class="journal-hero" data-act="journal-open" data-iso="${t.iso}">
-          <div class="tag">${DOW_FULL[t.dow]}</div>
-          <h3>${todayText ? "Today’s page." : "How did today go?"}</h3>
-          <p>${todayText ? escapeHtml(clipText(todayText, 180)) : "Write while it’s still yours. Saved on this device" + (state.session ? " and your account" : "") + "."}</p>
-          <span class="journal-cta">${todayText ? "Keep writing" : "Open the page"}</span>
-        </button>
-        <div class="section-h" style="padding:0 16px"><h4>Earlier</h4><span>${past.length || ""}</span></div>
-        ${past.length ? `<div class="journal-list">${past.map((iso) => `
-          <button class="journal-row" data-act="journal-open" data-iso="${iso}">
+        <p class="plan-kicker">A pad. Write anything. It saves as you type — not the devotion.</p>
+        ${notes.length ? `<div class="journal-list">${notes.map((n) => `
+          <button class="journal-row" data-act="journal-open" data-id="${n.id}">
             <div>
-              <h4>${escapeHtml(prettyIso(iso))}</h4>
-              <p>${escapeHtml(clipText(all[iso].diary, 110))}</p>
+              <h4>${escapeHtml(noteTitleOf(n))}</h4>
+              <p>${escapeHtml(clipText((n.title && n.body) ? n.body : String(n.body || "").split("\n").slice(1).join(" ") || n.body || "", 90) || prettyIso(n.date))}</p>
             </div>
             <span aria-hidden="true">›</span>
-          </button>`).join("")}</div>` : `<p class="hint journal-empty">Pages you finish will live here. Oldest days stay with the account.</p>`}
+          </button>`).join("")}</div>` : `
+        <button class="journal-hero" data-act="journal-new">
+          <div class="tag">Notepad</div>
+          <h3>New note</h3>
+          <p>Tap and write. Add as many notes as you want.</p>
+          <span class="journal-cta">Start writing</span>
+        </button>`}
       </div>
     `;
   };
 
   const viewJournalWrite = () => {
-    const iso = state.journalIso || today().iso;
-    const j = L().journalOf(iso);
-    const isToday = iso === today().iso;
-    const words = String(j.diary || "").trim() ? String(j.diary).trim().split(/\s+/).length : 0;
+    const id = state.journalNoteId;
+    const n = (L().noteById && id) ? L().noteById(id) : null;
+    const title = n ? n.title : "";
+    const body = n ? n.body : "";
+    const when = n && n.date ? prettyIso(n.date) : "Today";
     return `
       <div class="screen full has-cta journal-write">
-        <div class="back-row"><button class="icon-btn" data-act="journal-done">${chev()}</button></div>
-        <div class="page-title">
-          <div class="tag">${isToday ? "Today" : prettyIso(iso)}</div>
-          <h1>How the day went.</h1>
-          <p>Not the devotion. Write the day. You can see every line as you type.</p>
+        <div class="back-row">
+          <button class="icon-btn" data-act="journal-done">${chev()}</button>
+          <div class="journal-when">${escapeHtml(when)}</div>
+          <button class="linkish" data-act="journal-delete">Delete</button>
         </div>
-        <div class="scroll-body journal-body">
-          <div class="journal-prompts">
-            <button type="button" data-act="journal-prompt" data-prompt="How it went">How it went</button>
-            <button type="button" data-act="journal-prompt" data-prompt="What I’m carrying">What I’m carrying</button>
-            <button type="button" data-act="journal-prompt" data-prompt="One true thing">One true thing</button>
-          </div>
-          <textarea class="diary-box" id="diary-note" placeholder="What happened. What it felt like. What you don’t want to forget.">${escapeHtml(j.diary || "")}</textarea>
-          <p class="journal-meta">${words ? words + " word" + (words === 1 ? "" : "s") : "The page is empty."}${state.session ? " · Saves to your account." : " · Saves on this device."}</p>
-        </div>
-        <div class="sticky-cta">
-          <button class="btn" data-act="journal-done">${String(j.diary || "").trim() ? "Done" : "Close"}</button>
+        <div class="scroll-body journal-body pad">
+          <input id="note-title" class="note-title" type="text" maxlength="80" placeholder="Title" autocomplete="off" autocorrect="off" value="${escapeAttr(title)}" />
+          <textarea class="diary-box pad" id="diary-note" placeholder="Start writing…">${escapeHtml(body)}</textarea>
         </div>
       </div>
     `;
@@ -2814,18 +2811,10 @@
       AlignDB.saveDayPlan(iso, p);
     });
     const diary = $("#diary-note");
-    if (diary) diary.addEventListener("input", e => {
-      const iso = state.journalIso || today().iso;
-      const j = L().journalOf(iso);
-      j.diary = e.target.value;
-      L().saveJournal(iso, j);
-      AlignDB.saveJournal(iso, j);
-      const meta = document.querySelector(".journal-meta");
-      if (meta) {
-        const words = String(e.target.value || "").trim() ? String(e.target.value).trim().split(/\s+/).length : 0;
-        meta.textContent = (words ? words + " word" + (words === 1 ? "" : "s") : "The page is empty.") + (state.session ? " · Saves to your account." : " · Saves on this device.");
-      }
-    });
+    const ntitle = $("#note-title");
+    const onNoteInput = () => { saveOpenNote(); };
+    if (diary) diary.addEventListener("input", onNoteInput);
+    if (ntitle) ntitle.addEventListener("input", onNoteInput);
     [0,1,2].forEach((i) => {
       const el = document.getElementById("prio-" + i);
       if (el) el.addEventListener("input", () => {
@@ -3194,6 +3183,15 @@
         state.bookId = null;
         state.view = "library";
         toast("Book removed");
+      } else if (kind === "journal-delete") {
+        const id = state.journalNoteId;
+        const n = id && L().noteById ? L().noteById(id) : null;
+        const iso = (n && n.date) || state.journalIso || today().iso;
+        if (id && L().deleteNote) L().deleteNote(id);
+        AlignDB.saveJournal(iso, L().journalOf(iso)).catch(() => {});
+        state.journalNoteId = "";
+        state.view = "journal";
+        toast("Note deleted");
       } else render();
     } else if (act === "save-workout") {
       saveWorkout();
@@ -3415,32 +3413,43 @@
       toast("Amen.");
       state.view = "home";
       render();
+    } else if (act === "journal-new") {
+      const note = L().emptyNote(today().iso);
+      L().upsertNote(note);
+      AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
+      openNote(note);
+    } else if (act === "journal-today") {
+      const notes = (L().notesList && L().notesList()) || [];
+      const todayIso = today().iso;
+      const existing = notes.find((n) => n.date === todayIso);
+      if (existing) openNote(existing);
+      else {
+        const note = L().emptyNote(todayIso);
+        L().upsertNote(note);
+        AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
+        openNote(note);
+      }
     } else if (act === "journal-open") {
-      const iso = el.dataset.iso || today().iso;
-      if (iso > today().iso) return;
-      state.journalIso = iso;
-      state.view = "journalwrite";
-      render();
+      const n = L().noteById && L().noteById(el.dataset.id);
+      if (n) openNote(n);
     } else if (act === "journal-done") {
-      const iso = state.journalIso || today().iso;
-      const j = L().journalOf(iso);
-      const box = document.getElementById("diary-note");
-      if (box) j.diary = box.value;
-      L().saveJournal(iso, j);
-      AlignDB.saveJournal(iso, j).catch(() => {});
-      if (String(j.diary || "").trim()) toast("Journal saved");
+      const note = saveOpenNote();
+      if (note && !String(note.title || "").trim() && !String(note.body || "").trim()) {
+        L().deleteNote(note.id);
+        AlignDB.saveJournal(note.date, L().journalOf(note.date)).catch(() => {});
+      }
       state.view = "journal";
       render();
-    } else if (act === "journal-prompt") {
-      const box = document.getElementById("diary-note");
-      if (!box) return;
-      const heading = String(el.dataset.prompt || "").trim();
-      if (!heading) return;
-      const cur = box.value;
-      box.value = cur && String(cur).trim() ? (String(cur).replace(/\s*$/, "") + "\n\n" + heading + "\n") : (heading + "\n");
-      box.dispatchEvent(new Event("input"));
-      box.focus();
-      try { box.setSelectionRange(box.value.length, box.value.length); } catch { /* ignore */ }
+    } else if (act === "journal-delete") {
+      state.sheet = {
+        title: "Delete this note?",
+        body: "It’s gone from this device and your account.",
+        confirm: "Delete",
+        cancel: "Keep it",
+        danger: true,
+        kind: "journal-delete"
+      };
+      render();
     } else if (act === "save-devotion") {
       const iso = today().iso;
       const j = L().journalOf(iso);

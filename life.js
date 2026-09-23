@@ -222,6 +222,94 @@ window.ALIGN_LIFE = (() => {
   };
   const journalsAll = () => loadJSON(LS_J, {});
 
+  const noteId = () => "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  const hydrateNotes = (iso, j) => {
+    const pages = Array.isArray(j && j.notes) ? j.notes.filter(Boolean) : [];
+    if (pages.length) {
+      return pages.map((n) => ({
+        id: n.id || ("diary-" + iso),
+        title: String(n.title || ""),
+        body: String(n.body || ""),
+        created_at: n.created_at || (j && j.updated_at) || "",
+        updated_at: n.updated_at || (j && j.updated_at) || ""
+      }));
+    }
+    if (String((j && j.diary) || "").trim()) {
+      return [{
+        id: "diary-" + iso,
+        title: "",
+        body: String(j.diary),
+        created_at: (j && j.updated_at) || "",
+        updated_at: (j && j.updated_at) || ""
+      }];
+    }
+    return [];
+  };
+
+  const notesList = () => {
+    const all = loadJSON(LS_J, {});
+    const out = [];
+    Object.keys(all).forEach((iso) => {
+      hydrateNotes(iso, all[iso]).forEach((n) => out.push({ ...n, date: iso }));
+    });
+    out.sort((a, b) => ts(b.updated_at || b.created_at) - ts(a.updated_at || a.created_at));
+    return out;
+  };
+
+  const noteById = (id) => notesList().find((n) => n.id === id) || null;
+
+  const emptyNote = (iso) => ({
+    id: noteId(),
+    date: iso,
+    title: "",
+    body: "",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  const persistNotes = (iso, pages) => {
+    const j = journalOf(iso);
+    j.notes = (pages || []).map((n) => ({
+      id: n.id,
+      title: String(n.title || ""),
+      body: String(n.body || ""),
+      created_at: n.created_at || "",
+      updated_at: n.updated_at || ""
+    }));
+    const latest = j.notes.slice().sort((a, b) => ts(b.updated_at) - ts(a.updated_at))[0];
+    j.diary = latest
+      ? [latest.title, latest.body].filter((x) => String(x || "").trim()).join("\n")
+      : "";
+    return saveJournal(iso, j);
+  };
+
+  const upsertNote = (note) => {
+    const iso = note.date || String(note.created_at || "").slice(0, 10);
+    const j = journalOf(iso);
+    const pages = hydrateNotes(iso, j);
+    const row = {
+      id: note.id || noteId(),
+      title: String(note.title || ""),
+      body: String(note.body || ""),
+      created_at: note.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    const i = pages.findIndex((n) => n.id === row.id);
+    if (i >= 0) pages[i] = row;
+    else pages.unshift(row);
+    persistNotes(iso, pages);
+    return { ...row, date: iso };
+  };
+
+  const deleteNote = (id) => {
+    const n = noteById(id);
+    if (!n) return null;
+    const pages = hydrateNotes(n.date, journalOf(n.date)).filter((x) => x.id !== id);
+    persistNotes(n.date, pages);
+    return n.date;
+  };
+
   const mergeByTime = (localMap, rows, pick) => {
     (rows || []).forEach((r) => {
       const remote = pick(r);
