@@ -174,10 +174,7 @@ Open `http://localhost:8080`. Same Supabase backend.
 - [ ] Code on GitHub
 - [ ] Vercel deploy succeeds (ALIGN splash / Today)
 - [ ] Auth Site URL + Redirect URLs include the Vercel domain
-- [ ] `schema.sql` run
-- [ ] `schema-life.sql` run
-- [ ] `schema-books.sql` run (Storage bucket `reading` exists)
-- [ ] `schema-sounds.sql` run (public library + Storage bucket `sounds`)
+- [ ] `sql/align.sql` run (tables + Storage buckets `reading` and `sounds`)
 - [ ] Create account from the live URL
 - [ ] `GEMINI_API_KEY` and/or `GROQ_API_KEY` set in Vercel, then redeploy
 - [ ] You → Intelligence → Test connection
