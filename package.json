@@ -2,9 +2,7 @@
   "name": "align",
   "private": true,
   "type": "module",
-  "scripts": {
-    "build": "node -e \"process.exit(0)\""
-  },
+  "scripts": {},
   "dependencies": {
     "web-push": "^3.6.7"
   }

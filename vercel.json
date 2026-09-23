@@ -1,5 +1,6 @@
 {
   "cleanUrls": false,
+  "outputDirectory": ".",
   "headers": [
     {
       "source": "/sw.js",
