@@ -78,6 +78,90 @@ window.ALIGN_LIFE = (() => {
     return { title: pair[0], body: pair[1] };
   };
 
+  /* Lights-out copy. Indexed by the morning that sleep is for — not a gym ping. */
+  const LIGHTS_NOTES = [
+    [ // Sunday morning — notify Saturday 23:50, lights at midnight
+      ["ALIGN · Guard the night", "Ten minutes. Lights out at midnight. Rise is 4:00. The first appointment is His."],
+      ["ALIGN · Sleep is part of the path", "Put it down. Four hours. Church morning is already decided."]
+    ],
+    [
+      ["ALIGN · The morning is decided", "Ten minutes. Lights out at 1:00. What you protect tonight, you walk at 5:00."],
+      ["ALIGN · Close it well", "The feed will still be there. Your 5:00 will not, if you steal from it now."]
+    ],
+    [
+      ["ALIGN · Quiet strength starts now", "Ten minutes. Lights out at 1:00. Strength is built in the dark — including sleep."],
+      ["ALIGN · Don't bargain", "One more hour costs the morning. Lights out. Rise is 5:00."]
+    ],
+    [
+      ["ALIGN · Midweek, still yours", "Ten minutes. Lights out at 1:00. The week does not own this sleep. You do."],
+      ["ALIGN · Keep the order", "Rest is not a skip. It is how tomorrow's path stays possible."]
+    ],
+    [
+      ["ALIGN · Guard this hour", "Ten minutes. Lights out at 1:00. What you repeat in the dark becomes who you are in the light."],
+      ["ALIGN · Don't give it away", "The morning is waiting. Sleep like it matters — because it does."]
+    ],
+    [
+      ["ALIGN · Finish the week well", "Ten minutes. Lights out at 1:00. Don't let Friday steal the quiet of Saturday's rise."],
+      ["ALIGN · End as you began", "The work week is not owed your sleep. Lights out. Recover."]
+    ],
+    [
+      ["ALIGN · Recover, don't drift", "Ten minutes. Lights out at 1:00. Rest is part of the path. Keep the morning."],
+      ["ALIGN · Still a night that matters", "Saturday sleep still belongs to 5:00. Put the phone down."]
+    ]
+  ];
+
+  const lightsNote = (date = new Date()) => {
+    const d = date instanceof Date ? date : new Date(date);
+    const bank = LIGHTS_NOTES[d.getDay()] || LIGHTS_NOTES[1];
+    const pair = bank[d.getDate() % bank.length];
+    return { title: pair[0], body: pair[1] };
+  };
+
+  const preWakeNote = (date = new Date()) => {
+    const n = wakeNote(date);
+    if (/^Five minutes/i.test(n.body)) return n;
+    return { title: n.title, body: "Five minutes. " + n.body };
+  };
+
+  const isoOfDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
+
+  const inWindow = (now, h, m, winMin) => {
+    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+    const elapsed = (now.getTime() - t.getTime()) / 1000;
+    return elapsed >= 0 && elapsed < winMin * 60;
+  };
+
+  /* 5 min before rise (Sun 03:55 / else 04:55).
+     10 min before lights (Sat 23:50 for Sunday midnight / Mon–Sat 00:50 for 1:00). */
+  const dueAlarms = (now = new Date()) => {
+    const d = now instanceof Date ? now : new Date(now);
+    const dow = d.getDay();
+    const WIN = 8;
+    if ((dow === 0 && inWindow(d, 3, 55, WIN)) || (dow !== 0 && inWindow(d, 4, 55, WIN))) {
+      const n = preWakeNote(d);
+      return { kind: "wake", iso: isoOfDate(d), title: n.title, body: n.body };
+    }
+    if (dow === 6 && inWindow(d, 23, 50, WIN)) {
+      const sun = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+      const n = lightsNote(sun);
+      return { kind: "lights", iso: isoOfDate(sun), title: n.title, body: n.body };
+    }
+    if (dow === 0 && inWindow(d, 0, 0, WIN)) {
+      const n = lightsNote(d);
+      return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
+    }
+    if (dow !== 0 && inWindow(d, 0, 50, WIN)) {
+      const n = lightsNote(d);
+      return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
+    }
+    return null;
+  };
+
   const EVENING = [
     { id: "evening", title: "Evening Word", sub: "Spurgeon for the night. Then test the day’s chapters.", icon: "word" },
     { id: "nightquiz", title: "Night test", sub: "Same reading. Misses first. Then lights out.", icon: "drill" },
@@ -431,7 +515,7 @@ window.ALIGN_LIFE = (() => {
 
   return {
     BOOKS, STEPS, EVENING, ACTS,
-    clocksFor, isEvening, chapterTarget, stepsFor, wakeNote,
+    clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,

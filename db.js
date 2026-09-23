@@ -198,9 +198,14 @@ window.AlignDB = (() => {
   };
 
   const savePrefs = async (prefs) => {
-    localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
-    queueAndFlush("prefs", "prefs", prefs || {}, { delay: 0 });
-    return ok(prefs);
+    const next = Object.assign({}, prefs || {});
+    if (!next.timezone) {
+      try { next.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Lagos"; }
+      catch { next.timezone = "Africa/Lagos"; }
+    }
+    localStorage.setItem(LS_PREFS, JSON.stringify(next));
+    queueAndFlush("prefs", "prefs", next, { delay: 0 });
+    return ok(next);
   };
 
   const fetchPrefs = async () => {
@@ -214,7 +219,12 @@ window.AlignDB = (() => {
     const { data, error } = await sb.from("notification_prefs").select("*").eq("user_id", userId).maybeSingle();
     if (error) return fail(error);
     if (!data) return ok(local);
-    const prefs = { enabled: data.enabled, hour: data.reminder_hour, minute: data.reminder_minute };
+    const prefs = {
+      enabled: data.enabled,
+      hour: data.reminder_hour,
+      minute: data.reminder_minute,
+      timezone: data.timezone || local.timezone || "Africa/Lagos"
+    };
     localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
     return ok(prefs);
   };
@@ -497,6 +507,20 @@ window.AlignDB = (() => {
       err = await restUpsert("app_state", {
         user_id: userId, scripture: p || {}, updated_at: now
       }, "user_id");
+    } else if (item.kind === "prefs") {
+      const row = {
+        user_id: userId,
+        enabled: !!p.enabled,
+        reminder_hour: p.hour != null ? p.hour : 5,
+        reminder_minute: p.minute != null ? p.minute : 0,
+        timezone: p.timezone || "Africa/Lagos",
+        updated_at: now
+      };
+      err = await restUpsert("notification_prefs", row, "user_id");
+      if (err && /timezone|schema cache|column/i.test(err.message || "")) {
+        delete row.timezone;
+        err = await restUpsert("notification_prefs", row, "user_id");
+      }
     } else if (item.kind === "workout") {
       err = await restUpsert("workouts", {
         user_id: userId,

@@ -18,7 +18,7 @@ The anon key is already in `config.js`. Never put the **service role** key in th
 | The app (HTML/CSS/JS, PWA) | GitHub → Vercel |
 | Accounts, workouts, mornings, books metadata | Supabase database |
 | PDF files | Supabase Storage bucket `reading` |
-| Wake-up push (optional) | Supabase Edge Function `send-push` |
+| Timed reminders (5 min before rise, 10 min before lights) | Vercel `/api/cron-push` + `sql/push-alarms.sql` |
 | Server-side AI (optional) | Supabase Edge Function `ai` |
 | Gemini / Groq keys for in-app AI | **Vercel env vars** `GEMINI_API_KEY` / `GROQ_API_KEY` (route `/api/ai`) |
 
@@ -106,7 +106,7 @@ Confirm after Run:
 
 1. Open the Vercel URL on your phone.
 2. **You → Create account** (or sign in). Confirm-email can be off in Auth → Providers → Email so you get a session immediately. While signed in, ALIGN saves to Supabase on its own (and retries if you were offline). Check Table Editor as the project owner.
-3. **You → Wake nudge** if you want the 4am / 5am call (needs notifications allowed).
+3. **You → Reminders** — 5 minutes before rise (3:55 Sunday / 4:55 else) and 10 minutes before lights out (11:50 Saturday night / 12:50 AM other nights). Allow notifications. Stay signed in so they still arrive when ALIGN is closed.
 4. **AI keys on Vercel** (not on the phone). In the Vercel project: **Settings → Environment Variables**. Add:
    - `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey)
    - `GROQ_API_KEY` from [Groq Console](https://console.groq.com/keys)
@@ -118,40 +118,26 @@ Confirm after Run:
 
 ---
 
-## 6. Optional — edge functions (push + server AI)
+## 6. Timed reminders (closed-app push)
 
-Only if you want server-sent wake-ups, or AI keys kept off the phone.
+The phone toggle plus **Send a test** work immediately. Closed-app delivery needs one SQL run so Postgres can ping Vercel every 5 minutes:
 
-Install the [Supabase CLI](https://supabase.com/docs/guides/cli) and log in:
+Dashboard → **SQL Editor** → paste **`sql/push-alarms.sql`** → **Run**.
 
-```bash
-npm i -g supabase
-supabase login
-supabase link --project-ref sqwwjrddpjkenkhpyntg
-```
+Enable **pg_cron** and **pg_net** first if the notice says they are missing (Dashboard → Database → Extensions).
 
-### Push (`send-push`)
+Then **You → Reminders** on, while signed in, and allow notifications. iPhone: Add to Home Screen.
 
-Secrets from `supabase/.env.example` (do not put these in Vercel or `config.js`):
+Vercel `/api/cron-push` sends the two reminders in the phone’s timezone (default Africa/Lagos):
 
-```bash
-supabase secrets set VAPID_PUBLIC_KEY="BHQs0Wo3QmVAFpW5a7raJqABOk98BLfrBH_4eRUOAUgIHxIybOFlotKQlwLsST-JYfHtx7klDmNNJMchJpcUYBo"
-supabase secrets set VAPID_PRIVATE_KEY="YOUR_PRIVATE_FROM_ENV_EXAMPLE"
-supabase secrets set VAPID_SUBJECT="mailto:you@yourdomain.com"
-supabase functions deploy send-push
-```
+- 5 minutes before rise — Sunday 3:55, Mon–Sat 4:55
+- 10 minutes before lights out — Saturday 23:50 (midnight), other nights 00:50 (1:00)
 
-Then Dashboard → Edge Functions → `send-push` → **Schedules**: POST hourly with `{ "mode": "daily" }`.
+Copy is about the whole morning, not a gym ping. The old `send-push` edge function is optional.
 
-The app still works without this. The wake toggle on the phone uses a local notification if the function isn’t deployed.
+---
 
-### Server AI (`ai`)
-
-```bash
-supabase secrets set GEMINI_API_KEY="your_gemini_key"
-supabase secrets set GROQ_API_KEY="your_groq_key"
-supabase functions deploy ai
-```
+## 6b. Optional — server AI edge function
 
 You do **not** need this if keys are already on Vercel (`/api/ai`).
 

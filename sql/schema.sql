@@ -42,6 +42,9 @@ create table if not exists public.notification_prefs (
   enabled boolean not null default true,
   reminder_hour int not null default 7,
   reminder_minute int not null default 0,
+  timezone text not null default 'Africa/Lagos',
+  last_wake_sent date,
+  last_lights_sent date,
   updated_at timestamptz not null default now()
 );
 
@@ -95,3 +98,5 @@ create trigger on_auth_user_created
 
 -- Allow the edge function (service role) to read prefs + subscriptions.
 -- Service role bypasses RLS by default; no extra policy needed.
+
+-- Timed wake/lights reminders: also run sql/push-alarms.sql

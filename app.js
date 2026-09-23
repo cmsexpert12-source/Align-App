@@ -38,7 +38,7 @@
     authError: "",
     authInfo: "",
     authBusy: false,
-    prefs: { enabled: false, hour: 5, minute: 0 },
+    prefs: { enabled: false, hour: 5, minute: 0, timezone: "Africa/Lagos" },
     pushReady: false,
     installPrompt: null,
     setupUrl: "",
@@ -204,14 +204,14 @@
     }
   };
 
-  const localNotify = async (title, body) => {
+  const localNotify = async (title, body, tag) => {
     try {
       const reg = await navigator.serviceWorker.ready;
       await reg.showNotification(title, {
         body,
         icon: "./assets/icon-192.png",
         badge: "./assets/favicon-32.png",
-        tag: "align-local",
+        tag: tag || "align-local",
         vibrate: [80, 40, 80]
       });
       return true;
@@ -219,6 +219,35 @@
       if (window.Notification) new Notification(title, { body });
       return true;
     }
+  };
+
+  const phoneTz = () => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Lagos"; }
+    catch { return "Africa/Lagos"; }
+  };
+
+  let alarmTimer = 0;
+  const tickAlarms = async () => {
+    if (!state.prefs.enabled) return;
+    if (!window.Notification || Notification.permission !== "granted") return;
+    const Life = window.ALIGN_LIFE;
+    if (!Life || !Life.dueAlarms) return;
+    const due = Life.dueAlarms(new Date());
+    if (!due) return;
+    let fired = {};
+    try { fired = JSON.parse(localStorage.getItem("align-alarm-fired") || "{}") || {}; } catch { fired = {}; }
+    const key = due.kind + ":" + due.iso;
+    if (fired[key]) return;
+    fired[key] = Date.now();
+    try { localStorage.setItem("align-alarm-fired", JSON.stringify(fired)); } catch { /* ignore */ }
+    await localNotify(due.title, due.body, due.kind === "lights" ? "align-lights" : "align-wake");
+  };
+
+  const armLocalAlarms = () => {
+    if (alarmTimer) { clearInterval(alarmTimer); alarmTimer = 0; }
+    if (!state.prefs.enabled) return;
+    tickAlarms();
+    alarmTimer = setInterval(tickAlarms, 20000);
   };
 
   const enablePush = async () => {
@@ -242,7 +271,9 @@
     }
     state.pushReady = true;
     state.prefs.enabled = true;
+    state.prefs.timezone = phoneTz();
     await AlignDB.savePrefs(state.prefs);
+    armLocalAlarms();
     return { ok: true };
   };
 
@@ -258,27 +289,43 @@
     state.pushReady = false;
     state.prefs.enabled = false;
     await AlignDB.savePrefs(state.prefs);
+    armLocalAlarms();
   };
 
   const sendTestPush = async () => {
-    const note = L().wakeNote(today().date);
+    const Life = L();
+    const note = Life.preWakeNote ? Life.preWakeNote(today().date) : Life.wakeNote(today().date);
     const title = note.title;
     const body = note.body;
-    if (state.session && AlignDB.configured() && AlignDB.client()) {
+    if (state.session && AlignDB.configured()) {
       try {
-        const sb = AlignDB.client();
-        const { data: sess } = await sb.auth.getSession();
-        const jwt = sess.session && sess.session.access_token;
-        const url = AlignDB.readCfg().url.replace(/\/$/, "") + "/functions/v1/send-push";
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
-          body: JSON.stringify({ mode: "test" })
-        });
-        if (res.ok) return { ok: true, via: "edge" };
+        const sb = AlignDB.client && AlignDB.client();
+        let jwt = "";
+        if (sb) {
+          const { data: sess } = await sb.auth.getSession();
+          jwt = sess.session && sess.session.access_token;
+        }
+        if (jwt) {
+          const vercel = await fetch("/api/cron-push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
+            body: JSON.stringify({ mode: "test" })
+          });
+          if (vercel.ok) {
+            const j = await vercel.json().catch(() => ({}));
+            if (j && j.sent > 0) return { ok: true, via: "vercel" };
+          }
+          const url = AlignDB.readCfg().url.replace(/\/$/, "") + "/functions/v1/send-push";
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
+            body: JSON.stringify({ mode: "test" })
+          });
+          if (res.ok) return { ok: true, via: "edge" };
+        }
       } catch { /* fall through to local */ }
     }
-    await localNotify(title, body);
+    await localNotify(title, body, "align-test");
     return { ok: true, via: "local" };
   };
 
@@ -302,6 +349,7 @@
     }
     const prefs = await AlignDB.fetchPrefs();
     if (prefs.ok && prefs.data) state.prefs = prefs.data;
+    armLocalAlarms();
     const prof = await AlignDB.fetchProfile();
     if (prof.ok && prof.data && prof.data.display_name) {
       state.profile.name = prof.data.display_name;
@@ -1723,7 +1771,7 @@
               <button class="btn ghost" data-act="copy-sql" style="margin-top:10px;height:44px">Copy schema SQL</button>
             </div>
             <div class="step"><b>4. Auth settings</b><p>Authentication → Providers → Email on. For easier testing, turn off “Confirm email”. Add this site’s URL under Redirect URLs.</p></div>
-            <div class="step"><b>5. Push (optional)</b><p>Deploy <code>supabase/functions/send-push</code> and set VAPID secrets from supabase/.env.example. Then schedule it hourly.</p></div>
+            <div class="step"><b>5. Push (optional)</b><p>Run <code>sql/push-alarms.sql</code> in the SQL Editor so 5-min-before-rise and 10-min-before-lights still arrive when ALIGN is closed.</p></div>
           </div>
           ${state.setupErr ? `<div class="err">${escapeHtml(state.setupErr)}</div>` : ""}
           ${state.setupMsg ? `<div class="okmsg">${escapeHtml(state.setupMsg)}</div>` : ""}
@@ -1779,8 +1827,8 @@
           <div class="set-label">Notifications</div>
           <div class="setting">
             <div class="grow">
-              <h4>Wake call</h4>
-              <p>${state.prefs.enabled ? "On · today " + L().clocksFor(new Date()).wakeLabel : "Off · 4:00 Sunday, 5:00 weekdays"}</p>
+              <h4>Reminders</h4>
+              <p>${state.prefs.enabled ? "On · 5 min before rise · 10 min before lights out" : "Off · 5 min before 4:00 / 5:00 · 10 min before midnight / 1:00"}</p>
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
@@ -3292,7 +3340,7 @@
         state.prefs.minute = 0;
         const res = await enablePush();
         if (!res.ok) toast(res.error);
-        else toast("Wake call · " + L().clocksFor(new Date()).wakeLabel);
+        else toast(state.session ? "Reminders on · 5 min before rise, 10 min before lights" : "On while ALIGN is open. Sign in so they still arrive when it is closed.");
       }
       render();
     } else if (act === "toggle-pass") {
@@ -3808,6 +3856,10 @@
       const prefs = JSON.parse(localStorage.getItem("align-notif-prefs") || "null");
       if (prefs) state.prefs = prefs;
     } catch { /* ignore */ }
+    armLocalAlarms();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") tickAlarms();
+    });
     const wait = Math.max(0, 900 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
     clearTimeout(splashWatch);

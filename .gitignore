@@ -7,3 +7,4 @@ supabase/.env
 .arena
 .cache
 .local
+node_modules
