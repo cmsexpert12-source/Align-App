@@ -3134,7 +3134,7 @@
     save();
     AlignDB.saveWorkout(row).catch(() => {});
     completeStep("move");
-    successSound();
+    sfx("ok");
     state.workout = null;
     state.view = "home";
     toast("Session saved");
@@ -3491,7 +3491,7 @@
       L().saveJournal(iso, j);
       AlignDB.saveJournal(iso, j).catch(() => {});
       completeStep("pray");
-      successSound();
+      sfx("ok");
       toast("Amen.");
       state.view = "home";
       render();

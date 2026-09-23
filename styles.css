@@ -534,8 +534,9 @@ img { max-width: 100%; display: block; }
 .rest-num { font-family: var(--display); font-size: 96px; letter-spacing: -.07em; font-weight: 800; color: var(--lime); line-height: 1; }
 
 /* done */
-.done { min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px calc(28px + var(--safe-b)); }
-.done-hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.done { min-height: 100%; height: 100%; display: flex; flex-direction: column; padding: 28px 22px calc(22px + var(--safe-b)); overflow: hidden; }
+.done-hero { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: center; }
+.done > .btn { flex-shrink: 0; margin-top: 12px; }
 .done h1 { font-family: var(--display); font-size: 40px; letter-spacing: -.05em; line-height: .95; margin: 8px 0 12px; }
 .done-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 18px 0 8px; }
 .done-stats div {
