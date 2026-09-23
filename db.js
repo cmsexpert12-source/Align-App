@@ -129,10 +129,8 @@ window.AlignDB = (() => {
     return ok(data);
   };
 
-  const saveWorkout = async (row, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("workout", (row.date || "") + "|" + (row.dayId || ""), row, opts && opts.now);
-  };
+  const saveWorkout = async (row, opts) =>
+    queueAndFlush("workout", (row.date || "") + "|" + (row.dayId || ""), row, opts && opts.now);
 
   const fetchWorkouts = async () => {
     const sb = client();
@@ -217,8 +215,12 @@ window.AlignDB = (() => {
   const uidOf = async () => {
     const sb = client();
     if (!sb) return null;
-    const { data: u } = await sb.auth.getUser();
-    return (u && u.user && u.user.id) || null;
+    try {
+      const { data } = await sb.auth.getSession();
+      const id = data && data.session && data.session.user && data.session.user.id;
+      if (id) return id;
+    } catch { /* fall through */ }
+    return null;
   };
 
   const LS_OUT = "align-outbox";
@@ -238,7 +240,9 @@ window.AlignDB = (() => {
 
   let flushing = false;
   let flushTimer = null;
-  const scheduleFlush = (ms = 700) => {
+  let lastErr = "";
+  let lastOkAt = 0;
+  const scheduleFlush = (ms = 400) => {
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => { flush(); }, ms);
   };
@@ -315,7 +319,12 @@ window.AlignDB = (() => {
     }
     writeOut(left);
     flushing = false;
-    if (lastErr && left.length) return fail(lastErr);
+    if (left.length) {
+      lastErr = lastErr || "Waiting to sync";
+      return fail(lastErr);
+    }
+    lastErr = "";
+    lastOkAt = Date.now();
     return ok(true);
   };
 
@@ -326,30 +335,27 @@ window.AlignDB = (() => {
     return Promise.resolve(ok(true));
   };
 
-  const saveMorning = async (iso, steps, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("morning", iso, { iso, steps }, opts && opts.now);
-  };
+  const saveMorning = async (iso, steps, opts) =>
+    queueAndFlush("morning", iso, { iso, steps }, opts && opts.now);
 
-  const saveDayPlan = async (iso, plan, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("plan", iso, { iso, plan }, opts && opts.now);
-  };
+  const saveDayPlan = async (iso, plan, opts) =>
+    queueAndFlush("plan", iso, { iso, plan }, opts && opts.now);
 
-  const saveJournal = async (iso, payload, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("journal", iso, { iso, payload }, opts && opts.now);
-  };
+  const saveJournal = async (iso, payload, opts) =>
+    queueAndFlush("journal", iso, { iso, payload }, opts && opts.now);
 
-  const saveBible = async (cursor, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("bible", "bible", cursor || {}, opts && opts.now);
-  };
+  const saveBible = async (cursor, opts) =>
+    queueAndFlush("bible", "bible", cursor || {}, opts && opts.now);
 
-  const saveScripture = async (payload, opts) => {
-    if (!(await uidOf())) return ok(null);
-    return queueAndFlush("scripture", "scripture", payload || {}, opts && opts.now);
-  };
+  const saveScripture = async (payload, opts) =>
+    queueAndFlush("scripture", "scripture", payload || {}, opts && opts.now);
+
+  const status = () => ({
+    pending: pendingCount(),
+    error: lastErr,
+    lastOk: lastOkAt,
+    signed: false
+  });
 
   const pullLife = async () => {
     const sb = client();
@@ -571,12 +577,14 @@ window.AlignDB = (() => {
     saveMorning, saveDayPlan, saveJournal, saveBible, saveScripture, pullLife,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
-    flush, pendingCount
+    fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
+    flush, pendingCount, status
   };
 })();
 
 if (typeof window !== "undefined") {
-  window.addEventListener("online", () => {
-    try { if (window.AlignDB) window.AlignDB.flush(); } catch { /* ignore */ }
-  });
+  const kickFlush = () => { try { if (window.AlignDB) window.AlignDB.flush(); } catch { /* ignore */ } };
+  window.addEventListener("online", kickFlush);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) kickFlush(); });
+  setInterval(kickFlush, 20000);
 }

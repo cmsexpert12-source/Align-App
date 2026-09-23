@@ -23,6 +23,7 @@ create table if not exists public.workouts (
 );
 
 create index if not exists workouts_user_date_idx on public.workouts (user_id, date desc);
+create unique index if not exists workouts_user_date_day_uidx on public.workouts (user_id, date, day_id);
 
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),

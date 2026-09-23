@@ -33,6 +33,12 @@ create table if not exists public.bible_state (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.app_state (
+  user_id uuid primary key references auth.users on delete cascade,
+  scripture jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.mornings enable row level security;
 alter table public.day_plans enable row level security;
 alter table public.journals enable row level security;

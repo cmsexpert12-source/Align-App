@@ -345,6 +345,15 @@
     }
     try { await AlignDB.flush(); } catch { /* retry on next online */ }
     try {
+      const iso = today().iso;
+      AlignDB.saveMorning(iso, L().morningOf(iso));
+      AlignDB.saveDayPlan(iso, L().planOf(iso));
+      AlignDB.saveJournal(iso, L().journalOf(iso));
+      AlignDB.saveBible(L().bibleCursor());
+      if (window.ALIGN_SCRIPTURE) AlignDB.saveScripture(ALIGN_SCRIPTURE.load());
+      AlignDB.flush();
+    } catch { /* keep going */ }
+    try {
       const remoteBooks = await AlignDB.fetchBooks();
       if (remoteBooks.ok && remoteBooks.data && remoteBooks.data.length) {
         B().mergeRemote(remoteBooks.data);
@@ -1628,6 +1637,17 @@
             <div class="grow">
               <h3>${escapeHtml(state.profile.name || "ALIGN")}</h3>
               <p>${signed ? escapeHtml(email) : "On this device · create an account to sync"}</p>
+              ${(() => {
+                const st = (window.AlignDB && AlignDB.status) ? AlignDB.status() : { pending: 0, error: "" };
+                const line = !signed
+                  ? ""
+                  : st.pending
+                    ? "Cloud · " + st.pending + " waiting to save"
+                    : st.error
+                      ? "Cloud · " + st.error
+                      : "Cloud · writing to your account";
+                return line ? `<p class="cloud ${st.error ? "" : "on"}">${escapeHtml(line)}</p>` : "";
+              })()}
             </div>
           </div>
 
