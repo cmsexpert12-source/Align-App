@@ -933,7 +933,7 @@ img { max-width: 100%; display: block; }
 
 .prio { margin-bottom: 10px; }
 .prio label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 6px; }
-.prio input {
+.prio > input {
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--line-2);
@@ -946,18 +946,34 @@ img { max-width: 100%; display: block; }
   -webkit-text-fill-color: var(--text);
   outline: none;
 }
-.prio input:focus { border-color: var(--lime); }
-.task-row {
-  display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px;
+.prio > input:focus { border-color: var(--lime); }
+.check {
+  width: 28px; height: 28px; border-radius: 9px;
+  border: 1.5px solid var(--line-2);
+  background: transparent;
+  color: #111;
+  font-size: 13px; font-weight: 800;
+  display: grid; place-items: center;
+  padding: 0; margin: 0;
+  position: relative; z-index: 2;
+  flex-shrink: 0;
 }
-.task-row input, .task-row input[type="text"] {
+.check.done { background: var(--lime); border-color: var(--lime); }
+.task-row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px;
+  position: relative;
+}
+.task-row input, .task-row input[type="text"],
+.prio .task-row input {
   background: transparent;
   border: 0;
   padding: 8px 4px;
   font-size: 16px;
   outline: none;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   color: var(--text);
   caret-color: var(--lime);
   -webkit-text-fill-color: var(--text);
@@ -1451,6 +1467,7 @@ img { max-width: 100%; display: block; }
   display: grid; place-items: center;
   font-size: 11px; font-weight: 800;
 }
+.plan-pri.done span { background: var(--lime); color: #111; }
 .plan-pri p { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--text); }
 .plan-task {
   display: block; width: 100%; text-align: left;

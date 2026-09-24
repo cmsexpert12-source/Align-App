@@ -1510,7 +1510,7 @@
         <div class="plan-now">
           ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
-          ${prioRows.some((x) => x.text) ? prioRows.map((pr, i) => pr.text ? `<button type="button" class="plan-pri ${pr.done ? "done" : ""}" data-act="toggle-prio" data-i="${i}"><span>${i + 1}</span><p>${escapeHtml(pr.text)}</p></button>` : "").join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
+          ${prioRows.some((x) => x.text) ? prioRows.map((pr, i) => pr.text ? `<button type="button" class="plan-pri ${pr.done ? "done" : ""}" data-act="toggle-prio" data-i="${i}"><span>${pr.done ? "✓" : (i + 1)}</span><p>${escapeHtml(pr.text)}</p></button>` : "").join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
           ${planTasks.map((tk, i) => `<button type="button" class="plan-task ${tk.done ? "done" : ""}" data-act="toggle-task" data-i="${i}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</button>`).join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
           ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${(prioRows.every((x) => !x.text || x.done) && planTasks.every((x) => x.done)) ? "Schedule complete" : "Mark all done"}</button>` : ""}
