@@ -1444,9 +1444,12 @@ img { max-width: 100%; display: block; }
 }
 .plan-pri p { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--text); }
 .plan-task {
-  font-size: 13px; color: var(--muted); padding: 6px 0 2px; line-height: 1.4;
+  display: block; width: 100%; text-align: left;
+  font-size: 13px; color: var(--muted); padding: 8px 0 4px; line-height: 1.4;
+  background: transparent; border: 0; font-family: inherit; cursor: pointer;
 }
 .plan-task.done { text-decoration: line-through; opacity: .7; }
+.plan-mark { margin-top: 10px; padding: 4px 0 8px; }
 .plan-note-preview {
   font-size: 13px; color: var(--muted); line-height: 1.45; margin-top: 8px; white-space: pre-wrap;
 }

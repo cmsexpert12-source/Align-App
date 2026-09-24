@@ -487,11 +487,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -555,8 +555,12 @@
     const steps = (L().stepsFor(t.date) || L().STEPS).slice();
     const due = B().dueToday(t.iso, "morning");
     if (due.length) {
-      const i = steps.findIndex((s) => s.id === "word");
-      const at = i >= 0 ? i + 1 : steps.length;
+      const after = ["affirm", "verse", "drill", "word"];
+      let at = steps.length;
+      for (let k = 0; k < after.length; k++) {
+        const i = steps.findIndex((s) => s.id === after[k]);
+        if (i >= 0) { at = i + 1; break; }
+      }
       const unread = due.filter((b) => !B().loggedToday(t.iso, b.id));
       const first = unread[0] || due[0];
       steps.splice(at, 0, {
@@ -799,6 +803,11 @@
     }
     const m = L().morningOf(iso);
     if (id === "move") return !!(m.move || completedOn(iso));
+    if (id === "drill" || id === "verse" || id === "affirm") {
+      if (m[id]) return true;
+      if (m[id] == null && m.word && (m.plan || m.ready || m.go)) return true;
+      return false;
+    }
     if (id === "read") {
       const due = B().dueToday(iso, "morning");
       if (!due.length) return true;
@@ -943,8 +952,9 @@
     const next = currentVerse();
     if (!next) {
       sess.phase = "done";
+      completeStep("verse");
       toast("Verse hidden.");
-      state.view = "word";
+      state.view = "affirm";
       render();
       return;
     }
@@ -968,6 +978,7 @@
       finished: Date.now()
     }, state.drill.mode || "morning");
     if ((state.drill.mode || "") === "night") completeStep("nightquiz");
+    else completeStep("drill");
     render();
   };
 
@@ -1110,7 +1121,7 @@
   const tabFor = (view) => {
     if (view === "home") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
-    if (view === "word" || view === "library") return "word";
+    if (["word", "library", "pray", "devotion", "bible", "verse", "drill", "affirm", "devotionlog", "evening"].includes(view)) return "word";
     if (view === "journal") return "journal";
     if (view === "profile" || view === "sound") return "profile";
     return null;
@@ -1325,33 +1336,24 @@
       try { S().ensureTodayVerse(t.iso, assign.read, state.readPacks || []); } catch { /* ok */ }
     }
     const tv = S().todayVerse(t.iso);
-    const verseLine = String(jn.anchorVerse || "").trim();
     const verseRef = (tv && S().refOf) ? S().refOf(tv) : "";
     const verseBody = tv && tv.text ? String(tv.text).trim() : "";
-    const showWord = !!(morn.devotion || morn.word || verseLine || verseBody);
+    const verseDone = !!(S().load().daily[t.iso] && S().load().daily[t.iso].verseDone);
+    const showWord = !!(verseDone && verseBody);
     const wordToday = showWord ? `
         <div class="dash-card word-today">
-          <div class="section-h"><h4>Today’s Word</h4><button class="linkish" data-act="open-step" data-step="${morn.word ? "word" : "devotion"}">Open</button></div>
-          ${verseLine ? `<p class="word-verse">${escapeHtml(verseLine)}</p>${jn.anchorSource ? `<p class="word-src">${escapeHtml(jn.anchorSource)}</p>` : ""}` : ""}
-          ${verseBody ? `<p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}</span> ` : ""}${escapeHtml(verseBody)}</p>` : ""}
-          ${jn.devotion ? `<p class="word-note">${escapeHtml(jn.devotion)}</p>` : ""}
+          <div class="section-h"><h4>Memory verse</h4><button class="linkish" data-act="open-step" data-step="verse">Open</button></div>
+          <p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}</span> ` : ""}${escapeHtml(verseBody)}</p>
         </div>` : "";
     const planNow = (prios.length || planTasks.length || planNote || morn.plan || state.planJustSaved) ? `
         <div class="plan-now">
           ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
           ${prios.length ? prios.map((text, i) => `<div class="plan-pri"><span>${i + 1}</span><p>${escapeHtml(text)}</p></div>`).join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
-          ${planTasks.map((tk) => `<div class="plan-task ${tk.done ? "done" : ""}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</div>`).join("")}
+          ${planTasks.map((tk, i) => `<button type="button" class="plan-task ${tk.done ? "done" : ""}" data-act="toggle-task" data-i="${i}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</button>`).join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
+          ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${planTasks.length && planTasks.every((x) => x.done) ? "Mark schedule complete" : "Mark schedule done"}</button>` : ""}
         </div>` : "";
-    const diaryText = String(jn.diary || "").trim();
-    const diaryNow = `
-        <div class="plan-now">
-          <div class="section-h"><h4>Journal</h4><button class="linkish" data-go="journal">${diaryText ? "Open" : "Write"}</button></div>
-          <p class="plan-note-preview">${diaryText
-            ? escapeHtml(clipText(diaryText, 160))
-            : "A notepad. As many notes as you want — not the devotion."}</p>
-        </div>`;
 
     const subFor = (s) => {
       if (s.id === "move") return moveDone ? "Session logged" : `${day.name} · ${day.minutes} min`;
@@ -1364,6 +1366,16 @@
       }
       if (s.id === "plan") {
         return prios.length ? prios.join(" · ") : s.sub;
+      }
+      if (s.id === "drill") {
+        const sp = S().sprintOf(t.iso);
+        return sp && sp.answered ? (sp.correct || 0) + " / " + sp.answered + " right" : s.sub;
+      }
+      if (s.id === "verse") {
+        return (S().load().daily[t.iso] && S().load().daily[t.iso].verseDone) ? "Hidden" : s.sub;
+      }
+      if (s.id === "affirm") {
+        return morn.affirm ? "Spoken" : s.sub;
       }
       return s.sub;
     };
@@ -1440,7 +1452,6 @@
         })()}
         ${wordToday}
         ${planNow}
-        ${diaryNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
           <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
@@ -1888,9 +1899,18 @@
             <div class="grow"><h4>Play through the morning</h4><p>Stations in the app, or your own audio. Cues when a step lands.</p></div>
           </button>
 
+          <div class="set-label">Affirmation</div>
+          <div class="field"><label>Daily line</label>
+            <textarea class="note-box" id="pref-affirm" placeholder="The word you speak every morning.">${escapeHtml(L().affirmationPref())}</textarea>
+          </div>
+          <button class="btn ghost" data-act="save-affirm" style="height:44px">Save affirmation</button>
+
           <div class="set-label">Journal</div>
           <button class="setting" data-go="journal">
             <div class="grow"><h4>Notepad</h4><p>Write anything. New notes whenever you want. Not the devotion.</p></div>
+          </button>
+          <button class="setting" data-act="open-devotionlog">
+            <div class="grow"><h4>Devotion journal</h4><p>Past morning takeaways.</p></div>
           </button>
 
           <div class="set-label">Intelligence</div>
@@ -2021,11 +2041,11 @@
       : (n ? "A verse from what you just read" : "Read first. Then hide one line.");
     const sprintSub = sprint && sprint.answered
       ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
-      : "2 minutes · " + S().SPRINT_N + " questions · misses come back first";
+      : "2 minutes · " + S().SPRINT_N + " questions · meaning, not verse trivia";
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
-        <p class="plan-kicker">Prayer first. Then devotion. Then Scripture. Hide a verse. Drill the rest.</p>
+        <p class="plan-kicker">Pray. Devotion. Scripture. Sprint. Memory. Affirm. Then the day unlocks.</p>
         <div class="hub-grid">
           <button class="hub-card" data-act="open-step" data-step="pray">
             <div class="tile">${stepIcon("pray")}</div>
@@ -2053,6 +2073,11 @@
             <div class="tile">${stepIcon("drill")}</div>
             <h3>Sprint</h3>
             <p>${sprintSub}</p>
+          </button>
+          <button class="hub-card" data-act="open-step" data-step="affirm">
+            <div class="tile">${stepIcon("spark")}</div>
+            <h3>Affirm</h3>
+            <p>${L().morningOf(iso).affirm ? "Spoken today" : "Read today’s word over yourself."}</p>
           </button>
           <button class="hub-card" data-act="open-step" data-step="evening">
             <div class="tile">${stepIcon("rise")}</div>
@@ -2201,16 +2226,16 @@
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="page-title">
             <div class="tag">${night ? "Night test" : "Morning test"}</div>
-            <h1>2 minutes.<br>${S().SPRINT_N} from the text.</h1>
+            <h1>2 minutes.<br>${S().SPRINT_N} on the meaning.</h1>
             <p>${nQ
               ? (night
                 ? "Same chapters as this morning. Misses first, then lines you already got — so they stick overnight."
-                : ("Built from " + (refs || "today’s reading") + ". Fill the blank. Name the verse. Misses return tonight."))
+                : ("Built from " + (refs || "today’s reading") + ". Meaning, motive, promise — not which-verse trivia."))
               : "Read today’s Scripture first. ALIGN writes the questions from those chapters — not a generic bank."}</p>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" ${nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`}>${nQ ? "Start the clock" : "Read first"}</button>
-            <p class="next-up">${night ? "Then lights out." : "Sunday morning: skip if you’re walking out the door. It waits tonight."}</p>
+            <p class="next-up">${night ? "Then lights out." : "Then hide today’s verse. Then affirm."}</p>
           </div>
         </div>`;
     }
@@ -2230,8 +2255,10 @@
             </div>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
-            <button class="btn" data-act="drill-start">Go again</button>
-            <button class="btn ghost" style="margin-top:8px" data-go="word">Back to Word</button>
+            ${d.mode === "night"
+              ? `<button class="btn" data-act="complete-step" data-step="nightquiz">Continue</button>`
+              : `<button class="btn" data-act="open-step" data-step="verse">Continue to memory</button>`}
+            <button class="btn ghost" style="margin-top:8px" data-act="drill-start">Go again</button>
           </div>
         </div>`;
     }
@@ -2399,7 +2426,11 @@
     const odb = state.odb;
     return `
       <div class="screen full has-cta">
-        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+        <div class="back-row">
+          <button class="icon-btn" data-go="home">${chev()}</button>
+          <div style="flex:1"></div>
+          <button class="linkish" data-act="open-devotionlog">Past days</button>
+        </div>
         <div class="page-title">
           <div class="tag">Morning · in this app</div>
           <h1>Devotion.</h1>
@@ -2418,6 +2449,58 @@
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="save-devotion">Save & continue</button>
+        </div>
+      </div>
+    `;
+  };
+
+
+  const viewAffirm = () => {
+    const iso = today().iso;
+    const line = L().todayAffirmation(iso);
+    const custom = L().affirmationPref();
+    const tv = S().todayVerse(iso);
+    const ref = (tv && S().refOf) ? S().refOf(tv) : "";
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">After the Word</div>
+          <h1>Affirm.</h1>
+          <p>Read it aloud. Let it sit. This is the same word every morning unless you write your own in You.</p>
+        </div>
+        <div class="scripture">
+          <div class="devotion-body" style="font-family:var(--serif);font-size:22px;line-height:1.45">${escapeHtml(line)}</div>
+          ${tv && tv.text ? `<div class="devotion-verse" style="margin-top:18px">${ref ? escapeHtml(ref) + " · " : ""}${escapeHtml(tv.text)}</div>` : ""}
+          <div class="field"><label>Your daily affirmation</label>
+            <textarea class="note-box" id="affirm-text" placeholder="Leave blank to use the built-in line.">${escapeHtml(custom)}</textarea>
+          </div>
+        </div>
+        <div class="sticky-cta">
+          <button class="btn" data-act="affirm-done">I received it</button>
+          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save my line</button>
+        </div>
+      </div>
+    `;
+  };
+
+  const viewDevotionLog = () => {
+    const rows = (L().devotionLog && L().devotionLog()) || [];
+    return `
+      <div class="screen full">
+        <div class="back-row"><button class="icon-btn" data-act="open-step" data-step="devotion">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">Devotion journal</div>
+          <h1>Past days.</h1>
+          <p>What remained. Not the notepad.</p>
+        </div>
+        <div class="scroll-body" style="padding:0 16px calc(22px + var(--safe-b))">
+          ${rows.length ? rows.map((r) => `
+            <div class="journal-row" style="display:block;text-align:left;margin-bottom:10px">
+              <h4>${escapeHtml(prettyIso(r.iso))}</h4>
+              ${r.verse ? `<p class="word-src" style="margin:4px 0 6px">${escapeHtml(r.source || "Word")} · ${escapeHtml(r.verse)}</p>` : ""}
+              <p>${escapeHtml(r.devotion)}</p>
+            </div>`).join("") : `<p class="hint">When you save a devotion takeaway, it will live here.</p>`}
         </div>
       </div>
     `;
@@ -2498,8 +2581,8 @@
             <button class="btn" data-act="bible-done">${sunday ? "Chapter read · done" : "Chapter read"}</button>
           </div>
           ${readN >= target
-            ? `<button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="word">Finish Scripture</button>`
-            : `<p class="next-up" style="margin-top:8px">${sunday ? "One chapter. Then get ready for church." : (target - readN) + " more to the usual three"}</p>`}
+            ? `<button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="word">Scripture done · sprint next</button>`
+            : `<p class="next-up" style="margin-top:8px">${sunday ? "One chapter. Then the sprint." : (target - readN) + " more to the usual three"}</p>`}
         </div>
       </div>
     `;
@@ -2853,6 +2936,8 @@
       reader: viewReader,
       verse: viewVerse,
       drill: viewDrill,
+      affirm: viewAffirm,
+      devotionlog: viewDevotionLog,
       sound: viewSound,
       journal: viewJournal,
       journalwrite: viewJournalWrite
@@ -3481,6 +3566,17 @@
       } else if (step === "word") {
         const a = L().todayAssignment(iso);
         openBible(a.next.book, a.next.chapter);
+      } else if (step === "drill") {
+        stopDrillTick();
+        state.drill = null;
+        state.drillMode = "morning";
+        state.view = "drill";
+        render();
+      } else if (step === "verse") {
+        openVerseTutor(false);
+      } else if (step === "affirm") {
+        state.view = "affirm";
+        render();
       } else if (step === "plan") {
         state.planJustSaved = false;
         state.view = "dayplan";
@@ -3514,6 +3610,15 @@
       }
       completeStep(step);
       sfx("done");
+      if (step === "word") {
+        toast("Scripture done.");
+        stopDrillTick();
+        state.drill = null;
+        state.drillMode = "morning";
+        state.view = "drill";
+        render();
+        return;
+      }
       toast(step === "go" ? (L().clocksFor(today().date).sunday ? "Go to church." : "Go well.") : "Logged.");
       state.view = "home";
       render();
@@ -3595,7 +3700,11 @@
         openBible(cur.book, cur.chapter);
       } else if (readN >= target) {
         completeStep("word");
-        openVerseTutor(true);
+        stopDrillTick();
+        state.drill = null;
+        state.drillMode = "morning";
+        state.view = "drill";
+        render();
       } else {
         openBible(cur.book, cur.chapter);
       }
@@ -3778,6 +3887,7 @@
       if (state.session && AlignDB.configured()) AlignDB.deleteSoundRemote(row).catch(() => {});
       render();
     } else if (act === "open-verse") {
+      if (!gateStep("verse")) return;
       openVerseTutor(false);
     } else if (act === "verse-next") {
       const sess = state.verseSess;
@@ -3823,6 +3933,7 @@
       }
       advanceVerse();
     } else if (act === "open-drill") {
+      if (!gateStep("drill")) return;
       stopDrillTick();
       state.drill = null;
       state.drillMode = "morning";
@@ -3843,9 +3954,38 @@
       else {
         stopDrillTick();
         state.drill = null;
-        state.view = "word";
+        state.view = stepIsDone("drill") ? "home" : "word";
         render();
       }
+    } else if (act === "open-devotionlog") {
+      state.view = "devotionlog";
+      render();
+    } else if (act === "save-affirm") {
+      const box = document.getElementById("affirm-text") || document.getElementById("pref-affirm");
+      L().saveAffirmationPref(box ? box.value : "");
+      toast("Affirmation saved");
+      render();
+    } else if (act === "affirm-done") {
+      const box = document.getElementById("affirm-text");
+      if (box) L().saveAffirmationPref(box.value);
+      completeStep("affirm");
+      sfx("done");
+      toast("Amen.");
+      state.view = "home";
+      render();
+    } else if (act === "schedule-done") {
+      if (!canComplete("plan") && !stepIsDone("plan")) {
+        gateStep("plan");
+        return;
+      }
+      const iso = today().iso;
+      const plan = L().planOf(iso);
+      (plan.tasks || []).forEach((tk) => { if (tk) tk.done = true; });
+      L().savePlan(iso, plan);
+      AlignDB.saveDayPlan(iso, plan);
+      completeStep("plan");
+      toast("Schedule done.");
+      render();
     }
   };
 

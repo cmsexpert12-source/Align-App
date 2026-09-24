@@ -190,6 +190,9 @@ window.ALIGN_LIFE = (() => {
     { id: "pray", title: "Pray", sub: "Before you read. Before you plan.", icon: "pray" },
     { id: "devotion", title: "Devotion", sub: "Your daily reading. Capture what stays.", icon: "book" },
     { id: "word", title: "Scripture", sub: "Three or four chapters. Stay with it.", icon: "word" },
+    { id: "drill", title: "Sprint", sub: "Thirty questions. Meaning, not trivia.", icon: "drill" },
+    { id: "verse", title: "Memory", sub: "Hide one line from today’s reading.", icon: "verse" },
+    { id: "affirm", title: "Affirm", sub: "Read today’s word over yourself.", icon: "spark" },
     { id: "plan", title: "Plan the day", sub: "Three true priorities. Then the rest.", icon: "plan" },
     { id: "ready", title: "Get ready", sub: "Bath, dress, leave the room in order.", icon: "ready" },
     { id: "go", title: "Begin", sub: "Step into the day. Nothing else to open.", icon: "go" }
@@ -212,6 +215,9 @@ window.ALIGN_LIFE = (() => {
       if (s.id === "move") return { ...s, sub: "Twelve minutes. Then Word." };
       if (s.id === "devotion") return { ...s, sub: "Short. One line that stays." };
       if (s.id === "word") return { ...s, sub: "One chapter. That’s Sunday." };
+      if (s.id === "drill") return { ...s, sub: "Thirty questions on the one chapter." };
+      if (s.id === "verse") return { ...s, sub: "Hide the line. Then church." };
+      if (s.id === "affirm") return { ...s, sub: "Speak it. Then get ready." };
       if (s.id === "plan") return { ...s, sub: "Church first. Keep the rest light." };
       if (s.id === "ready") return { ...s, sub: "Dress for church. Leave by 5:45." };
       if (s.id === "go") return { ...s, sub: "Out the door by 5:45." };
@@ -529,6 +535,51 @@ window.ALIGN_LIFE = (() => {
     { k: "Supplication", d: "Ask. Family, work, the hours ahead, people you’re carrying." }
   ];
 
+  const LS_A = "align-affirm";
+  const DEFAULT_AFFIRMS = [
+    "I am in Christ. The old has gone. The new has come. I walk this day as one made new.",
+    "The Lord is my shepherd. I lack nothing. He leads me. I will not fear.",
+    "I have hidden His word in my heart, that I might not sin against Him.",
+    "I am God’s workmanship, created in Christ Jesus for good works He prepared beforehand.",
+    "Greater is He who is in me than he who is in the world.",
+    "This is the day the Lord has made. I will rejoice and be glad in it.",
+    "I can do all things through Christ who strengthens me — not as a slogan, as dependence."
+  ];
+
+  const affirmationPref = () => {
+    const row = loadJSON(LS_A, { text: "" });
+    return String((row && row.text) || "").trim();
+  };
+  const saveAffirmationPref = (text) => {
+    const row = stamp({ text: String(text || "").trim() });
+    saveJSON(LS_A, row);
+    return row;
+  };
+  const todayAffirmation = (iso) => {
+    const custom = affirmationPref();
+    if (custom) return custom;
+    const parts = String(iso || "").split("-").map(Number);
+    const d = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+    const start = new Date(d.getFullYear(), 0, 0);
+    const day = Math.floor((d - start) / 86400000);
+    return DEFAULT_AFFIRMS[((day % DEFAULT_AFFIRMS.length) + DEFAULT_AFFIRMS.length) % DEFAULT_AFFIRMS.length];
+  };
+
+  const devotionLog = () => {
+    const all = journalsAll();
+    return Object.keys(all).sort().reverse().map((iso) => {
+      const j = all[iso] || {};
+      const devotion = String(j.devotion || "").trim();
+      if (!devotion) return null;
+      return {
+        iso,
+        devotion,
+        verse: String(j.anchorVerse || "").trim(),
+        source: String(j.anchorSource || "").trim()
+      };
+    }).filter(Boolean);
+  };
+
   return {
     BOOKS, STEPS, EVENING, ACTS,
     clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
@@ -536,7 +587,8 @@ window.ALIGN_LIFE = (() => {
     morningOf, setStep, emptyMorning,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
-    planOf, savePlan, journalOf, saveJournal, journalsAll,
-    notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay
+    planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
+    notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
+    affirmationPref, saveAffirmationPref, todayAffirmation
   };
 })();

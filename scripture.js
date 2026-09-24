@@ -4,7 +4,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const LS = "align-scripture";
   const DAY_MS = 86400000;
   const SPRINT_SEC = 120;
-  const SPRINT_N = 60;
+  const SPRINT_N = 30;
 
   const V = (id, book, chapter, verse, thru, text, theme, why, score) =>
     ({ id, book, chapter, verse, thru: thru || verse, text, theme, why, score });
@@ -706,16 +706,18 @@ window.ALIGN_SCRIPTURE = (() => {
         }
       }
       const quote = v.text.length > 110 ? v.text.slice(0, 96).replace(/\s+\S*$/, "") + "…" : v.text;
-      const otherRefs = verses.filter((x) => !(x.book === v.book && x.chapter === v.chapter && x.verse === v.verse))
-        .map((x) => x.book + " " + x.chapter + ":" + x.verse);
-      otherRefs.push(v.book + " " + v.chapter + ":" + Math.max(1, v.verse - 1));
-      otherRefs.push(v.book + " " + v.chapter + ":" + (v.verse + 1));
-      const d = twoOthers(ref, otherRefs);
+      const t = v.text.toLowerCase();
+      const kind = /\b(do not|don't|shall not|you shall not|flee|beware|woe)\b/.test(t) ? "a warning or command"
+        : /\b(i will|i am|blessed are|covenant|my people|i have given)\b/.test(t) ? "a promise of God"
+        : /\b(praise|bless the lord|thank|worship|sing)\b/.test(t) ? "worship"
+        : /\b(love|faith|trust|believe|hope|obey)\b/.test(t) ? "a call to trust and obey"
+        : "a claim about God or his people";
+      const kinds = ["a warning or command", "a promise of God", "worship", "a call to trust and obey", "a claim about God or his people"];
       list.push({
-        id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":ref",
-        q: "Which verse says: “" + quote + "”",
-        a: ref,
-        d,
+        id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":kind",
+        q: "“" + quote + "” — this line is mainly:",
+        a: kind,
+        d: twoOthers(kind, kinds),
         tag: "read",
         ref
       });
@@ -728,7 +730,12 @@ window.ALIGN_SCRIPTURE = (() => {
     });
   };
 
-  const readingQs = (iso) => ((load().daily[iso] || {}).readingQs) || [];
+  const isIdQuiz = (q) => {
+    const id = String((q && q.id) || "");
+    const stem = String((q && q.q) || "");
+    return /:ref$/.test(id) || /which verse/i.test(stem) || /who said/i.test(stem) || /what verse/i.test(stem);
+  };
+  const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q));
 
   const ingestReading = (iso, packs) => {
     const built = fromPacks(packs, iso);
@@ -779,8 +786,8 @@ window.ALIGN_SCRIPTURE = (() => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           maxOutputTokens: 1200,
-          system: "You write short Bible quizzes only from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Facts must appear in the text. One sentence stems.",
-          prompt: "Write 8 multiple-choice questions about this reading only:\n\n" + body
+          system: "You write short Bible quizzes from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding: meaning, motive, promise, command, character of God, what the text requires of the reader. Do not ask verse numbers, chapter numbers, or which-verse identification. Do not ask who-said unless the speaker is the point. Answers must be supportable from the text. One-sentence stems.",
+          prompt: "Write 10 multiple-choice questions of understanding about this reading only. No trivia about references.\n\n" + body
         })
       });
       const js = await res.json().catch(() => ({}));
@@ -844,8 +851,12 @@ window.ALIGN_SCRIPTURE = (() => {
   const dailyQueue = (n = SPRINT_N, mode = "morning", iso) => {
     const data = load();
     const now = Date.now();
-    const todayQs = iso ? readingQs(iso) : [];
-    const bank = todayQs.length ? allReadingBank() : QUIZ.slice();
+    const todayQs = (iso ? readingQs(iso) : []).slice().sort((a, b) => {
+      const pa = (a.tag === "read-ai" ? 0 : 1);
+      const pb = (b.tag === "read-ai" ? 0 : 1);
+      return pa - pb;
+    });
+    const bank = todayQs.length ? allReadingBank().filter((q) => !isIdQuiz(q)) : QUIZ.slice();
     const missed = [];
     const due = [];
     const fresh = [];
