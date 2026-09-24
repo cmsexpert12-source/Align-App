@@ -357,6 +357,37 @@ window.ALIGN_LIFE = (() => {
     })).filter((x) => x.ms >= 1000 || (x.done && x.id !== "rise" && x.id !== "go" && x.id !== "lights"));
   };
 
+  const HOLD_IDS = { pray: 1, devotion: 1, verse: 1, word: 1, recite: 1, affirm: 1, evening: 1 };
+  const idealMinFor = (iso, id, opts) => {
+    const sunday = chapterTarget(iso) === 1;
+    const train = Math.max(1, Number((opts && opts.trainMin) || (sunday ? 12 : 28)));
+    const ch = Number((opts && opts.chapters) != null ? opts.chapters : (sunday ? 1 : 3));
+    const table = sunday ? {
+      rise: 1, move: train, pray: 6, devotion: 6, verse: 4,
+      word: Math.max(6, ch * 5), drill: 2, affirm: 2, plan: 3,
+      ready: 15, recite: 2, go: 1, read: 8, evening: 8, nightquiz: 2, lights: 1
+    } : {
+      rise: 1, move: train, pray: 7, devotion: 8, verse: 4,
+      word: Math.max(10, ch * 4), drill: 2, affirm: 2, plan: 5,
+      ready: 12, recite: 2, go: 1, read: 10, evening: 8, nightquiz: 2, lights: 1
+    };
+    return table[id] || 0;
+  };
+  const idealMsFor = (iso, id, opts) => idealMinFor(iso, id, opts) * 60000;
+  const pathIdealMs = (iso, opts) =>
+    STEPS.reduce((n, s) => n + idealMsFor(iso, s.id, opts), 0);
+  const pathWindowMs = (iso) => (chapterTarget(iso) === 1 ? 105 : 90) * 60000;
+  const paceKind = (id, actual, ideal) => {
+    const a = Number(actual) || 0;
+    const i = Number(ideal) || 0;
+    if (!i) return "open";
+    const slack = Math.max(90 * 1000, i * 0.2);
+    const d = a - i;
+    if (Math.abs(d) <= slack) return "pace";
+    if (HOLD_IDS[id]) return d < 0 ? "short" : "held";
+    return d > 0 ? "long" : "pace";
+  };
+
   const setStep = (iso, id, val) => {
     const all = loadJSON(LS_M, {});
     if (!all[iso]) all[iso] = emptyMorning();
@@ -800,6 +831,7 @@ window.ALIGN_LIFE = (() => {
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
     timesOf, markOpen, markClose, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
+    idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
     planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,

@@ -1466,6 +1466,64 @@ img { max-width: 100%; display: block; }
   color: var(--muted);
   font-weight: 700;
 }
+.time-cmp {
+  display: grid;
+  grid-template-columns: 1fr 52px 52px 56px;
+  gap: 6px 8px;
+  align-items: end;
+  padding: 10px 0 8px;
+  border-top: 1px solid var(--line);
+}
+.time-cmp.head {
+  border-top: 0;
+  padding: 0 0 4px;
+}
+.time-cmp.head b {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+}
+.time-cmp .lab { font-size: 14px; font-weight: 700; min-width: 0; }
+.time-cmp .lab span { display: block; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.time-cmp b { font-size: 12px; font-weight: 800; text-align: right; }
+.time-cmp b.ideal { color: var(--muted); font-weight: 600; }
+.time-cmp b.long, .time-day b.long { color: #ffb020; }
+.time-cmp b.short, .time-day b.short, .time-day b.over { color: #ff6b4a; }
+.time-cmp b.held, .time-cmp b.pace, .time-day b.pace { color: var(--lime); }
+.time-track {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 99px;
+  background: #1c1f28;
+  position: relative;
+  margin-top: 2px;
+}
+.time-track.big { height: 8px; margin: 4px 0 0; }
+.time-track i {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 99px;
+  max-width: 100%;
+  display: block;
+}
+.time-track i.ideal { background: rgba(244, 241, 234, .18); }
+.time-track i.act { background: var(--lime); }
+.time-track i.act.long { background: #ffb020; }
+.time-track i.act.short { background: #ff6b4a; }
+.time-track i.act.held, .time-track i.act.pace { background: var(--lime); }
+.time-focus {
+  margin: 0 16px 12px;
+  background: color-mix(in srgb, #ffb020 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, #ffb020 40%, var(--line));
+  border-radius: 16px;
+  padding: 14px;
+  text-align: left;
+}
+.time-focus p { font-size: 13px; color: var(--text); margin: 6px 0 0; line-height: 1.4; }
+.time-focus p:first-of-type { margin-top: 0; }
 
 .dash-card, .word-today {
   margin: 0 16px 14px;

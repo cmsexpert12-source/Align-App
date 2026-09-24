@@ -1638,10 +1638,11 @@
             </div>
             ${(() => {
               const ms = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
+              const ideal = (L().pathIdealMs && L().pathIdealMs(t.iso, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) || 0;
               const label = ms >= 1000
-                ? ((L().fmtSpan && L().fmtSpan(ms)) || "") + " on the path today"
-                : "Times land as you finish each step";
-              return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Time · see the week</span></button>`;
+                ? ((L().fmtSpan && L().fmtSpan(ms)) || "") + " / " + ((L().fmtSpan && L().fmtSpan(ideal)) || "") + " ideal"
+                : "Ideal vs actual · open Time";
+              return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Pace</span></button>`;
             })()}
           </div>
         </div>
@@ -1666,7 +1667,7 @@
           <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
           <p>${allDone
             ? (clk.sunday ? "The light path is done. Church is the first appointment." : "You walked the whole path. Go well.")
-            : (cur ? subFor(cur) : "Mark rise and the morning begins.")}</p>
+            : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Mark rise and the morning begins.")}</p>
           ${allDone
             ? ""
             : `<button class="btn" data-act="open-step" data-step="${cur ? cur.id : "rise"}">${nextCta}</button>`}
@@ -1739,115 +1740,176 @@
   const viewTime = () => {
     const t = today();
     const fmt = (ms) => (L().fmtSpan && L().fmtSpan(ms)) || "—";
-    const todayMs = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
-    const todayParts = (L().timingParts && L().timingParts(t.iso)) || [];
-    const partLabel = (p) => (p.ms >= 1000 ? fmt(p.ms) : "Done");
+    const optsFor = (iso) => {
+      const parts = String(iso).split("-").map(Number);
+      const dt = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+      const day = days.find((x) => x.dow === dt.getDay()) || todayDay();
+      return { trainMin: day.minutes, chapters: L().chapterTarget(iso) };
+    };
+    const opts = optsFor(t.iso);
+    const times = (L().timesOf && L().timesOf(t.iso)) || {};
+    const morn = L().morningOf(t.iso);
     const cur = currentStep();
     let live = 0;
     try {
-      const row = cur && L().timesOf ? (L().timesOf(t.iso)[cur.id] || {}) : {};
+      const row = cur && times[cur.id] ? times[cur.id] : {};
       if (row && row.open && !row.ms) live = Math.max(0, Date.now() - row.open);
     } catch { live = 0; }
-    const thisW = weekTime(0);
-    const lastW = weekTime(-1);
-    const titles = {};
-    (L().STEPS || []).concat(L().EVENING || []).forEach((s) => { titles[s.id] = s.title; });
-    const areas = [
-      { id: "still", title: "Pray & affirm", ids: ["pray", "affirm"] },
-      { id: "word", title: "The Word", ids: ["devotion", "verse", "word", "drill", "recite", "evening", "nightquiz"] },
-      { id: "body", title: "Train & ready", ids: ["move", "ready"] },
-      { id: "plan", title: "Plan & go", ids: ["plan", "go", "rise", "lights"] }
-    ];
-    const sumIds = (pack, ids) => ids.reduce((n, id) => n + ((pack.byStep && pack.byStep[id]) || 0), 0);
+    const rows = (L().STEPS || []).map((s) => {
+      const ideal = (L().idealMsFor && L().idealMsFor(t.iso, s.id, opts)) || 0;
+      const actual = (times[s.id] && times[s.id].ms) || 0;
+      const shown = (cur && cur.id === s.id && live > actual) ? live : actual;
+      const done = !!morn[s.id] || (s.id === "move" && !!completedOn(t.iso));
+      const kind = (L().paceKind && L().paceKind(s.id, shown, ideal)) || "open";
+      return { id: s.id, title: s.title, ideal, actual: shown, done, kind, live: !!(cur && cur.id === s.id && live >= 1000 && !done) };
+    });
+    const todayMs = rows.reduce((n, r) => n + (r.actual || 0), 0);
+    const idealMs = (L().pathIdealMs && L().pathIdealMs(t.iso, opts)) || rows.reduce((n, r) => n + r.ideal, 0);
+    const windowMs = (L().pathWindowMs && L().pathWindowMs(t.iso)) || idealMs;
+    const sunday = L().clocksFor(t.date).sunday;
+    const maxBar = Math.max(idealMs, todayMs, 1);
+    const kindLabel = { pace: "On pace", long: "Over", short: "Short", held: "Held", open: "—" };
+    const focus = rows
+      .filter((r) => r.actual >= 1000 || r.done)
+      .filter((r) => r.kind === "long" || r.kind === "short")
+      .map((r) => Object.assign({}, r, { mag: Math.abs(r.actual - r.ideal) }))
+      .sort((a, b) => b.mag - a.mag)
+      .slice(0, 2);
     const notes = [];
-    if (thisW.daysN < 2) {
-      notes.push("Finish a few mornings. This page will show where the time goes, and whether the path is tightening.");
-    } else if (lastW.daysN) {
-      const dt = thisW.avg - lastW.avg;
-      if (Math.abs(dt) >= 3 * 60000) {
-        notes.push(dt < 0
-          ? "The path is " + fmt(-dt) + " tighter than last week."
-          : "The path ran " + fmt(dt) + " longer than last week.");
-      } else {
-        notes.push("The morning is holding steady against last week.");
-      }
-      const wordD = sumIds(thisW, areas[1].ids) - sumIds(lastW, areas[1].ids);
-      const stillD = sumIds(thisW, areas[0].ids) - sumIds(lastW, areas[0].ids);
-      const bodyD = sumIds(thisW, areas[2].ids) - sumIds(lastW, areas[2].ids);
-      if (wordD >= 5 * 60000) notes.push("You stayed with the Word " + fmt(wordD) + " longer.");
-      else if (wordD <= -8 * 60000) notes.push("Word was " + fmt(-wordD) + " shorter. Guard the chapters.");
-      if (stillD >= 3 * 60000) notes.push("Prayer held " + fmt(stillD) + " more.");
-      if (bodyD <= -5 * 60000) notes.push("Train and ready ran " + fmt(-bodyD) + " tighter.");
+    if (todayMs < 1000 && !rows.some((r) => r.done)) {
+      notes.push("Finish a step. Ideal vs actual is how you see which part of the morning needs you.");
     } else {
-      notes.push("This is the baseline week. Next week you’ll see what grew.");
+      if (todayMs > windowMs + 3 * 60000) {
+        notes.push(sunday
+          ? "The path is over the 5:45 window. Cut from ready and plan — not the Word."
+          : "The path ran past the 90 min aim. Find the leak below.");
+      } else if (todayMs >= 1000 && todayMs <= idealMs + 2 * 60000 && rows.filter((r) => r.done || r.actual >= 1000).length >= 4) {
+        notes.push("The morning is inside the mark. Keep the Word full.");
+      }
+      focus.forEach((f) => {
+        const over = f.actual - f.ideal;
+        if (f.kind === "long") {
+          notes.push(f.title + " used " + fmt(f.actual) + " against " + fmt(f.ideal) + ". That’s " + fmt(over) + " over — this is where the morning leaks.");
+        } else {
+          notes.push(f.title + " was " + fmt(f.actual) + " against " + fmt(f.ideal) + ". Short by " + fmt(-over) + ". Don’t starve this.");
+        }
+      });
     }
-    const stepIds = Object.keys(thisW.byStep);
-    const maxStep = stepIds.reduce((m, id) => Math.max(m, thisW.byStep[id] || 0), 0) || 1;
-    const stepRows = (L().STEPS || []).concat(L().EVENING || []).map((s) => {
-      const curMs = thisW.byStep[s.id] || 0;
-      if (curMs < 1000) return "";
-      const prevMs = lastW.byStep[s.id] || 0;
-      const d = curMs - prevMs;
-      const delta = !lastW.daysN || Math.abs(d) < 60000
-        ? ""
-        : `<span class="time-delta ${d > 0 ? "up" : "dn"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
-      const pct = Math.max(8, Math.round(curMs / maxStep * 100));
+    const cmpRow = (r) => {
+      const delta = r.actual && r.ideal ? (r.actual - r.ideal) : 0;
+      const dLab = !r.actual
+        ? "—"
+        : (Math.abs(delta) < 60000 ? "on pace" : ((delta > 0 ? "+" : "−") + fmt(Math.abs(delta))));
+      const actPct = Math.max(2, Math.min(100, Math.round(r.actual / maxBar * 100)));
+      const idPct = Math.max(2, Math.min(100, Math.round(r.ideal / maxBar * 100)));
+      const k = r.actual >= 1000 ? r.kind : "open";
       return `
-        <div class="time-row">
-          <div>
-            <h4>${escapeHtml(s.title)}</h4>
-            <p>${fmt(curMs)} this week${thisW.daysN ? " · " + fmt(Math.round(curMs / thisW.daysN)) + " avg" : ""}</p>
-          </div>
-          ${delta}
-          <div class="time-bar"><i style="width:${pct}%"></i></div>
+        <div class="time-cmp">
+          <div class="lab">${escapeHtml(r.title)}${r.live ? " · now" : ""}<span>${kindLabel[k] || "—"}</span></div>
+          <b class="ideal">${fmt(r.ideal)}</b>
+          <b class="${k}">${r.actual >= 1000 ? fmt(r.actual) : (r.done ? "Done" : "—")}</b>
+          <b class="${k}">${dLab}</b>
+          <div class="time-track"><i class="ideal" style="width:${idPct}%"></i><i class="act ${k}" style="width:${actPct}%"></i></div>
         </div>`;
+    };
+    const thisW = weekTime(0);
+    const weekRows = thisW.isos.map((iso) => {
+      const o = optsFor(iso);
+      const act = (L().dayTotalMs && L().dayTotalMs(iso)) || 0;
+      const ideal = (L().pathIdealMs && L().pathIdealMs(iso, o)) || 0;
+      const win = (L().pathWindowMs && L().pathWindowMs(iso)) || ideal;
+      const parts = (L().timingParts && L().timingParts(iso)) || [];
+      let wordAct = 0, wordIdeal = 0;
+      ["devotion", "verse", "word", "drill", "recite"].forEach((id) => {
+        wordIdeal += (L().idealMsFor && L().idealMsFor(iso, id, o)) || 0;
+        const hit = parts.find((x) => x.id === id);
+        wordAct += (hit && hit.ms) || 0;
+      });
+      const over = act > win + 3 * 60000;
+      const starved = wordAct >= 1000 && wordIdeal && wordAct < wordIdeal * 0.7;
+      return { iso, act, ideal, win, over, starved };
+    });
+    const timedDays = weekRows.filter((d) => d.act >= 1000);
+    const inAim = timedDays.filter((d) => !d.over && !d.starved).length;
+    const weekFocus = [];
+    if (timedDays.length) {
+      const overN = timedDays.filter((d) => d.over).length;
+      const starN = timedDays.filter((d) => d.starved).length;
+      if (overN) weekFocus.push(overN + " morning" + (overN === 1 ? "" : "s") + " ran past the window.");
+      if (starN) weekFocus.push("The Word was short on " + starN + " day" + (starN === 1 ? "" : "s") + ". Guard the chapters.");
+      if (!overN && !starN) weekFocus.push("This week is inside the mark. Hold it.");
+    }
+    const areaIds = [
+      { title: "Pray & affirm", ids: ["pray", "affirm"] },
+      { title: "The Word", ids: ["devotion", "verse", "word", "drill", "recite"] },
+      { title: "Train & ready", ids: ["move", "ready"] },
+      { title: "Plan & go", ids: ["plan", "go"] }
+    ];
+    const areaBlock = areaIds.map((a) => {
+      let act = 0, ideal = 0;
+      a.ids.forEach((id) => {
+        act += thisW.byStep[id] || 0;
+        thisW.isos.forEach((iso) => {
+          if (((L().dayTotalMs && L().dayTotalMs(iso)) || 0) < 1000) return;
+          ideal += (L().idealMsFor && L().idealMsFor(iso, id, optsFor(iso))) || 0;
+        });
+      });
+      if (act < 1000 && ideal < 1000) return "";
+      const kind = ideal && act > ideal * 1.2 ? "long" : (ideal && act < ideal * 0.75 ? "short" : "pace");
+      const d = act - ideal;
+      const dLab = !timedDays.length || Math.abs(d) < 60000 ? "" : ((d > 0 ? "+" : "−") + fmt(Math.abs(d)));
+      return `<div class="time-day"><span>${escapeHtml(a.title)}</span><b class="${kind}">${act >= 1000 ? fmt(act) : "—"} / ${ideal ? fmt(ideal) : "—"} ideal${dLab ? `<i>${dLab}</i>` : ""}</b></div>`;
     }).join("");
-    const dayRows = thisW.days.map((d) => {
+    const dayRows = weekRows.map((d) => {
       const dt = new Date(d.iso + "T12:00:00");
       const name = DOW[dt.getDay()];
       const isToday = d.iso === t.iso;
-      return `<div class="time-day ${isToday ? "today" : ""}"><span>${isToday ? "Today" : name}</span><b>${d.ms >= 1000 ? fmt(d.ms) : "—"}</b></div>`;
-    }).join("");
-    const areaRows = areas.map((a) => {
-      const ms = sumIds(thisW, a.ids);
-      if (ms < 1000) return "";
-      const prev = sumIds(lastW, a.ids);
-      const d = ms - prev;
-      const delta = !lastW.daysN || Math.abs(d) < 60000 ? "" : (d > 0 ? "+" : "−") + fmt(Math.abs(d));
-      return `<div class="time-day"><span>${escapeHtml(a.title)}</span><b>${fmt(ms)}${delta ? `<i>${delta}</i>` : ""}</b></div>`;
+      const mark = d.act < 1000 ? "—" : (d.over ? "over" : (d.starved ? "short" : "pace"));
+      return `<div class="time-day ${isToday ? "today" : ""}"><span>${isToday ? "Today" : name}</span><b class="${mark === "—" ? "" : mark}">${d.act >= 1000 ? fmt(d.act) + " / " + fmt(d.ideal) : "—"}</b></div>`;
     }).join("");
     const liveLine = (cur && live >= 1000)
-      ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)}</p>`
+      ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)} of ${fmt((L().idealMsFor && L().idealMsFor(t.iso, cur.id, opts)) || 0)} ideal</p>`
       : "";
+    const headHint = sunday ? "Sunday window 4:00–5:45 · 105 min" : "Weekday aim 90 min · don’t cut the Word to make it";
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">Time<h2>The path.</h2></div>
+        <div class="topbar"><div class="greet">Time<h2>Pace.</h2></div>
           <button class="linkish" data-go="home">Today</button>
         </div>
-        <p class="plan-kicker">How long each step actually took. Use it to tighten the morning without starving the Word.</p>
+        <p class="plan-kicker">${headHint}. Ideal is the mark. Actual is what happened. The gap is where to focus.</p>
         ${liveLine}
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : (todayParts.length ? "Done" : "Not yet")}</span></div>
-          ${todayParts.length
-            ? todayParts.map((p) => `<div class="time-day"><span>${escapeHtml(p.title)}</span><b>${partLabel(p)}</b></div>`).join("")
-            : `<p class="hint" style="margin:0">Open a step. When you finish it, the minutes land here.</p>`}
-        </div>
-        <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This week</h4><span>${thisW.daysN ? thisW.daysN + " morning" + (thisW.daysN === 1 ? "" : "s") : "—"}</span></div>
-          <div class="pulse-stats" style="margin:0;padding:0;border:0">
-            <div><b>${thisW.daysN ? fmt(thisW.avg) : "—"}</b><span>Avg path</span></div>
-            <div><b>${thisW.total ? fmt(thisW.total) : "—"}</b><span>This week</span></div>
-            <div><b>${lastW.daysN ? fmt(lastW.avg) : "—"}</b><span>Last week</span></div>
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : "—"} / ${fmt(idealMs)}</span></div>
+          <div class="pulse-stats" style="margin:0 0 10px;padding:0;border:0">
+            <div><b>${todayMs >= 1000 ? fmt(todayMs) : "—"}</b><span>Actual</span></div>
+            <div><b>${fmt(idealMs)}</b><span>Ideal</span></div>
+            <div><b>${fmt(windowMs)}</b><span>${sunday ? "To 5:45" : "Aim"}</span></div>
           </div>
+          <div class="time-track big"><i class="ideal" style="width:${Math.min(100, Math.round(idealMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i><i class="act ${todayMs > windowMs ? "long" : "pace"}" style="width:${Math.min(100, Math.round(todayMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i></div>
           ${notes.map((n) => `<p class="hint" style="margin:10px 0 0">${escapeHtml(n)}</p>`).join("")}
-          ${areaRows}
+        </div>
+        ${focus.length ? `
+        <div class="time-focus">
+          <div class="section-h" style="padding:0;margin:0 0 6px"><h4>Needs focus</h4></div>
+          ${focus.map((f) => `<p><strong>${escapeHtml(f.title)}</strong> · ${fmt(f.actual)} actual · ${fmt(f.ideal)} ideal</p>`).join("")}
+        </div>` : ""}
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4><span>Ideal · actual</span></div>
+          <div class="time-cmp head"><div class="lab"></div><b class="ideal">Ideal</b><b>Used</b><b>Gap</b></div>
+          ${rows.map(cmpRow).join("")}
         </div>
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4></div>
-          ${stepRows || `<p class="hint" style="margin:0">Walk the path. Each step writes a time.</p>`}
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This week</h4><span>${timedDays.length ? inAim + "/" + timedDays.length + " on aim" : "—"}</span></div>
+          <div class="pulse-stats" style="margin:0;padding:0;border:0">
+            <div><b>${thisW.daysN ? fmt(thisW.avg) : "—"}</b><span>Avg used</span></div>
+            <div><b>${timedDays.length ? fmt(Math.round(timedDays.reduce((n, d) => n + d.ideal, 0) / timedDays.length)) : "—"}</b><span>Avg ideal</span></div>
+            <div><b>${timedDays.length ? inAim + "/" + timedDays.length : "—"}</b><span>On aim</span></div>
+          </div>
+          ${weekFocus.map((n) => `<p class="hint" style="margin:10px 0 0">${escapeHtml(n)}</p>`).join("")}
+          ${areaBlock}
         </div>
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>Days</h4></div>
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>Days</h4><span>Used / ideal</span></div>
           ${dayRows}
         </div>
       </div>
