@@ -555,7 +555,7 @@
           <div class="ai-reply">
             ${state.ai.busy ? `<p class="hint">Thinking…</p>` : ""}
             ${state.ai.error ? `<div class="err">${escapeHtml(state.ai.error)}</div>` : ""}
-            ${state.ai.reply ? formatAiReply(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">Brief the morning, scale a session, or sit with the Word. Gemini first — Groq if it’s down.</p>` : "")}
+            ${state.ai.reply ? formatAiReply(state.ai.reply) : (!state.ai.busy && !state.ai.error ? `<p class="hint">Ask about this screen, today’s path, or how ALIGN works. It uses your live facts — it will not invent a verse or a feature.</p>` : "")}
           </div>
           ${state.ai.provider ? `<div class="ai-via">${escapeHtml((state.ai.provider === "groq" ? "Groq" : "Gemini") + " · " + state.ai.model)}</div>` : ""}
           <div class="ai-row">
@@ -644,44 +644,138 @@
     const t = today();
     const day = todayDay();
     const clk = L().clocksFor(t.date);
+    const steps = pathSteps();
+    const cur = (typeof currentStep === "function") ? currentStep() : null;
+    const doneTitles = steps.filter((s) => typeof stepIsDone === "function" && stepIsDone(s)).map((s) => s.title);
+    const openTitles = steps.filter((s) => !(typeof stepIsDone === "function" && stepIsDone(s))).map((s) => s.title);
+    const screen = {
+      home: "Today — the path",
+      time: "Pace — ideal vs actual after the path",
+      plan: "Move — the week and today's session",
+      ready: "Session ready / Start",
+      exercise: "An exercise in today's session",
+      player: "Move player",
+      word: "Word hub",
+      pray: "Prayer overlay",
+      devotion: "Morning devotion (Spurgeon)",
+      bible: "Scripture reader",
+      verse: "Memory — devotion verse, then hide the words",
+      drill: "Sprint — 30 questions on today's text",
+      affirm: "Affirm — user-written line",
+      dayplan: "Plan the day — Top 3 and Also",
+      getready: "Get ready",
+      recite: "Verse again before Begin",
+      go: "Begin the day",
+      library: "Book library and shelves",
+      book: "One book's schedule and shelf",
+      reader: "PDF reader",
+      journal: "Notepad (not devotion)",
+      journalwrite: "Writing a note",
+      evening: "Evening Word",
+      lights: "Lights out — same devotion verse",
+      profile: "You — account, reminders, AI",
+      sound: "Sounds in ALIGN",
+      progress: "Training log",
+      balance: "How training is built"
+    };
     const lines = [
-      "Today is " + DOW_FULL[t.dow] + " (" + t.iso + ").",
-      "Training: " + day.name + " · " + day.minutes + " min · " + day.subtitle + ".",
-      clk.sunday ? "Sunday church morning. Leave by 5:45 AM." : ("Wake " + clk.wakeLabel + "."),
-      "Open screen: " + state.view + "."
+      "Name: " + ((state.profile && state.profile.name) || "(not set)"),
+      "Today is " + DOW_FULL[t.dow] + " (" + t.iso + "). " + (clk.sunday
+        ? "Sunday. Rise 4:00 AM. Leave for church by 5:45 AM. Lights midnight."
+        : ("Weekday. Rise " + clk.wakeLabel + ". Lights " + (clk.tonightLabel || "1:00 AM") + ".")),
+      "Training day: " + day.name + " · " + day.minutes + " min · " + day.subtitle + ".",
+      "Open screen: " + state.view + " (" + (screen[state.view] || "in ALIGN") + ").",
+      "Path done: " + (doneTitles.join(", ") || "none") + ".",
+      "Path next: " + (cur ? cur.title : "path complete") + ".",
+      "Path still open: " + (openTitles.join(", ") || "none") + "."
     ];
+    try {
+      const tv = S() && S().todayVerse && S().todayVerse(t.iso);
+      if (tv) {
+        const ref = S().refOf ? S().refOf(tv) : "";
+        const body = String(tv.text || tv.t || tv.verse || "").slice(0, 280);
+        lines.push("Memory verse (the devotion line, not the day's chapters): " + [ref, body].filter(Boolean).join(" — "));
+      }
+    } catch { /* optional */ }
+    if (state.spurgeonAm) {
+      if (state.spurgeonAm.v) lines.push("Morning devotion verse: " + state.spurgeonAm.v);
+      if (state.spurgeonAm.b) lines.push("Devotion excerpt: " + String(state.spurgeonAm.b).slice(0, 500));
+    }
+    if (state.spurgeonPm && (state.view === "evening" || state.view === "lights")) {
+      if (state.spurgeonPm.v) lines.push("Evening devotion verse: " + state.spurgeonPm.v);
+    }
+    try {
+      const aff = L().affirmationPref && L().affirmationPref();
+      if (aff) lines.push("User affirmation: " + String(aff).slice(0, 280));
+    } catch { /* optional */ }
+    try {
+      const a = L().todayAssignment(t.iso);
+      const target = L().chapterTarget(t.iso);
+      const read = (a && a.read) || [];
+      const next = a && a.next;
+      lines.push("Scripture target today: " + target + " chapter(s)."
+        + (next ? (" Next: " + next.book + " " + next.chapter + ".") : "")
+        + (read.length ? (" Already read: " + read.map((x) => (x.book || "") + " " + (x.chapter || "")).join(", ") + ".") : " None read yet."));
+    } catch { /* optional */ }
     if (state.view === "bible" && state.bibleData) {
-      lines.push("Scripture: " + (state.bibleData.reference || (state.readBook + " " + state.readCh)) + ".");
-      const vs = ((state.bibleData.verses || []).slice(0, 10)).map((x) => x.verse + ". " + String(x.text || "").trim()).join(" ");
+      lines.push("Open Scripture: " + (state.bibleData.reference || (state.readBook + " " + state.readCh)) + ".");
+      const vs = ((state.bibleData.verses || []).slice(0, 12)).map((x) => x.verse + ". " + String(x.text || "").trim()).join(" ");
       if (vs) lines.push("Chapter start: " + vs.slice(0, 900));
     }
-    if (state.spurgeonAm && (state.view === "devotion" || state.view === "home")) {
-      lines.push("Morning devotion verse: " + (state.spurgeonAm.v || ""));
-      lines.push("Devotion excerpt: " + String(state.spurgeonAm.b || "").slice(0, 600));
-    }
-    if (state.view === "ready" || state.view === "exercise" || state.view === "plan") {
+    if (state.view === "ready" || state.view === "exercise" || state.view === "plan" || state.view === "player") {
       lines.push("Moves: " + day.items.map((it) => {
         const ex = exercises[it.id];
         return (ex ? ex.name : it.id) + " " + it.target;
       }).join(", ") + ".");
     }
+    try {
+      const hist = completedOn(t.iso);
+      if (hist) lines.push("Training already logged today: " + (hist.minutes || 0) + " min, " + (hist.completed || 0) + "/" + (hist.total || 0) + " — keep the longest if they save again.");
+    } catch { /* optional */ }
+    try {
+      const due = B().dueToday(t.iso) || [];
+      if (due.length) {
+        lines.push("Books due today: " + due.map((b) => {
+          const cat = (B().catLabel && B().catLabel(b.category)) || b.category || "";
+          return (b.title || "Untitled") + " p." + (b.current_page || 1) + (b.pages ? "/" + b.pages : "") + (cat && cat !== "Unfiled" ? " [" + cat + "]" : "");
+        }).join("; ") + ".");
+      }
+      const n = (B().list() || []).length;
+      if (n) lines.push("Library: " + n + " title(s).");
+    } catch { /* optional */ }
     if (state.bookId) {
-      const b = B().byId(state.bookId);
-      if (b) lines.push("Book: " + b.title + ", page " + (state.pdfPage || b.current_page) + (b.pages ? " of " + b.pages : "") + ".");
+      try {
+        const b = B().byId(state.bookId);
+        if (b) lines.push("Open book: " + b.title + ", page " + (state.pdfPage || b.current_page) + (b.pages ? " of " + b.pages : "") + (b.category ? ", shelf " + b.category : "") + ".");
+      } catch { /* optional */ }
     }
     try {
       const plan = L().planOf(t.iso);
       const pri = (plan.priorities || []).map(prioOf).map((x) => x.text).filter(Boolean);
-      if (pri.length) lines.push("Priorities already set: " + pri.join(" · ") + ".");
+      if (pri.length) lines.push("Top 3 already set: " + pri.join(" · ") + ".");
+      const also = (plan.also || plan.tasks || []).map((x) => (x && (x.text || x)) || "").filter(Boolean);
+      if (also.length) lines.push("Also: " + also.slice(0, 8).join(" · ") + ".");
       if (plan.note) lines.push("Day notes: " + String(plan.note).slice(0, 400));
-    } catch { /* ignore */ }
+    } catch { /* optional */ }
     try {
       if (state.view === "journal" || state.view === "journalwrite") {
-        lines.push("This is the ALIGN notepad — free writing, not the devotion takeaway.");
+        lines.push("This is the ALIGN notepad — free writing, not the devotion takeaway, not on the dashboard.");
         const n = (L().noteById && state.journalNoteId) ? L().noteById(state.journalNoteId) : null;
         if (n && (n.title || n.body)) lines.push("Open note: " + [n.title, n.body].filter(Boolean).join("\n").slice(0, 500));
       }
-    } catch { /* ignore */ }
+    } catch { /* optional */ }
+    try {
+      if (state.view === "time" && L().timingParts) {
+        const rows = L().timingParts(t.iso) || [];
+        const bits = rows.slice(0, 12).map((r) => {
+          const ideal = (L().idealMinFor && L().idealMinFor(t.iso, r.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) || 0;
+          const act = Math.round((r.ms || 0) / 60000);
+          return r.title + " " + act + "m vs ideal " + ideal + "m";
+        });
+        if (bits.length) lines.push("Pace today: " + bits.join("; ") + ".");
+      }
+    } catch { /* optional */ }
+    lines.push("If a fact is not in this list, you do not know it. Do not guess.");
     return lines.join("\n");
   };
 

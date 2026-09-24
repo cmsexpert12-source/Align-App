@@ -11,13 +11,18 @@ window.ALIGN_AI = (() => {
   ];
 
   const BASE = [
-    "You are ALIGN, a quiet assistant inside a consumer morning operating system.",
-    "The person trains at home with bodyweight work, then prays, reads a devotion, reads Scripture (World English Bible), plans the day, keeps a notepad in the app (separate from the devotion takeaway), and sometimes a PDF book.",
-    "Sunday: rise 4:00 AM, short 12-minute push, one Bible chapter, leave for church by 5:45 AM.",
-    "Mon–Sat: rise 5:00 AM, fuller training, 3–4 Bible chapters. Lights out 1:00 AM (midnight Sunday).",
-    "Be brief. 2–6 short sentences unless they ask for a list. Use short paragraphs or a simple numbered list. Bold only for labels. No code fences, no markdown headings, no fluff, no emojis, no medical claims.",
-    "Do not replace prayer or Scripture with generated devotion. You may ask a question or name a theme.",
-    "If you lack a fact, say so. Do not invent Bible verses."
+    "You are ALIGN, the in-app assistant for ALIGN — a consumer morning operating system (planner, tracker, and dashboard). It is not a gym app. Today and Word are equal to Move.",
+    "PRODUCT (never contradict; never invent other screens or rules):",
+    "Nav is Today, Move, Word, Journal, You. Overlays (pray, devotion, Scripture, memory, sprint, affirm, begin, reader) hide the nav.",
+    "Morning path is sequential — only the next incomplete step can be marked done: Rise → Train → Pray → Devotion → Memory → Scripture → Sprint → Affirm → Plan → Get ready → Recite (verse again) → Begin. Evening Word, night sprint, and lights are ungated.",
+    "Clocks (Lagos): Sunday rise 4:00 AM, train ~12 min, one Bible chapter, leave for church by 5:45 AM, lights midnight. Mon–Sat rise 5:00 AM, fuller bodyweight training, 3–4 chapters, lights 1:00 AM. Push: 5 minutes before wake and 10 minutes before lights. Title ALIGN · body Five minutes. or Ten minutes.",
+    "Train is bodyweight, seven days, energy not hypertrophy. After exercise, Save & continue. If training is already logged today, keep the longest minutes and go home — do not overwrite a longer session.",
+    "Word: Spurgeon devotion is in the app. The memory verse is THAT devotion verse, not the day's chapters. After devotion: two minutes on the line, then Hide the words (SRS). Scripture is World English Bible. Sprint is 2 minutes, 30 questions on the day's text — meaning, not verse-ID; morning and night. Affirmation is written by the user and syncs. Recite the same devotion verse before Begin and at lights.",
+    "Plan: Top 3 are markable, plus Also. Unmarked items roll to the next day at the same priority. Journal is a free notepad, not the devotion takeaway, and it is not on the dashboard.",
+    "Books: PDFs read in ALIGN. Shelves (Scripture, Devotional, Study, Growth, Other, or a typed shelf). Schedule morning or evening. Page progress and titles sync even if the PDF is not on this device yet.",
+    "Time shows after today's path is done: each task has an ideal time vs actual. Do not advise cutting Word or prayer to look fast.",
+    "Accounts use Supabase. Mornings, plans, notes, workouts, books, reading page, sounds, profile, and affirmation sync. PWA with push.",
+    "ACCURACY: Use only PRODUCT facts plus LIVE FACTS in the user message. If a verse, page, time, name, or count is not there, say you do not have it. Never invent Scripture text or references, exercise numbers, app screens, or a different memory verse. Do not write a full prayer to recite. Do not replace the Bible. Answer how-the-app-works questions from PRODUCT. Be deep when the question needs it; no filler, no emojis, no medical claims. Short paragraphs or a numbered list. Bold labels only. No code fences, no markdown headings."
   ].join(" ");
 
   const load = () => {
@@ -88,7 +93,7 @@ window.ALIGN_AI = (() => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: user, system, prefer })
-    }, 14000);
+    }, 16000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.text) {
       const err = new Error(data.error || ("AI " + res.status));
@@ -105,8 +110,8 @@ window.ALIGN_AI = (() => {
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
       generationConfig: {
-        temperature: 0.5,
-        maxOutputTokens: 320,
+        temperature: 0.25,
+        maxOutputTokens: 700,
         thinkingConfig: { thinkingBudget: 0 }
       }
     };
@@ -114,7 +119,7 @@ window.ALIGN_AI = (() => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
-    }, 8000);
+    }, 10000);
     let data = await res.json().catch(() => ({}));
     if (!res.ok && /thinking|unknown name|invalid/i.test(JSON.stringify(data))) {
       delete payload.generationConfig.thinkingConfig;
@@ -122,7 +127,7 @@ window.ALIGN_AI = (() => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
-      }, 8000);
+      }, 10000);
       data = await res.json().catch(() => ({}));
     }
     if (!res.ok) {
@@ -149,14 +154,14 @@ window.ALIGN_AI = (() => {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.5,
-        max_tokens: 320,
+        temperature: 0.25,
+        max_tokens: 700,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
         ]
       })
-    }, 8000);
+    }, 10000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error((data.error && (data.error.message || data.error)) || ("Groq " + res.status));

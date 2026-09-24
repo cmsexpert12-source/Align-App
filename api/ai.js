@@ -10,8 +10,8 @@ const GROQ_MODELS = [
   "openai/gpt-oss-20b"
 ];
 
-const MAX_TOK = 320;
-const CALL_MS = 7000;
+const MAX_TOK = 700;
+const CALL_MS = 10000;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +44,7 @@ async function callGemini(key, model, system, prompt) {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.5,
+      temperature: 0.25,
       maxOutputTokens: MAX_TOK,
       thinkingConfig: { thinkingBudget: 0 }
     }
@@ -77,7 +77,7 @@ async function callGroq(key, model, system, prompt) {
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
     body: JSON.stringify({
       model,
-      temperature: 0.5,
+      temperature: 0.25,
       max_tokens: MAX_TOK,
       messages: [
         { role: "system", content: system },
@@ -152,9 +152,9 @@ export default async function handler(req, res) {
     if (typeof req.body === "string") {
       try { body = JSON.parse(req.body); } catch { body = {}; }
     }
-    const prompt = String(body.prompt || "").trim().slice(0, 4000);
+    const prompt = String(body.prompt || "").trim().slice(0, 8000);
     if (!prompt) return send(res, 400, { error: "prompt required" });
-    const system = String(body.system || "You are ALIGN. Be brief.").slice(0, 6000);
+    const system = String(body.system || "You are ALIGN. Be accurate. Use only the live facts given.").slice(0, 10000);
     let prefer = body.prefer === "groq" ? ["groq", "gemini"]
       : body.prefer === "gemini" ? ["gemini", "groq"]
         : ["gemini", "groq"];
