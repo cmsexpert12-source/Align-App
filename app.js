@@ -344,6 +344,10 @@
   const applySession = async (session) => {
     state.session = session;
     if (!session) return;
+    const waited = Date.now();
+    while (applying && Date.now() - waited < 15000) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
     if (applying) return;
     applying = true;
     try {
@@ -453,7 +457,6 @@
       }
       const remoteLog = await AlignDB.fetchReadingLog();
       if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
-      try { (B().list() || []).forEach((b) => { if (b && b.id) AlignDB.upsertBookMeta(b); }); } catch { /* later flush */ }
       hydrateBooks().catch(() => {});
     } catch { /* books schema may not be applied yet */ }
     try {
@@ -2521,7 +2524,7 @@
           <button class="hub-card" data-go="library">
             <div class="tile">${stepIcon("read")}</div>
             <h3>Books</h3>
-            <p>${B().list().length ? B().list().length + " on this device" : "Upload a PDF. Read offline."}</p>
+            <p>${B().list().length ? B().list().length + " in your library" : "Titles sync to this account. Upload a PDF or open after signing in."}</p>
           </button>
         </div>
         <div class="pulse" style="margin-top:4px">
@@ -3221,7 +3224,7 @@
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
           <button class="btn" data-act="pick-pdf" style="margin-bottom:14px">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
-          ${!books.length ? `<div class="empty">Drop in a book you already own. Schedule a sitting. It stays offline after the first save.</div>` : books.map((b) => {
+          ${!books.length ? `<div class="empty">${state.session ? "Titles on this account show here even before the PDF is on this device. Open Word → Books after signing in, or upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</div>` : books.map((b) => {
             const due = B().dueToday(iso).some((x) => x.id === b.id);
             const pct = Math.round(B().progress(b) * 100);
             return `
@@ -4262,21 +4265,26 @@
       openReader(el.dataset.id || state.bookId);
     } else if (act === "close-reader") {
       const id = state.bookId;
-      if (id) B().update(id, { current_page: state.pdfPage });
+      if (id) {
+        const next = B().update(id, { current_page: state.pdfPage });
+        if (next && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(next, { delay: 0 });
+      }
       closePdf();
       state.view = "library";
       render();
     } else if (act === "pdf-prev") {
       if (!pdfDoc) return;
       state.pdfPage = Math.max(1, state.pdfPage - 1);
-      B().update(state.bookId, { current_page: state.pdfPage });
+      const prev = B().update(state.bookId, { current_page: state.pdfPage });
+      if (prev && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(prev, { delay: 800 });
       const elPg = app.querySelector(".pg");
       if (elPg) elPg.textContent = state.pdfPage + (state.pdfPages ? " / " + state.pdfPages : "");
       paintPdf();
     } else if (act === "pdf-next") {
       if (!pdfDoc) return;
       state.pdfPage = Math.min(state.pdfPages || state.pdfPage + 1, state.pdfPage + 1);
-      B().update(state.bookId, { current_page: state.pdfPage });
+      const nxt = B().update(state.bookId, { current_page: state.pdfPage });
+      if (nxt && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(nxt, { delay: 800 });
       const elPg = app.querySelector(".pg");
       if (elPg) elPg.textContent = state.pdfPage + (state.pdfPages ? " / " + state.pdfPages : "");
       paintPdf();
@@ -4287,9 +4295,9 @@
       const from = b.current_page || 1;
       const to = Math.max(state.pdfPage, B().targetEnd(b));
       B().markRead(iso, b.id, from, to);
-      B().update(b.id, { current_page: Math.min((b.pages || to), to + 1) });
-      AlignDB.saveReadingLog(iso, b.id, from, to).catch(() => {});
-      AlignDB.upsertBookMeta(B().byId(b.id)).catch(() => {});
+      const saved = B().update(b.id, { current_page: Math.min((b.pages || to), to + 1) });
+      try { if (saved) await AlignDB.upsertBookMeta(saved, { now: true }); } catch { /* keep local */ }
+      try { await AlignDB.saveReadingLog(iso, b.id, from, to, { now: true }); } catch { /* keep local */ }
       completeStep("read");
       closePdf();
       toast("Reading logged");

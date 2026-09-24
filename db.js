@@ -748,7 +748,13 @@ window.AlignDB = (() => {
 
   const flush = async () => {
     if (flushing) { dirty = true; return ok(true); }
-    const q = readOut();
+    const rank = (k) => {
+      if (k === "book" || k === "sound" || k === "profile") return 0;
+      if (k === "reading") return 2;
+      if (k === "note-del") return 3;
+      return 1;
+    };
+    const q = readOut().slice().sort((a, b) => rank(a.kind) - rank(b.kind));
     if (!q.length) return ok(true);
     if (!window.supabase || !window.supabase.createClient) {
       setErr("Database library did not load");
@@ -964,24 +970,30 @@ window.AlignDB = (() => {
   };
 
   const fetchBooks = async () => {
-    const sb = client();
     const userId = await uidOf();
-    if (!sb || !userId) return ok([]);
+    if (!userId) return ok([]);
+    const viaRest = await restSelect("books", "select=*&user_id=eq." + encodeURIComponent(userId) + "&order=updated_at.desc");
+    if (viaRest.length) return ok(viaRest);
+    const sb = client();
+    if (!sb) return ok(viaRest);
     const { data, error } = await sb.from("books").select("*").eq("user_id", userId).order("updated_at", { ascending: false });
     if (error) {
-      if (/does not exist|schema cache/i.test(error.message || "")) return ok([]);
-      return fail(error);
+      if (/does not exist|schema cache/i.test(error.message || "")) return ok(viaRest);
+      return viaRest.length ? ok(viaRest) : fail(error);
     }
-    return ok(data || []);
+    return ok(data || viaRest || []);
   };
 
   const fetchReadingLog = async () => {
-    const sb = client();
     const userId = await uidOf();
-    if (!sb || !userId) return ok([]);
+    if (!userId) return ok([]);
+    const viaRest = await restSelect("reading_log", "select=*&user_id=eq." + encodeURIComponent(userId));
+    if (viaRest.length) return ok(viaRest);
+    const sb = client();
+    if (!sb) return ok(viaRest);
     const { data, error } = await sb.from("reading_log").select("*").eq("user_id", userId);
-    if (error) return fail(error);
-    return ok(data || []);
+    if (error) return viaRest.length ? ok(viaRest) : fail(error);
+    return ok(data || viaRest || []);
   };
 
   const upsertBookMeta = async (book, opts) => {
@@ -1022,8 +1034,8 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
-  const saveReadingLog = async (iso, bookId, fromPage, toPage) =>
-    queueAndFlush("reading", iso + "|" + bookId, { iso, bookId, fromPage, toPage }, { delay: 0 });
+  const saveReadingLog = async (iso, bookId, fromPage, toPage, opts) =>
+    queueAndFlush("reading", iso + "|" + bookId, { iso, bookId, fromPage, toPage }, opts || { delay: 0 });
 
   const fetchSounds = async () => {
     const sb = client();

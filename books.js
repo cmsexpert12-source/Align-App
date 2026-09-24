@@ -64,8 +64,26 @@ window.ALIGN_BOOKS = (() => {
     });
   };
 
-  const list = () => loadJSON(LS, []);
-  const saveList = (arr) => saveJSON(LS, arr);
+  const coerceDays = (d) => {
+    if (Array.isArray(d)) return d.map(Number).filter((n) => n >= 0 && n <= 6);
+    if (typeof d === "string") {
+      return d.replace(/[{}\s]/g, "").split(",").map(Number).filter((n) => n >= 0 && n <= 6);
+    }
+    return [1, 2, 3, 4, 5, 6];
+  };
+  const coerceBook = (b) => {
+    if (!b || !b.id) return b;
+    return Object.assign({}, b, {
+      days: coerceDays(b.days),
+      current_page: Math.max(1, Number(b.current_page) || 1),
+      pages: Number(b.pages) || 0,
+      pages_per_day: Number(b.pages_per_day) || 8,
+      enabled: b.enabled !== false,
+      slot: b.slot === "morning" ? "morning" : "evening"
+    });
+  };
+  const list = () => (loadJSON(LS, []) || []).map(coerceBook);
+  const saveList = (arr) => saveJSON(LS, (arr || []).map(coerceBook));
   const byId = (id) => list().find((b) => b.id === id) || null;
 
   const upsertLocal = (book) => {
@@ -226,11 +244,14 @@ window.ALIGN_BOOKS = (() => {
     local.forEach((b) => { by[b.id] = b; });
     rows.forEach((r) => {
       if (!r || !r.id) return;
-      const cur = by[r.id] || {};
-      const remoteNewer = !cur.updated_at || (r.updated_at && r.updated_at >= cur.updated_at);
-      const next = remoteNewer ? { ...cur, ...r } : { ...r, ...cur };
+      const cur = coerceBook(by[r.id] || { id: r.id }) || { id: r.id };
+      const remote = coerceBook(r);
+      const remoteNewer = !cur.updated_at || (remote.updated_at && remote.updated_at >= cur.updated_at);
+      const next = remoteNewer ? { ...cur, ...remote } : { ...remote, ...cur };
       if (!next.storage_path && cur.storage_path) next.storage_path = cur.storage_path;
-      by[r.id] = next;
+      next.current_page = Math.max(Number(cur.current_page) || 1, Number(remote.current_page) || 1);
+      if ((Number(remote.pages) || 0) > (Number(next.pages) || 0)) next.pages = Number(remote.pages);
+      by[r.id] = coerceBook(next);
     });
     const arr = Object.values(by).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
     saveList(arr);
@@ -242,7 +263,17 @@ window.ALIGN_BOOKS = (() => {
     const log = logAll();
     rows.forEach((r) => {
       const k = logKey(r.date, r.book_id);
-      if (!log[k]) log[k] = { from: r.from_page, to: r.to_page, at: Date.now() };
+      const from = Number(r.from_page) || 1;
+      const to = Number(r.to_page) || from;
+      const cur = log[k];
+      if (!cur) log[k] = { from, to, at: Date.now() };
+      else {
+        log[k] = {
+          from: Math.min(Number(cur.from) || from, from),
+          to: Math.max(Number(cur.to) || 0, to),
+          at: Date.now()
+        };
+      }
     });
     saveJSON(LS_LOG, log);
   };
