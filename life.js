@@ -302,14 +302,79 @@ window.ALIGN_LIFE = (() => {
   const stamp = (obj) => Object.assign({}, obj, { updated_at: new Date().toISOString() });
   const ts = (v) => Date.parse((v && v.updated_at) || v || "") || 0;
 
+  const planTaskId = () => "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+  const shiftIso = (iso, days) => {
+    const parts = String(iso || "").split("-").map(Number);
+    const d = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+    d.setDate(d.getDate() + days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
+
+  const normPrio = (x, i) => {
+    if (x && typeof x === "object") {
+      return { text: String(x.text || "").trim(), done: !!x.done, id: x.id || ("p" + (i + 1)) };
+    }
+    return { text: String(x || "").trim(), done: false, id: "p" + (i + 1) };
+  };
+
+  const normalizePlan = (p) => {
+    const src = p || {};
+    const priorities = [0, 1, 2].map((i) => normPrio((src.priorities || [])[i], i));
+    const tasks = (src.tasks || []).map((t, i) => ({
+      id: (t && t.id) || ("t" + i),
+      text: String((t && t.text) || "").trim(),
+      done: !!(t && t.done)
+    }));
+    return Object.assign({}, src, { priorities, tasks, note: src.note || "" });
+  };
+
+  const carryInto = (iso, plan) => {
+    const all = loadJSON(LS_P, {});
+    const today = normalizePlan(plan);
+    if (today._carried) return today;
+    const seen = new Set(today.tasks.map((t) => String(t.text || "").toLowerCase()).filter(Boolean));
+    for (let n = 1; n <= 7; n++) {
+      const prev = all[shiftIso(iso, -n)];
+      if (!prev) continue;
+      const yp = normalizePlan(prev);
+      [0, 1, 2].forEach((i) => {
+        const y = yp.priorities[i];
+        const t = today.priorities[i];
+        if (y.text && !y.done && !t.text) {
+          today.priorities[i] = { text: y.text, done: false, id: y.id || ("p" + (i + 1)) };
+        }
+      });
+      yp.tasks.forEach((tk) => {
+        if (!tk.text || tk.done) return;
+        const key = tk.text.toLowerCase();
+        if (seen.has(key)) return;
+        today.tasks.push({ id: tk.id || planTaskId(), text: tk.text, done: false });
+        seen.add(key);
+      });
+    }
+    today._carried = true;
+    return today;
+  };
+
   const planOf = (iso) => {
     const all = loadJSON(LS_P, {});
-    if (!all[iso]) all[iso] = { priorities: ["", "", ""], tasks: [], note: "" };
-    return all[iso];
+    let row = normalizePlan(all[iso] || { priorities: ["", "", ""], tasks: [], note: "" });
+    if (!row._carried) {
+      row = carryInto(iso, row);
+      all[iso] = stamp(row);
+      saveJSON(LS_P, all);
+    }
+    return row;
   };
   const savePlan = (iso, plan) => {
     const all = loadJSON(LS_P, {});
-    all[iso] = stamp(plan || {});
+    const row = normalizePlan(plan || {});
+    row._carried = true;
+    all[iso] = stamp(row);
     saveJSON(LS_P, all);
     return all[iso];
   };

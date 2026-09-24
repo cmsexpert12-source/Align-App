@@ -1435,8 +1435,16 @@ img { max-width: 100%; display: block; }
   align-items: start;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
+  width: 100%;
+  background: transparent;
+  border-left: 0; border-right: 0; border-top: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 .plan-pri:last-of-type { border-bottom: 0; }
+.plan-pri.done p { text-decoration: line-through; opacity: .7; }
 .plan-pri span {
   width: 22px; height: 22px; border-radius: 7px;
   background: rgba(214,255,63,.14); color: var(--lime);

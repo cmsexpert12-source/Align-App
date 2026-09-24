@@ -651,7 +651,7 @@
     }
     try {
       const plan = L().planOf(t.iso);
-      const pri = (plan.priorities || []).filter(Boolean);
+      const pri = (plan.priorities || []).map(prioOf).map((x) => x.text).filter(Boolean);
       if (pri.length) lines.push("Priorities already set: " + pri.join(" · ") + ".");
       if (plan.note) lines.push("Day notes: " + String(plan.note).slice(0, 400));
     } catch { /* ignore */ }
@@ -1459,6 +1459,11 @@
     return n + " days. Guard this.";
   };
 
+  const prioOf = (x) => {
+    if (x && typeof x === "object") return { text: String(x.text || "").trim(), done: !!x.done };
+    return { text: String(x || "").trim(), done: false };
+  };
+
   const viewHome = () => {
     const t = today();
     const day = todayDay();
@@ -1483,7 +1488,8 @@
       </div>` : "";
 
     const plan = L().planOf(t.iso);
-    const prios = (plan.priorities || []).map((x) => String(x || "").trim()).filter(Boolean);
+    const prioRows = (plan.priorities || []).map(prioOf);
+    const prios = prioRows.map((x) => x.text).filter(Boolean);
     const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
     const planNote = String(plan.note || "").trim();
     const jn = L().journalOf(t.iso);
@@ -1504,10 +1510,10 @@
         <div class="plan-now">
           ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
-          ${prios.length ? prios.map((text, i) => `<div class="plan-pri"><span>${i + 1}</span><p>${escapeHtml(text)}</p></div>`).join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
+          ${prioRows.some((x) => x.text) ? prioRows.map((pr, i) => pr.text ? `<button type="button" class="plan-pri ${pr.done ? "done" : ""}" data-act="toggle-prio" data-i="${i}"><span>${i + 1}</span><p>${escapeHtml(pr.text)}</p></button>` : "").join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
           ${planTasks.map((tk, i) => `<button type="button" class="plan-task ${tk.done ? "done" : ""}" data-act="toggle-task" data-i="${i}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</button>`).join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
-          ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${planTasks.length && planTasks.every((x) => x.done) ? "Mark schedule complete" : "Mark schedule done"}</button>` : ""}
+          ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${(prioRows.every((x) => !x.text || x.done) && planTasks.every((x) => x.done)) ? "Schedule complete" : "Mark all done"}</button>` : ""}
         </div>` : "";
 
     const subFor = (s) => {
@@ -2799,7 +2805,8 @@
     const p = L().planOf(today().iso);
     const sunday = L().clocksFor(today().date).sunday;
     const saved = !!state.planJustSaved;
-    const pri = (p.priorities || []).map((x) => String(x || "").trim());
+    const prioRows = (p.priorities || []).map(prioOf);
+    const pri = prioRows.map((x) => x.text);
     const has = pri.some(Boolean) || (p.tasks || []).some((t) => t && String(t.text || "").trim()) || String(p.note || "").trim();
     return `
       <div class="screen full has-cta">
@@ -2813,20 +2820,24 @@
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
           ${saved && has ? `<div class="saved-banner"><b>Saved.</b> This is the plan you’ll see on Today.</div>` : ""}
+          <p class="hint" style="margin:0 0 10px">Add one thing at a time. Unchecked lines move to tomorrow in the same slot.</p>
           ${[0,1,2].map((i) => `
             <div class="prio">
               <label>Priority ${i+1}</label>
-              <input id="prio-${i}" type="text" autocomplete="off" autocorrect="off" value="${escapeAttr(p.priorities[i] || "")}" placeholder="${["The one that matters","If there’s time","Only if the first two hold"][i]}" />
+              <div class="task-row ${prioRows[i].done?"done":""}">
+                <button class="check ${prioRows[i].done?"done":""}" data-act="toggle-prio" data-i="${i}" style="${prioRows[i].done?"background:var(--lime);border-color:var(--lime)":""}">${prioRows[i].done?"✓":""}</button>
+                <input id="prio-${i}" type="text" autocomplete="off" autocorrect="off" value="${escapeAttr(prioRows[i].text)}" placeholder="${["The one that matters","If there’s time","Only if the first two hold"][i]}" />
+              </div>
             </div>
           `).join("")}
           <div class="section-h"><h4>Also</h4></div>
-          ${(p.tasks || []).map((t, i) => `
-            <div class="task-row ${t.done?"done":""}">
-              <button class="check ${t.done?"done":""}" data-act="toggle-task" data-i="${i}" style="${t.done?"background:var(--lime);border-color:var(--lime)":""}">${t.done?"✓":""}</button>
-              <input type="text" autocomplete="off" data-task="${i}" value="${escapeAttr(t.text)}" />
+          ${(p.tasks || []).map((tk, i) => `
+            <div class="task-row ${tk.done?"done":""}">
+              <button class="check ${tk.done?"done":""}" data-act="toggle-task" data-i="${i}" style="${tk.done?"background:var(--lime);border-color:var(--lime)":""}">${tk.done?"✓":""}</button>
+              <input type="text" autocomplete="off" data-task="${i}" value="${escapeAttr(tk.text)}" />
             </div>
           `).join("")}
-          <button class="btn g="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
+          <button class="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
           <div class="field"><label>Notes</label>
             <textarea class="note-box" id="plan-note" placeholder="People, calls, the afternoon…">${escapeHtml(p.note || "")}</textarea>
           </div>
@@ -3254,7 +3265,8 @@
       if (el) el.addEventListener("input", () => {
         const iso = today().iso;
         const p = L().planOf(iso);
-        p.priorities[i] = el.value;
+        const cur = prioOf(p.priorities[i]);
+        p.priorities[i] = { text: el.value, done: cur.done, id: (p.priorities[i] && p.priorities[i].id) || ("p" + (i + 1)) };
         L().savePlan(iso, p);
         AlignDB.saveDayPlan(iso, p);
       });
@@ -3884,7 +3896,10 @@
     } else if (act === "save-dayplan") {
       const iso = today().iso;
       const p = L().planOf(iso);
-      p.priorities = [0,1,2].map((i) => ((document.getElementById("prio-" + i) || {}).value || ""));
+      p.priorities = [0,1,2].map((i) => {
+        const cur = prioOf(p.priorities[i]);
+        return { text: ((document.getElementById("prio-" + i) || {}).value || ""), done: cur.done, id: cur.id || ("p" + (i + 1)) };
+      });
       p.note = (document.getElementById("plan-note") || {}).value || "";
       L().savePlan(iso, p);
       const res = await AlignDB.saveDayPlan(iso, p, { now: true });
@@ -3899,7 +3914,7 @@
     } else if (act === "add-task") {
       const iso = today().iso;
       const p = L().planOf(iso);
-      p.tasks.push({ text: "", done: false });
+      p.tasks.push({ id: "t" + Date.now().toString(36), text: "", done: false });
       L().savePlan(iso, p);
       AlignDB.saveDayPlan(iso, p);
       render();
@@ -3908,6 +3923,16 @@
       const p = L().planOf(iso);
       const i = Number(el.dataset.i);
       if (p.tasks[i]) p.tasks[i].done = !p.tasks[i].done;
+      L().savePlan(iso, p);
+      AlignDB.saveDayPlan(iso, p);
+      render();
+    } else if (act === "toggle-prio") {
+      const iso = today().iso;
+      const p = L().planOf(iso);
+      const i = Number(el.dataset.i);
+      const cur = prioOf(p.priorities[i]);
+      if (!cur.text) return;
+      p.priorities[i] = { text: cur.text, done: !cur.done, id: cur.id || ("p" + (i + 1)) };
       L().savePlan(iso, p);
       AlignDB.saveDayPlan(iso, p);
       render();
@@ -4170,6 +4195,10 @@
       }
       const iso = today().iso;
       const plan = L().planOf(iso);
+      plan.priorities = (plan.priorities || []).map((x, i) => {
+        const cur = prioOf(x);
+        return { text: cur.text, done: !!cur.text, id: cur.id || ("p" + (i + 1)) };
+      });
       (plan.tasks || []).forEach((tk) => { if (tk) tk.done = true; });
       L().savePlan(iso, plan);
       AlignDB.saveDayPlan(iso, plan);
