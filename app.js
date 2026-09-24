@@ -908,6 +908,10 @@
     }
     const tv = S().todayVerse(iso);
     const daily = S().load().daily[iso] || {};
+    if (daily.verseDone || stepIsDone("verse")) {
+      goAffirm();
+      return;
+    }
     const queue = [];
     const seen = new Set();
     if (tv && !daily.verseDone) {
@@ -937,11 +941,26 @@
     render();
   };
 
+  const goAffirm = () => {
+    const iso = today().iso;
+    try { S().markVerseDone(iso); } catch { /* local */ }
+    if (!stepIsDone("verse")) {
+      const steps = L().setStep(iso, "verse", true);
+      AlignDB.saveMorning(iso, steps).catch(() => {});
+      toast("Verse hidden.");
+    }
+    state.view = "affirm";
+    render();
+  };
+
   const advanceVerse = () => {
     const sess = state.verseSess;
     if (!sess) return;
     const item = currentVerse();
-    if (item && item.kind === "today") S().markVerseDone(today().iso);
+    const wasToday = !!(item && item.kind === "today");
+    if (wasToday) {
+      try { S().markVerseDone(today().iso); } catch { /* local */ }
+    }
     sess.i += 1;
     sess.cloze = null;
     sess.filled = [];
@@ -950,12 +969,9 @@
     sess.misses = 0;
     sess.revealed = false;
     const next = currentVerse();
-    if (!next) {
+    if (wasToday || !next) {
       sess.phase = "done";
-      completeStep("verse");
-      toast("Verse hidden.");
-      state.view = "affirm";
-      render();
+      goAffirm();
       return;
     }
     sess.phase = next.kind === "today" ? "learn" : "recall";
@@ -2127,25 +2143,25 @@
     if (!sess) {
       return `
         <div class="screen full">
-          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
           <div class="page-title"><div class="tag">Memory</div><h1>Hide the Word.</h1>
             <p>Read today’s chapters first. ALIGN picks one line worth hiding — inspiring, known, or the bottom of the text. Miss it and it returns tomorrow. Grade it well and it waits longer.</p></div>
-          <div style="padding:0 22px"><button class="btn" data-go="word">Back to Word</button></div>
+          <div style="padding:0 22px"><button class="btn" data-act="verse-continue">Continue</button></div>
         </div>`;
     }
     const item = currentVerse();
     const v = item && item.verse;
     if (!v) {
       return `
-        <div class="screen full">
-          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+        <div class="screen full has-cta">
+          <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
           <div class="done-hero" style="padding:24px 22px">
             <div class="kicker">Memory</div>
             <h1>Hidden.</h1>
-            <p class="lead" style="color:var(--muted)">Spaced repetition will bring it back. Tomorrow’s reading picks the next line.</p>
+            <p class="lead" style="color:var(--muted)">Spaced repetition will bring it back. Affirm next, then the day unlocks.</p>
           </div>
-          <div style="padding:0 22px calc(22px + var(--safe-b))">
-            <button class="btn" data-go="word">Done</button>
+          <div class="sticky-cta">
+            <button class="btn" data-act="verse-continue">Continue to affirm</button>
           </div>
         </div>`;
     }
@@ -2172,7 +2188,7 @@
     return `
       <div class="screen full has-cta">
         <div class="back-row">
-          <button class="icon-btn" data-go="word">${chev()}</button>
+          <button class="icon-btn" data-go="home">${chev()}</button>
           <div style="flex:1"></div>
           <span class="linkish">${sess.i + 1} / ${n}</span>
         </div>
@@ -2209,6 +2225,7 @@
               <button class="g-good" data-act="verse-grade" data-g="2">Good</button>
               <button class="g-easy" data-act="verse-grade" data-g="3">Easy</button>
             </div>` : ""}
+          ${(S().load().daily[today().iso] || {}).verseDone ? `<button class="btn ghost" style="margin-top:8px" data-act="verse-continue">Continue to affirm</button>` : ""}
         </div>
       </div>
     `;
@@ -2457,8 +2474,10 @@
 
   const viewAffirm = () => {
     const iso = today().iso;
-    const line = L().todayAffirmation(iso);
-    const custom = L().affirmationPref();
+    let line = "This is the day the Lord has made. I will rejoice and be glad in it.";
+    try { if (L().todayAffirmation) line = L().todayAffirmation(iso) || line; } catch { /* built-in */ }
+    let custom = "";
+    try { custom = (L().affirmationPref && L().affirmationPref()) || ""; } catch { custom = ""; }
     const tv = S().todayVerse(iso);
     const ref = (tv && S().refOf) ? S().refOf(tv) : "";
     return `
@@ -3917,6 +3936,8 @@
     } else if (act === "verse-reveal") {
       if (state.verseSess) state.verseSess.revealed = true;
       render();
+    } else if (act === "verse-continue") {
+      goAffirm();
     } else if (act === "verse-grade") {
       const item = currentVerse();
       if (!item) return;
