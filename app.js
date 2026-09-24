@@ -2127,7 +2127,7 @@
             <div><b>${streak() + 1}</b><span>streak</span></div>
           </div>
         </div>
-        <button class="btn" data-act="save-workout">Save & continue</button>
+        <button class="btn" data-act="save-workout">${(stepIsDone("move") || completedOn(today().iso)) ? "Back to today" : "Save & continue"}</button>
       </div>
     `;
   };
@@ -3777,22 +3777,42 @@
 
   const saveWorkout = () => {
     const w = state.workout;
-    const day = days.find(d => d.id === w.dayId);
+    const iso = today().iso;
+    const alreadyMove = stepIsDone("move") || !!completedOn(iso);
+    if (!w) {
+      state.view = "home";
+      render();
+      return;
+    }
+    const day = days.find(d => d.id === w.dayId) || todayDay();
     const minutes = Math.max(1, Math.round((Date.now() - w.startedAt) / 60000));
+    const completed = w.log.filter(x => x.status === "done").length;
+    const total = itemsOf(w).length;
+    const prior = (state.history || []).filter((h) => h && h.date === iso);
+    const priorBest = prior.reduce((a, h) => Math.max(a, h.minutes || 0), 0);
+    const keepPrior = priorBest > minutes;
+    const best = keepPrior ? prior.find((h) => (h.minutes || 0) === priorBest) : null;
     const row = {
-      date: today().iso,
-      dayId: day.id,
-      minutes,
-      completed: w.log.filter(x => x.status === "done").length,
-      total: itemsOf(w).length,
-      log: w.log
+      date: iso,
+      dayId: keepPrior && best ? best.dayId : day.id,
+      minutes: Math.max(minutes, priorBest),
+      completed: Math.max(completed, ...prior.map((h) => h.completed || 0), 0),
+      total: Math.max(total, ...prior.map((h) => h.total || 0), 0),
+      log: keepPrior && best && best.log ? best.log : w.log
     };
+    state.history = (state.history || []).filter((h) => h && h.date !== iso);
     state.history.push(row);
     save();
     AlignDB.saveWorkout(row).catch(() => {});
-    completeStep("move");
+    if (!alreadyMove) completeStep("move");
     sfx("ok");
     state.workout = null;
+    if (alreadyMove) {
+      toast(row.minutes > minutes ? ("Kept " + row.minutes + " min") : "Session saved");
+      state.view = "home";
+      render();
+      return;
+    }
     toast("Session saved");
     goNext();
   };

@@ -626,14 +626,37 @@ window.AlignDB = (() => {
         err = await restUpsert("notification_prefs", row, "user_id");
       }
     } else if (item.kind === "workout") {
+      let minutes = Number(p.minutes) || 0;
+      let completed = Number(p.completed) || 0;
+      let total = Number(p.total) || 0;
+      let log = p.log || [];
+      let dayId = p.dayId;
+      try {
+        const got = await restSelect(
+          "workouts",
+          "select=minutes,completed,total,log,day_id&date=eq." + encodeURIComponent(p.date) + "&day_id=eq." + encodeURIComponent(p.dayId)
+        );
+        const remote = got && got[0];
+        if (remote) {
+          const rMin = Number(remote.minutes) || 0;
+          const rDone = Number(remote.completed) || 0;
+          if (rMin > minutes) {
+            minutes = rMin;
+            log = remote.log || log;
+            dayId = remote.day_id || dayId;
+          }
+          if (rDone > completed) completed = rDone;
+          if ((Number(remote.total) || 0) > total) total = Number(remote.total) || total;
+        }
+      } catch { /* keep local */ }
       err = await restUpsert("workouts", {
         user_id: userId,
         date: p.date,
-        day_id: p.dayId,
-        minutes: p.minutes,
-        completed: p.completed,
-        total: p.total,
-        log: p.log || []
+        day_id: dayId,
+        minutes,
+        completed,
+        total,
+        log
       }, "user_id,date,day_id");
       if (err && /on conflict|unique|constraint|no unique/i.test(err.message || "")) {
         const sb = client();
