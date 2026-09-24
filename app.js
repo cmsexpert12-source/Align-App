@@ -853,6 +853,129 @@
     return false;
   };
 
+  const goNext = () => {
+    const cur = currentStep();
+    if (!cur) {
+      state.view = "home";
+      render();
+      return;
+    }
+    openPathStep(cur.id);
+  };
+
+  const openPathStep = (step) => {
+    const iso = today().iso;
+    if (step === "rise") {
+      completeStep("rise");
+      toast("Good morning.");
+      goNext();
+      return;
+    }
+    if (step === "move") {
+      state.selectedDay = todayDay().id;
+      state.view = "ready";
+      render();
+      return;
+    }
+    if (step === "pray") {
+      const j = L().journalOf(iso);
+      if (!state.prayOn && !state.praySec) state.praySec = j.praySeconds || 0;
+      state.view = "pray";
+      render();
+      return;
+    }
+    if (step === "devotion") {
+      state.view = "devotion";
+      render();
+      Promise.all([
+        state.spurgeonAm ? Promise.resolve(state.spurgeonAm) : L().todaySpurgeon("am"),
+        state.odb ? Promise.resolve(state.odb) : L().fetchODB()
+      ]).then(([sp, odb]) => {
+        state.spurgeonAm = sp;
+        if (odb) state.odb = odb;
+        if (state.view === "devotion") render();
+      }).catch(() => {});
+      return;
+    }
+    if (step === "evening") {
+      state.view = "evening";
+      render();
+      (state.spurgeonPm ? Promise.resolve(state.spurgeonPm) : L().todaySpurgeon("pm"))
+        .then((sp) => { state.spurgeonPm = sp; if (state.view === "evening") render(); })
+        .catch(() => {});
+      return;
+    }
+    if (step === "nightquiz") {
+      stopDrillTick();
+      state.drill = null;
+      state.drillMode = "night";
+      state.view = "drill";
+      render();
+      return;
+    }
+    if (step === "lights") {
+      state.view = "lights";
+      render();
+      return;
+    }
+    if (step === "word") {
+      const a = L().todayAssignment(iso);
+      openBible(a.next.book, a.next.chapter);
+      return;
+    }
+    if (step === "drill") {
+      stopDrillTick();
+      state.drill = null;
+      state.drillMode = "morning";
+      state.view = "drill";
+      render();
+      return;
+    }
+    if (step === "verse") {
+      const run = () => openVerseTutor(true);
+      if (state.spurgeonAm && state.spurgeonAm.v) run();
+      else L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; run(); }).catch(() => run());
+      return;
+    }
+    if (step === "recite") {
+      const go = () => { state.view = "recite"; render(); };
+      if (state.spurgeonAm && state.spurgeonAm.v) go();
+      else L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; go(); }).catch(() => go());
+      return;
+    }
+    if (step === "affirm") {
+      state.view = "affirm";
+      render();
+      return;
+    }
+    if (step === "plan") {
+      state.planJustSaved = false;
+      state.view = "dayplan";
+      render();
+      return;
+    }
+    if (step === "ready") {
+      state.view = "getready";
+      render();
+      return;
+    }
+    if (step === "go") {
+      state.view = "go";
+      render();
+      return;
+    }
+    if (step === "read") {
+      const due = B().dueToday(iso, "morning");
+      const unread = due.filter((b) => !B().loggedToday(iso, b.id));
+      const first = unread[0] || due[0];
+      if (first) openReader(first.id);
+      else goNext();
+      return;
+    }
+    state.view = "home";
+    render();
+  };
+
   const completeStep = (id) => {
     const iso = today().iso;
     if (!canComplete(id)) {
@@ -1003,9 +1126,15 @@
       correct: state.drill.correct,
       finished: Date.now()
     }, state.drill.mode || "morning");
-    if ((state.drill.mode || "") === "night") completeStep("nightquiz");
-    else completeStep("drill");
-    render();
+    if ((state.drill.mode || "") === "night") {
+      completeStep("nightquiz");
+      toast((state.drill.correct || 0) + " right. Read the verse, then lights out.");
+      openPathStep("lights");
+      return;
+    }
+    completeStep("drill");
+    toast((state.drill.correct || 0) + " / " + (state.drill.answered || 0) + " right");
+    goNext();
   };
 
   const startDrill = (mode) => {
@@ -3364,9 +3493,8 @@
     completeStep("move");
     sfx("ok");
     state.workout = null;
-    state.view = "home";
     toast("Session saved");
-    render();
+    goNext();
   };
 
   const submitAuth = async () => {
@@ -3627,86 +3755,8 @@
       toast(cur ? ("Finish " + cur.title + " first.") : "The morning path is done.");
     } else if (act === "open-step") {
       const step = el.dataset.step;
-      const iso = today().iso;
       if (!gateStep(step)) return;
-      if (step === "rise") {
-        completeStep("rise");
-        toast("Good morning.");
-        render();
-      } else if (step === "move") {
-        state.selectedDay = todayDay().id;
-        state.view = "ready";
-        render();
-      } else if (step === "pray") {
-        const j = L().journalOf(iso);
-        if (!state.prayOn && !state.praySec) state.praySec = j.praySeconds || 0;
-        state.view = "pray";
-        render();
-      } else if (step === "devotion") {
-        state.view = "devotion";
-        render();
-        Promise.all([
-          state.spurgeonAm ? Promise.resolve(state.spurgeonAm) : L().todaySpurgeon("am"),
-          state.odb ? Promise.resolve(state.odb) : L().fetchODB()
-        ]).then(([sp, odb]) => {
-          state.spurgeonAm = sp;
-          if (odb) state.odb = odb;
-          if (state.view === "devotion") render();
-        }).catch(() => {});
-      } else if (step === "evening") {
-        state.view = "evening";
-        render();
-        (state.spurgeonPm ? Promise.resolve(state.spurgeonPm) : L().todaySpurgeon("pm"))
-          .then((sp) => { state.spurgeonPm = sp; if (state.view === "evening") render(); })
-          .catch(() => {});
-      } else if (step === "nightquiz") {
-        stopDrillTick();
-        state.drill = null;
-        state.drillMode = "night";
-        state.view = "drill";
-        render();
-      } else if (step === "lights") {
-        state.view = "lights";
-        render();
-      } else if (step === "word") {
-        const a = L().todayAssignment(iso);
-        openBible(a.next.book, a.next.chapter);
-      } else if (step === "drill") {
-        stopDrillTick();
-        state.drill = null;
-        state.drillMode = "morning";
-        state.view = "drill";
-        render();
-      } else if (step === "verse") {
-        const run = () => openVerseTutor(true);
-        if (state.spurgeonAm && state.spurgeonAm.v) run();
-        else {
-          (L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; run(); }).catch(() => run()));
-        }
-      } else if (step === "recite") {
-        const go = () => { state.view = "recite"; render(); };
-        if (state.spurgeonAm && state.spurgeonAm.v) go();
-        else (L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; go(); }).catch(() => go()));
-      } else if (step === "affirm") {
-        state.view = "affirm";
-        render();
-      } else if (step === "plan") {
-        state.planJustSaved = false;
-        state.view = "dayplan";
-        render();
-      } else if (step === "ready") {
-        state.view = "getready";
-        render();
-      } else if (step === "go") {
-        state.view = "go";
-        render();
-      } else if (step === "read") {
-        const due = B().dueToday(iso, "morning");
-        const unread = due.filter((b) => !B().loggedToday(iso, b.id));
-        const first = unread[0] || due[0];
-        if (first) openReader(first.id);
-        else toast("No sitting due today.");
-      }
+      openPathStep(step);
     } else if (act === "complete-step") {
       const step = el.dataset.step;
       const iso = today().iso;
@@ -3723,18 +3773,14 @@
       }
       completeStep(step);
       sfx("done");
-      if (step === "word") {
-        toast("Scripture done.");
-        stopDrillTick();
-        state.drill = null;
-        state.drillMode = "morning";
-        state.view = "drill";
+      if (step === "go" || step === "lights") {
+        toast(step === "go" ? (L().clocksFor(today().date).sunday ? "Go to church." : "Go well.") : "Phone down.");
+        state.view = "home";
         render();
         return;
       }
-      toast(step === "go" ? (L().clocksFor(today().date).sunday ? "Go to church." : "Go well.") : "Logged.");
-      state.view = "home";
-      render();
+      toast("Logged.");
+      goNext();
     } else if (act === "pray-start") {
       state.prayOn = true;
       ensureLifeTick();
@@ -3749,8 +3795,7 @@
       completeStep("pray");
       sfx("ok");
       toast("Amen.");
-      state.view = "home";
-      render();
+      goNext();
     } else if (act === "journal-new" || act === "journal-today") {
       try {
         const note = L().emptyNote(today().iso);
@@ -3845,10 +3890,9 @@
       const res = await AlignDB.saveDayPlan(iso, p, { now: true });
       completeStep("plan");
       state.planJustSaved = true;
-      state.view = "home";
       const cloud = !!(state.session && res && res.ok && res.data !== null);
-      toast(cloud ? "Plan saved — on Today" : (res && res.ok === false ? "Saved on this device — on Today" : "Plan saved — on Today"));
-      render();
+      toast(cloud ? "Plan saved" : (res && res.ok === false ? "Saved on this device" : "Plan saved"));
+      goNext();
     } else if (act === "edit-dayplan") {
       state.planJustSaved = false;
       render();
@@ -3916,8 +3960,7 @@
       completeStep("read");
       closePdf();
       toast("Reading logged");
-      state.view = "home";
-      render();
+      goNext();
     } else if (act === "book-slot") {
       const b = B().update(state.bookId, { slot: el.dataset.slot });
       if (b) syncBook(b);
@@ -4119,8 +4162,7 @@
       completeStep("affirm");
       sfx("done");
       toast("Amen.");
-      state.view = "home";
-      render();
+      goNext();
     } else if (act === "schedule-done") {
       if (!canComplete("plan") && !stepIsDone("plan")) {
         gateStep("plan");
@@ -4133,7 +4175,7 @@
       AlignDB.saveDayPlan(iso, plan);
       completeStep("plan");
       toast("Schedule done.");
-      render();
+      goNext();
     }
   };
 
