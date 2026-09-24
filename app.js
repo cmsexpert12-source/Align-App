@@ -992,6 +992,23 @@
     render();
   };
 
+  const seedTimesFromKnown = (iso) => {
+    if (!L().markClose) return;
+    iso = iso || today().iso;
+    const m = L().morningOf(iso);
+    const j = L().journalOf(iso) || {};
+    if (j.praySeconds) L().markClose(iso, "pray", j.praySeconds * 1000);
+    const mins = (state.history || []).filter((h) => h && h.date === iso).reduce((a, h) => a + (h.minutes || 0), 0);
+    if (mins) L().markClose(iso, "move", mins * 60000);
+    try {
+      const daily = (S().load().daily || {})[iso] || {};
+      if (m.verse || daily.verseDone) L().markClose(iso, "verse", Math.max(state.verseSitSec || 0, 120) * 1000);
+      const sp = S().sprintOf ? S().sprintOf(iso) : null;
+      if (m.drill || (sp && sp.answered)) L().markClose(iso, "drill", 2 * 60 * 1000);
+    } catch { /* scripture optional */ }
+    if (m.ready && state.readySec) L().markClose(iso, "ready", state.readySec * 1000);
+  };
+
   const completeStep = (id) => {
     const iso = today().iso;
     if (!canComplete(id)) {
@@ -1000,6 +1017,15 @@
       return L().morningOf(iso);
     }
     const steps = L().setStep(iso, id, true);
+    let extra = 0;
+    if (id === "pray") extra = (state.praySec || 0) * 1000;
+    if (id === "ready") extra = (state.readySec || 0) * 1000;
+    if (id === "verse") extra = Math.max(state.verseSitSec || 0, 120) * 1000;
+    if (id === "drill") extra = 2 * 60 * 1000;
+    if (id === "move") {
+      extra = (state.history || []).filter((h) => h && h.date === iso).reduce((a, h) => a + (h.minutes || 0), 0) * 60000;
+    }
+    if (extra && L().markClose) L().markClose(iso, id, extra);
     AlignDB.saveMorning(iso, steps).catch(() => {});
     return steps;
   };
@@ -1496,7 +1522,7 @@
     const moveDone = !!completedOn(t.iso) || morn.move;
     const clk = L().clocksFor(t.date);
     const evening = L().isEvening(t.date);
-    const allDone = doneN >= steps.length;
+    const allDone = !cur || !!morn.go;
     const install = state.installPrompt ? `
       <div class="install-banner">
         <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
@@ -1612,16 +1638,12 @@
             </div>
             ${(() => {
               const ms = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
-              const label = ms >= 5000
+              const label = ms >= 1000
                 ? ((L().fmtSpan && L().fmtSpan(ms)) || "") + " on the path today"
                 : "Times land as you finish each step";
               return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Time · see the week</span></button>`;
             })()}
           </div>
-        </div>
-        <div class="clocks">
-          <div><span>Rise</span><b>${clk.wakeLabel}</b></div>
-          <div><span>${clk.sunday ? "Leave" : "Lights out"}</span><b>${clk.sunday ? clk.leaveLabel : clk.tonightLabel}</b></div>
         </div>
         ${(() => {
           const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", id: "" };
@@ -1704,7 +1726,7 @@
     const days = [];
     isos.forEach((iso) => {
       const ms = (L().dayTotalMs && L().dayTotalMs(iso)) || 0;
-      if (ms >= 5000) daysN++;
+      if (ms >= 1000) daysN++;
       total += ms;
       days.push({ iso, ms });
       ((L().timingParts && L().timingParts(iso)) || []).forEach((p) => {
@@ -1719,6 +1741,7 @@
     const fmt = (ms) => (L().fmtSpan && L().fmtSpan(ms)) || "—";
     const todayMs = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
     const todayParts = (L().timingParts && L().timingParts(t.iso)) || [];
+    const partLabel = (p) => (p.ms >= 1000 ? fmt(p.ms) : "Done");
     const cur = currentStep();
     let live = 0;
     try {
@@ -1762,7 +1785,7 @@
     const maxStep = stepIds.reduce((m, id) => Math.max(m, thisW.byStep[id] || 0), 0) || 1;
     const stepRows = (L().STEPS || []).concat(L().EVENING || []).map((s) => {
       const curMs = thisW.byStep[s.id] || 0;
-      if (curMs < 5000) return "";
+      if (curMs < 1000) return "";
       const prevMs = lastW.byStep[s.id] || 0;
       const d = curMs - prevMs;
       const delta = !lastW.daysN || Math.abs(d) < 60000
@@ -1783,17 +1806,17 @@
       const dt = new Date(d.iso + "T12:00:00");
       const name = DOW[dt.getDay()];
       const isToday = d.iso === t.iso;
-      return `<div class="time-day ${isToday ? "today" : ""}"><span>${isToday ? "Today" : name}</span><b>${d.ms >= 5000 ? fmt(d.ms) : "—"}</b></div>`;
+      return `<div class="time-day ${isToday ? "today" : ""}"><span>${isToday ? "Today" : name}</span><b>${d.ms >= 1000 ? fmt(d.ms) : "—"}</b></div>`;
     }).join("");
     const areaRows = areas.map((a) => {
       const ms = sumIds(thisW, a.ids);
-      if (ms < 5000) return "";
+      if (ms < 1000) return "";
       const prev = sumIds(lastW, a.ids);
       const d = ms - prev;
       const delta = !lastW.daysN || Math.abs(d) < 60000 ? "" : (d > 0 ? "+" : "−") + fmt(Math.abs(d));
       return `<div class="time-day"><span>${escapeHtml(a.title)}</span><b>${fmt(ms)}${delta ? `<i>${delta}</i>` : ""}</b></div>`;
     }).join("");
-    const liveLine = (cur && live >= 5000)
+    const liveLine = (cur && live >= 1000)
       ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)}</p>`
       : "";
     return `
@@ -1804,9 +1827,9 @@
         <p class="plan-kicker">How long each step actually took. Use it to tighten the morning without starving the Word.</p>
         ${liveLine}
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 5000 ? fmt(todayMs) : "Not yet"}</span></div>
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : (todayParts.length ? "Done" : "Not yet")}</span></div>
           ${todayParts.length
-            ? todayParts.map((p) => `<div class="time-day"><span>${escapeHtml(p.title)}</span><b>${fmt(p.ms)}</b></div>`).join("")
+            ? todayParts.map((p) => `<div class="time-day"><span>${escapeHtml(p.title)}</span><b>${partLabel(p)}</b></div>`).join("")
             : `<p class="hint" style="margin:0">Open a step. When you finish it, the minutes land here.</p>`}
         </div>
         <div class="time-area">
@@ -3072,6 +3095,7 @@
 
   const viewGo = () => {
     const sunday = L().clocksFor(today().date).sunday;
+    const done = stepIsDone("go");
     return `
     <div class="screen full has-cta">
       <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
@@ -3082,7 +3106,9 @@
         <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "The verse is in you. Go well. Read it once more before bed."}</p>
       </div>
       <div class="sticky-cta">
-        <button class="btn" data-act="begin-day">${sunday ? "Go to church" : "Begin the day"}</button>
+        ${done
+          ? `<button class="btn" data-go="home">Back to today</button>`
+          : `<button class="btn" data-act="begin-day">${sunday ? "Go to church" : "Begin the day"}</button>`}
       </div>
     </div>
   `;
@@ -3317,6 +3343,18 @@
 
   /* ---------- RENDER / EVENTS ---------- */
   const render = () => {
+    try {
+      const iso = today().iso;
+      const viewStep = {
+        pray: "pray", devotion: "devotion", bible: "word", verse: "verse", drill: "drill",
+        affirm: "affirm", dayplan: "plan", getready: "ready", go: "go",
+        ready: "move", exercise: "move", player: "move", rest: "move", done: "move",
+        recite: "recite", evening: "evening", lights: "lights", reader: "read"
+      };
+      const sid = viewStep[state.view];
+      if (sid && L().markOpen) L().markOpen(iso, sid);
+      if (typeof seedTimesFromKnown === "function") seedTimesFromKnown(iso);
+    } catch { /* timing optional */ }
     const map = {
       splash: viewSplash,
       onboard: viewOnboard,

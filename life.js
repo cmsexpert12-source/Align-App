@@ -265,7 +265,7 @@ window.ALIGN_LIFE = (() => {
     const row = Object.assign({}, timesOf(iso));
     const cur = Object.assign({}, stepTime(row, id) || {});
     const extra = Math.max(0, Number(extraMs) || 0);
-    if (cur.ms) {
+    if (cur.ms > 0) {
       if (extra > cur.ms) {
         cur.ms = Math.min(MAX_STEP_MS, extra);
         row[id] = cur;
@@ -348,11 +348,13 @@ window.ALIGN_LIFE = (() => {
   };
   const timingParts = (iso) => {
     const t = timesOf(iso);
+    const m = morningOf(iso);
     return STEPS.concat(EVENING).map((s) => ({
       id: s.id,
       title: s.title,
-      ms: (t[s.id] && t[s.id].ms) || 0
-    })).filter((x) => x.ms >= 5000);
+      ms: (t[s.id] && t[s.id].ms) || 0,
+      done: !!m[s.id]
+    })).filter((x) => x.ms >= 1000 || (x.done && x.id !== "rise" && x.id !== "go" && x.id !== "lights"));
   };
 
   const setStep = (iso, id, val) => {
