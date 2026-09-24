@@ -554,8 +554,43 @@ window.AlignDB = (() => {
         updated_at: now
       }, "user_id");
     } else if (item.kind === "scripture") {
+      let sc = Object.assign({}, p || {});
+      try {
+        const localA = JSON.parse(localStorage.getItem("align-affirm") || "null") || {};
+        if (localA && localA.text != null && String(localA.text).trim()) {
+          const lAt = Date.parse(localA.updated_at || "") || 0;
+          const sAt = Date.parse(sc._affirmationAt || "") || 0;
+          if (sc._affirmation == null || lAt >= sAt) {
+            sc._affirmation = localA.text;
+            sc._affirmationAt = localA.updated_at || now;
+          }
+        }
+      } catch { /* ignore */ }
+      if (sc._affirmation == null) {
+        try {
+          const got = await restSelect("app_state", "select=scripture");
+          const remote = (got && got[0] && got[0].scripture) || {};
+          if (remote._affirmation != null) {
+            sc._affirmation = remote._affirmation;
+            sc._affirmationAt = remote._affirmationAt;
+          }
+        } catch { /* keep local */ }
+      }
       err = await restUpsert("app_state", {
-        user_id: userId, scripture: p || {}, updated_at: now
+        user_id: userId, scripture: sc, updated_at: now
+      }, "user_id");
+    } else if (item.kind === "affirm") {
+      const text = String((p && p.text) || "");
+      let sc = {};
+      try {
+        const got = await restSelect("app_state", "select=scripture");
+        sc = (got && got[0] && got[0].scripture) || {};
+      } catch { sc = {}; }
+      if (!sc || typeof sc !== "object") sc = {};
+      sc._affirmation = text;
+      sc._affirmationAt = now;
+      err = await restUpsert("app_state", {
+        user_id: userId, scripture: sc, updated_at: now
       }, "user_id");
     } else if (item.kind === "prefs") {
       const row = {
@@ -794,7 +829,10 @@ window.AlignDB = (() => {
       notes,
       bible: b.data || null,
       scripture: (a.data && a.data.scripture) || null,
-      scriptureAt: (a.data && a.data.updated_at) || null
+      scriptureAt: (a.data && a.data.updated_at) || null,
+      affirmation: (a.data && a.data.scripture && a.data.scripture._affirmation != null)
+        ? { text: a.data.scripture._affirmation, updated_at: a.data.scripture._affirmationAt || a.data.updated_at }
+        : null
     });
   };
 
@@ -954,7 +992,9 @@ window.AlignDB = (() => {
     session, onAuth, signUp, signIn, magicLink, resetPassword, signOut,
     upsertProfile, fetchProfile, saveWorkout, fetchWorkouts,
     savePushSub, deletePushSub, savePrefs, fetchPrefs, testConnection,
-    saveMorning, saveDayPlan, saveJournal, saveNote, deleteNoteRemote, saveBible, saveScripture, pullLife,
+    saveMorning, saveDayPlan, saveJournal, saveNote, deleteNoteRemote, saveBible, saveScripture,
+    saveAffirmation: (row, opts) => queueAndFlush("affirm", "affirm", row || {}, opts || { delay: 0 }),
+    pullLife,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,

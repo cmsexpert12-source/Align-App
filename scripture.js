@@ -668,24 +668,30 @@ window.ALIGN_SCRIPTURE = (() => {
     const words = contentWords(text);
     if (!words.length) return null;
     const ranked = words.slice().sort((a, b) => {
-      const sc = (w) => ( /^[A-Z]/.test(w) ? 4 : 0) + (/(Yahweh|Lord|God|Jesus|Christ|Spirit|faith|love|heart|holy)/i.test(w) ? 5 : 0) + Math.min(w.length, 10);
+      const sc = (w) => (w.length >= 6 ? 3 : 0) + (/^[A-Z]/.test(w) ? 1 : 0) + Math.min(w.length, 8);
       return sc(b) - sc(a);
     });
-    return ranked[0];
+    const obvious = /^(Yahweh|Lord|God|Jesus|Christ|Spirit)$/i;
+    const pick = ranked.find((w) => !obvious.test(w)) || ranked[1] || ranked[0];
+    return pick;
   };
 
   const twoOthers = (answer, pool) => {
     const a = String(answer || "");
+    const alen = a.length;
     const uniq = [];
     pool.forEach((w) => {
       const s = String(w || "").trim();
       if (!s || s.toLowerCase() === a.toLowerCase()) return;
       if (!uniq.some((x) => x.toLowerCase() === s.toLowerCase())) uniq.push(s);
     });
-    const out = shuffle(uniq).slice(0, 2);
+    uniq.sort((x, y) => Math.abs(x.length - alen) - Math.abs(y.length - alen));
+    const close = uniq.filter((w) => Math.abs(w.length - alen) <= 3);
+    const out = shuffle(close.length >= 2 ? close : uniq).slice(0, 2);
     FALLBACK_D.forEach((w) => {
       if (out.length >= 2) return;
       if (w.toLowerCase() === a.toLowerCase()) return;
+      if (Math.abs(w.length - alen) > 4 && out.length) return;
       out.push(w);
     });
     while (out.length < 2) out.push(out[0] === "mercy" ? "faith" : "mercy");
@@ -729,22 +735,6 @@ window.ALIGN_SCRIPTURE = (() => {
           });
         }
       }
-      const quote = v.text.length > 110 ? v.text.slice(0, 96).replace(/\s+\S*$/, "") + "…" : v.text;
-      const t = v.text.toLowerCase();
-      const kind = /\b(do not|don't|shall not|you shall not|flee|beware|woe)\b/.test(t) ? "a warning or command"
-        : /\b(i will|i am|blessed are|covenant|my people|i have given)\b/.test(t) ? "a promise of God"
-        : /\b(praise|bless the lord|thank|worship|sing)\b/.test(t) ? "worship"
-        : /\b(love|faith|trust|believe|hope|obey)\b/.test(t) ? "a call to trust and obey"
-        : "a claim about God or his people";
-      const kinds = ["a warning or command", "a promise of God", "worship", "a call to trust and obey", "a claim about God or his people"];
-      list.push({
-        id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":kind",
-        q: "“" + quote + "” — this line is mainly:",
-        a: kind,
-        d: twoOthers(kind, kinds),
-        tag: "read",
-        ref
-      });
     });
     const seen = new Set();
     return list.filter((q) => {
@@ -757,7 +747,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const isIdQuiz = (q) => {
     const id = String((q && q.id) || "");
     const stem = String((q && q.q) || "");
-    return /:ref$/.test(id) || /which verse/i.test(stem) || /who said/i.test(stem) || /what verse/i.test(stem);
+    return /:ref$/.test(id) || /:kind$/.test(id) || /which verse/i.test(stem) || /who said/i.test(stem) || /what verse/i.test(stem) || /this line is mainly/i.test(stem);
   };
   const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q));
 
@@ -810,8 +800,8 @@ window.ALIGN_SCRIPTURE = (() => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           maxOutputTokens: 1200,
-          system: "You write short Bible quizzes from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding: meaning, motive, promise, command, character of God, what the text requires of the reader. Do not ask verse numbers, chapter numbers, or which-verse identification. Do not ask who-said unless the speaker is the point. Answers must be supportable from the text. One-sentence stems.",
-          prompt: "Write 10 multiple-choice questions of understanding about this reading only. No trivia about references.\n\n" + body
+          system: "You write short Bible quizzes from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding: meaning, motive, promise, command, character of God, what the text requires of the reader. Do not ask verse numbers, chapter numbers, or which-verse identification. Distractors must be plausible — same length and tone as the right answer, could fool someone who skimmed. Never make the correct option the only spiritual-sounding one. Never use obviously silly or off-topic wrong answers. One-sentence stems.",
+          prompt: "Write 10 multiple-choice questions of understanding about this reading only. Plausible wrong answers. No trivia about references.\n\n" + body
         })
       });
       const js = await res.json().catch(() => ({}));

@@ -613,12 +613,11 @@ window.ALIGN_LIFE = (() => {
     "I can do all things through Christ who strengthens me — not as a slogan, as dependence."
   ];
 
-  const affirmationPref = () => {
-    const row = loadJSON(LS_A, { text: "" });
-    return String((row && row.text) || "").trim();
-  };
-  const saveAffirmationPref = (text) => {
+  const affirmationRow = () => loadJSON(LS_A, { text: "", updated_at: "" });
+  const affirmationPref = () => String((affirmationRow() && affirmationRow().text) || "").trim();
+  const saveAffirmationPref = (text, meta) => {
     const row = stamp({ text: String(text || "").trim() });
+    if (meta && meta.updated_at) row.updated_at = meta.updated_at;
     saveJSON(LS_A, row);
     return row;
   };
@@ -679,6 +678,6 @@ window.ALIGN_LIFE = (() => {
     fetchChapter, markChapterRead, todayAssignment,
     planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
-    affirmationPref, saveAffirmationPref, todayAffirmation, parseDevotionVerse
+    affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse
   };
 })();

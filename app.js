@@ -416,6 +416,16 @@
           log
         });
       }
+      if (life.data.affirmation && Life && Life.saveAffirmationPref) {
+        try {
+          const local = Life.affirmationRow ? Life.affirmationRow() : {};
+          const lAt = Date.parse((local && local.updated_at) || "") || 0;
+          const rAt = Date.parse(life.data.affirmation.updated_at || "") || 0;
+          if (!String((local && local.text) || "").trim() || rAt >= lAt) {
+            Life.saveAffirmationPref(life.data.affirmation.text || "", { updated_at: life.data.affirmation.updated_at });
+          }
+        } catch { /* keep local line */ }
+      }
       if (life.data.scripture) {
         try {
           const local = JSON.parse(localStorage.getItem("align-scripture") || "null") || {};
@@ -489,11 +499,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -2659,20 +2669,20 @@
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">After the Word</div>
+          <div class="tag">Your line</div>
           <h1>Affirm.</h1>
-          <p>Read it aloud. Let it sit. This is the same word every morning unless you write your own in You.</p>
+          <p>Write the word you speak every morning. It saves to your account. Then read it aloud.</p>
         </div>
         <div class="scripture">
-          <div class="devotion-body" style="font-family:var(--serif);font-size:22px;line-height:1.45">${escapeHtml(line)}</div>
-          ${tv && tv.text ? `<div class="devotion-verse" style="margin-top:18px">${ref ? escapeHtml(ref) + " · " : ""}${escapeHtml(tv.text)}</div>` : ""}
-          <div class="field"><label>Your daily affirmation</label>
-            <textarea class="note-box" id="affirm-text" placeholder="Leave blank to use the built-in line.">${escapeHtml(custom)}</textarea>
+          <div class="field"><label>My affirmation</label>
+            <textarea class="note-box" id="affirm-text" placeholder="${escapeAttr(line)}">${escapeHtml(custom)}</textarea>
           </div>
+          ${!custom ? `<div class="devotion-body" style="font-family:var(--serif);font-size:20px;line-height:1.45;margin-top:12px">${escapeHtml(line)}</div>` : ""}
+          ${tv && tv.text ? `<div class="devotion-verse" style="margin-top:18px">${ref ? escapeHtml(ref) + " · " : ""}${escapeHtml(tv.text)}</div>` : ""}
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="affirm-done">I received it</button>
-          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save my line</button>
+          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save to account</button>
         </div>
       </div>
     `;
@@ -2905,7 +2915,7 @@
   const viewGo = () => {
     const sunday = L().clocksFor(today().date).sunday;
     return `
-    <div class="screen full">
+    <div class="screen full has-cta">
       <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
       <div class="done-hero" style="padding:24px 22px">
         <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
@@ -2913,8 +2923,8 @@
         <h1>${sunday ? "Go<br>to church." : "Begin<br>the day."}</h1>
         <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "The verse is in you. Go well. Read it once more before bed."}</p>
       </div>
-      <div style="padding:0 22px calc(22px + var(--safe-b))">
-        <button class="btn" data-act="complete-step" data-step="go">Step out</button>
+      <div class="sticky-cta">
+        <button class="btn" data-act="begin-day">${sunday ? "Go to church" : "Begin the day"}</button>
       </div>
     </div>
   `;
@@ -3785,8 +3795,8 @@
       }
       completeStep(step);
       sfx("done");
-      if (step === "go" || step === "lights") {
-        toast(step === "go" ? (L().clocksFor(today().date).sunday ? "Go to church." : "Go well.") : "Phone down.");
+      if (step === "lights") {
+        toast("Phone down.");
         state.view = "home";
         render();
         return;
@@ -4118,6 +4128,18 @@
       startCloze(item.verse);
       sess.phase = (sess.cloze && sess.cloze.answers && sess.cloze.answers.length) ? "cloze" : "grade";
       render();
+    } else if (act === "begin-day") {
+      const iso = today().iso;
+      if (!stepIsDone("recite")) {
+        const steps = L().setStep(iso, "recite", true);
+        AlignDB.saveMorning(iso, steps).catch(() => {});
+      }
+      const steps = L().setStep(iso, "go", true);
+      AlignDB.saveMorning(iso, steps).catch(() => {});
+      sfx("done");
+      toast(L().clocksFor(today().date).sunday ? "Go to church." : "Go well.");
+      state.view = "home";
+      render();
     } else if (act === "recite-done") {
       completeStep("recite");
       sfx("ok");
@@ -4178,12 +4200,16 @@
       render();
     } else if (act === "save-affirm") {
       const box = document.getElementById("affirm-text") || document.getElementById("pref-affirm");
-      L().saveAffirmationPref(box ? box.value : "");
-      toast("Affirmation saved");
+      const row = L().saveAffirmationPref(box ? box.value : "");
+      if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
+      toast(state.session ? "Affirmation saved to your account" : "Affirmation saved on this device");
       render();
     } else if (act === "affirm-done") {
       const box = document.getElementById("affirm-text");
-      if (box) L().saveAffirmationPref(box.value);
+      if (box) {
+        const row = L().saveAffirmationPref(box.value);
+        if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
+      }
       completeStep("affirm");
       sfx("done");
       toast("Amen.");
