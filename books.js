@@ -225,9 +225,12 @@ window.ALIGN_BOOKS = (() => {
     const by = {};
     local.forEach((b) => { by[b.id] = b; });
     rows.forEach((r) => {
+      if (!r || !r.id) return;
       const cur = by[r.id] || {};
       const remoteNewer = !cur.updated_at || (r.updated_at && r.updated_at >= cur.updated_at);
-      by[r.id] = remoteNewer ? { ...cur, ...r } : { ...r, ...cur };
+      const next = remoteNewer ? { ...cur, ...r } : { ...r, ...cur };
+      if (!next.storage_path && cur.storage_path) next.storage_path = cur.storage_path;
+      by[r.id] = next;
     });
     const arr = Object.values(by).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
     saveList(arr);

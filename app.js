@@ -448,12 +448,13 @@
     } catch { /* retry on next online */ }
     try {
       const remoteBooks = await AlignDB.fetchBooks();
-      if (remoteBooks.ok && remoteBooks.data && remoteBooks.data.length) {
+      if (remoteBooks.ok && Array.isArray(remoteBooks.data)) {
         B().mergeRemote(remoteBooks.data);
       }
       const remoteLog = await AlignDB.fetchReadingLog();
       if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
-      hydrateBooks();
+      try { (B().list() || []).forEach((b) => { if (b && b.id) AlignDB.upsertBookMeta(b); }); } catch { /* later flush */ }
+      hydrateBooks().catch(() => {});
     } catch { /* books schema may not be applied yet */ }
     try {
       const remoteSounds = await AlignDB.fetchSounds();
@@ -742,17 +743,22 @@
   };
 
   const syncBook = async (book) => {
-    if (!state.session || !AlignDB.configured()) return;
+    if (!book || !book.id) return { ok: false };
+    if (!state.session || !AlignDB.configured()) return { ok: false };
     try {
       const blob = await B().getFile(book.id);
       if (blob && !book.storage_path) {
         const up = await AlignDB.uploadBookFile(book.id, blob);
         if (up.ok && up.data) {
           book = B().update(book.id, { storage_path: up.data }) || book;
+        } else if (up && up.ok === false) {
+          return { ok: false, error: up.error || "Could not upload the PDF" };
         }
       }
-      await AlignDB.upsertBookMeta(book);
-    } catch { /* local copy still good */ }
+      return await AlignDB.upsertBookMeta(book, { now: true });
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || "Could not sync this book" };
+    }
   };
 
   const hydrateBooks = async () => {
@@ -766,6 +772,17 @@
         if (dl.ok && dl.data) await B().putFile(b.id, dl.data);
       } catch { /* stay with what we have */ }
     }
+  };
+
+  const pullBooksCloud = async () => {
+    if (!state.session || !AlignDB.configured()) return;
+    try {
+      const remoteBooks = await AlignDB.fetchBooks();
+      if (remoteBooks.ok && Array.isArray(remoteBooks.data)) B().mergeRemote(remoteBooks.data);
+      const remoteLog = await AlignDB.fetchReadingLog();
+      if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
+      await hydrateBooks();
+    } catch { /* keep local library */ }
   };
 
   const openReader = async (id) => {
@@ -3565,10 +3582,12 @@
       render();
       try {
         const book = await B().addFromFile(file);
-        await syncBook(book);
+        const cloud = await syncBook(book);
         state.bookId = book.id;
         state.view = "book";
-        toast(state.session ? "Saved on this phone and your account" : "Saved on this phone");
+        toast(state.session
+          ? (cloud && cloud.ok !== false ? "Saved on this phone and your account" : "Saved on this phone. Cloud can retry when you’re online.")
+          : "Saved on this phone");
       } catch (err) {
         toast((err && err.message) || "Could not add that PDF");
         state.view = "library";

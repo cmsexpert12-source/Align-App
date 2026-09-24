@@ -654,6 +654,68 @@ window.AlignDB = (() => {
           }
         }
       }
+    } else if (item.kind === "profile") {
+      err = await restUpsert("profiles", {
+        id: userId,
+        display_name: p.display_name || "",
+        updated_at: now
+      }, "id");
+      if (err && missingTable(err)) err = null;
+    } else if (item.kind === "book") {
+      if (!p.id) err = null;
+      else {
+        err = await restUpsert("books", {
+          id: p.id,
+          user_id: userId,
+          title: p.title || "Untitled",
+          author: p.author || "",
+          filename: p.filename || "",
+          storage_path: p.storage_path || "",
+          bytes: Number(p.bytes) || 0,
+          pages: Number(p.pages) || 0,
+          current_page: Number(p.current_page) || 1,
+          slot: p.slot || "evening",
+          days: Array.isArray(p.days) ? p.days : [1, 2, 3, 4, 5, 6],
+          pages_per_day: Number(p.pages_per_day) || 8,
+          enabled: p.enabled !== false,
+          updated_at: now
+        }, "id");
+        if (err && missingTable(err)) err = null;
+      }
+    } else if (item.kind === "reading") {
+      if (!p.bookId || !p.iso) err = null;
+      else {
+        err = await restUpsert("reading_log", {
+          user_id: userId,
+          book_id: p.bookId,
+          date: p.iso,
+          from_page: p.fromPage != null ? p.fromPage : (p.from || 1),
+          to_page: p.toPage != null ? p.toPage : (p.to || 1),
+          updated_at: now
+        }, "user_id,book_id,date");
+        if (err && missingTable(err)) err = null;
+      }
+    } else if (item.kind === "sound") {
+      if (!p.id) err = null;
+      else {
+        err = await restUpsert("sounds", {
+          id: p.id,
+          user_id: userId,
+          title: p.title || "Sound",
+          artist: p.artist || "",
+          source: p.source || "upload",
+          license: p.license || "",
+          mood: p.mood || "still",
+          source_url: p.source_url || null,
+          storage_path: p.storage_path || null,
+          filename: p.filename || "",
+          mime: p.mime || "",
+          bytes: Number(p.bytes) || 0,
+          is_public: !!p.is_public,
+          updated_at: now
+        }, "id");
+        if (err && missingTable(err)) err = null;
+      }
     } else {
       return { keep: false };
     }
@@ -899,9 +961,9 @@ window.AlignDB = (() => {
     return ok(data || []);
   };
 
-  const upsertBookMeta = async (book) => {
+  const upsertBookMeta = async (book, opts) => {
     if (!book || !book.id) return ok(null);
-    return queueAndFlush("book", book.id, book, { delay: 0 });
+    return queueAndFlush("book", book.id, book, opts || { delay: 0 });
   };
 
   const uploadBookFile = async (bookId, blob) => {
