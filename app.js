@@ -888,8 +888,11 @@
         if (state.view === "verse") {
           const el = app.querySelector(".verse-sit");
           if (el) el.textContent = fmtClock(state.verseSitSec);
+          const hint = app.querySelector(".pray-stage .hint");
+          const btn = app.querySelector("[data-act='verse-sit-done']");
           if (state.verseSitSec >= 120) {
-            try { render(); } catch { /* keep clock */ }
+            if (hint) hint.textContent = "Two minutes. Now hide it.";
+            if (btn) { btn.disabled = false; btn.textContent = "Hide the words"; }
           }
         }
       }
@@ -1144,7 +1147,7 @@
   const tabFor = (view) => {
     if (view === "home") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
-    if (["word", "library", "pray", "devotion", "bible", "verse", "drill", "affirm", "devotionlog", "evening", "recite", "lights"].includes(view)) return "word";
+    if (view === "word" || view === "library") return "word";
     if (view === "journal") return "journal";
     if (view === "profile" || view === "sound") return "profile";
     return null;
@@ -2199,7 +2202,7 @@
             </div>
           </div>
           <div class="sticky-cta">
-            <button class="btn" data-act="verse-sit-done" ${ready ? "" : "disabled"}>${ready ? "I’ve read it · revise" : "Keep reading"}</button>
+            <button class="btn" data-act="verse-sit-done" ${ready ? "" : "disabled"}>${ready ? "Hide the words" : "Keep reading"}</button>
           </div>
         </div>`;
     }

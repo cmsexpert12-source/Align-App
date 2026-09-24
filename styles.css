@@ -612,11 +612,12 @@ img { max-width: 100%; display: block; }
 .nav svg { width: 20px; height: 20px; }
 
 /* overlay screens that hide nav */
-.full { position: absolute; inset: 0; background: var(--bg); z-index: 12; overflow: auto; height: 100%; }
+.full { position: absolute; inset: 0; background: var(--bg); z-index: 22; overflow: auto; height: 100%; }
 .full.has-cta { overflow: hidden; display: flex; flex-direction: column; animation: none; }
 .full.has-cta .back-row,
 .full.has-cta .page-title,
 .full.has-cta .why,
+.full.has-cta .pray-stage,
 .full.has-cta .sticky-cta,
 .full.has-cta .pdf-tools { flex-shrink: 0; }
 .full.has-cta .ex-list,
