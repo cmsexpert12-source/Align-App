@@ -382,12 +382,17 @@
         const local = mAll[r.date] || {};
         const steps = { ...local };
         Object.keys(r.steps || {}).forEach((k) => {
+          if (!k || k.charAt(0) === "_") return;
           if (r.steps[k] || local[k]) steps[k] = true;
           else if (!(k in steps)) steps[k] = !!r.steps[k];
         });
+        if (steps._times) delete steps._times;
         mAll[r.date] = steps;
       });
       localStorage.setItem("align-morning", JSON.stringify(mAll));
+      if (Life && Life.mergeTimesRemote) {
+        try { Life.mergeTimesRemote(life.data.mornings || []); } catch { /* keep local times */ }
+      }
       const pAll = JSON.parse(localStorage.getItem("align-plans") || "{}");
       if (Life && Life.mergeByTime) Life.mergeByTime(pAll, life.data.plans, (r) => r.payload || {});
       else (life.data.plans || []).forEach((r) => { pAll[r.date] = r.payload || pAll[r.date]; });
@@ -504,7 +509,7 @@
 
   const overlays = () => {
     const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening"].includes(state.view);
-    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal"].includes(state.view);
+    const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
     const hideNow = nowHidden();
@@ -875,6 +880,7 @@
 
   const openPathStep = (step) => {
     const iso = today().iso;
+    try { if (step && L().markOpen) L().markOpen(iso, step); } catch { /* timing optional */ }
     if (step === "rise") {
       completeStep("rise");
       toast("Good morning.");
@@ -1284,7 +1290,7 @@
     </nav>`;
 
   const tabFor = (view) => {
-    if (view === "home") return "home";
+    if (view === "home" || view === "time") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
     if (view === "word" || view === "library") return "word";
     if (view === "journal") return "journal";
@@ -1604,6 +1610,13 @@
               <div><b>${pulse.sessions}</b><span>Sessions</span></div>
               <div><b>${pulse.chapters}</b><span>Chapters</span></div>
             </div>
+            ${(() => {
+              const ms = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
+              const label = ms >= 5000
+                ? ((L().fmtSpan && L().fmtSpan(ms)) || "") + " on the path today"
+                : "Times land as you finish each step";
+              return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Time · see the week</span></button>`;
+            })()}
           </div>
         </div>
         <div class="clocks">
@@ -1669,6 +1682,151 @@
             r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
           )).join("")}</div>` : ""}`;
         })()}
+      </div>
+    `;
+  };
+
+
+  const weekIsos = (offset) => {
+    const start = startOfWeek(today().date);
+    start.setDate(start.getDate() + (Number(offset) || 0) * 7);
+    return [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return isoOf(d);
+    });
+  };
+
+  const weekTime = (offset) => {
+    const isos = weekIsos(offset);
+    const byStep = {};
+    let total = 0, daysN = 0;
+    const days = [];
+    isos.forEach((iso) => {
+      const ms = (L().dayTotalMs && L().dayTotalMs(iso)) || 0;
+      if (ms >= 5000) daysN++;
+      total += ms;
+      days.push({ iso, ms });
+      ((L().timingParts && L().timingParts(iso)) || []).forEach((p) => {
+        byStep[p.id] = (byStep[p.id] || 0) + p.ms;
+      });
+    });
+    return { isos, total, daysN, days, byStep, avg: daysN ? Math.round(total / daysN) : 0 };
+  };
+
+  const viewTime = () => {
+    const t = today();
+    const fmt = (ms) => (L().fmtSpan && L().fmtSpan(ms)) || "—";
+    const todayMs = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
+    const todayParts = (L().timingParts && L().timingParts(t.iso)) || [];
+    const cur = currentStep();
+    let live = 0;
+    try {
+      const row = cur && L().timesOf ? (L().timesOf(t.iso)[cur.id] || {}) : {};
+      if (row && row.open && !row.ms) live = Math.max(0, Date.now() - row.open);
+    } catch { live = 0; }
+    const thisW = weekTime(0);
+    const lastW = weekTime(-1);
+    const titles = {};
+    (L().STEPS || []).concat(L().EVENING || []).forEach((s) => { titles[s.id] = s.title; });
+    const areas = [
+      { id: "still", title: "Pray & affirm", ids: ["pray", "affirm"] },
+      { id: "word", title: "The Word", ids: ["devotion", "verse", "word", "drill", "recite", "evening", "nightquiz"] },
+      { id: "body", title: "Train & ready", ids: ["move", "ready"] },
+      { id: "plan", title: "Plan & go", ids: ["plan", "go", "rise", "lights"] }
+    ];
+    const sumIds = (pack, ids) => ids.reduce((n, id) => n + ((pack.byStep && pack.byStep[id]) || 0), 0);
+    const notes = [];
+    if (thisW.daysN < 2) {
+      notes.push("Finish a few mornings. This page will show where the time goes, and whether the path is tightening.");
+    } else if (lastW.daysN) {
+      const dt = thisW.avg - lastW.avg;
+      if (Math.abs(dt) >= 3 * 60000) {
+        notes.push(dt < 0
+          ? "The path is " + fmt(-dt) + " tighter than last week."
+          : "The path ran " + fmt(dt) + " longer than last week.");
+      } else {
+        notes.push("The morning is holding steady against last week.");
+      }
+      const wordD = sumIds(thisW, areas[1].ids) - sumIds(lastW, areas[1].ids);
+      const stillD = sumIds(thisW, areas[0].ids) - sumIds(lastW, areas[0].ids);
+      const bodyD = sumIds(thisW, areas[2].ids) - sumIds(lastW, areas[2].ids);
+      if (wordD >= 5 * 60000) notes.push("You stayed with the Word " + fmt(wordD) + " longer.");
+      else if (wordD <= -8 * 60000) notes.push("Word was " + fmt(-wordD) + " shorter. Guard the chapters.");
+      if (stillD >= 3 * 60000) notes.push("Prayer held " + fmt(stillD) + " more.");
+      if (bodyD <= -5 * 60000) notes.push("Train and ready ran " + fmt(-bodyD) + " tighter.");
+    } else {
+      notes.push("This is the baseline week. Next week you’ll see what grew.");
+    }
+    const stepIds = Object.keys(thisW.byStep);
+    const maxStep = stepIds.reduce((m, id) => Math.max(m, thisW.byStep[id] || 0), 0) || 1;
+    const stepRows = (L().STEPS || []).concat(L().EVENING || []).map((s) => {
+      const curMs = thisW.byStep[s.id] || 0;
+      if (curMs < 5000) return "";
+      const prevMs = lastW.byStep[s.id] || 0;
+      const d = curMs - prevMs;
+      const delta = !lastW.daysN || Math.abs(d) < 60000
+        ? ""
+        : `<span class="time-delta ${d > 0 ? "up" : "dn"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
+      const pct = Math.max(8, Math.round(curMs / maxStep * 100));
+      return `
+        <div class="time-row">
+          <div>
+            <h4>${escapeHtml(s.title)}</h4>
+            <p>${fmt(curMs)} this week${thisW.daysN ? " · " + fmt(Math.round(curMs / thisW.daysN)) + " avg" : ""}</p>
+          </div>
+          ${delta}
+          <div class="time-bar"><i style="width:${pct}%"></i></div>
+        </div>`;
+    }).join("");
+    const dayRows = thisW.days.map((d) => {
+      const dt = new Date(d.iso + "T12:00:00");
+      const name = DOW[dt.getDay()];
+      const isToday = d.iso === t.iso;
+      return `<div class="time-day ${isToday ? "today" : ""}"><span>${isToday ? "Today" : name}</span><b>${d.ms >= 5000 ? fmt(d.ms) : "—"}</b></div>`;
+    }).join("");
+    const areaRows = areas.map((a) => {
+      const ms = sumIds(thisW, a.ids);
+      if (ms < 5000) return "";
+      const prev = sumIds(lastW, a.ids);
+      const d = ms - prev;
+      const delta = !lastW.daysN || Math.abs(d) < 60000 ? "" : (d > 0 ? "+" : "−") + fmt(Math.abs(d));
+      return `<div class="time-day"><span>${escapeHtml(a.title)}</span><b>${fmt(ms)}${delta ? `<i>${delta}</i>` : ""}</b></div>`;
+    }).join("");
+    const liveLine = (cur && live >= 5000)
+      ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)}</p>`
+      : "";
+    return `
+      <div class="screen home">
+        <div class="topbar"><div class="greet">Time<h2>The path.</h2></div>
+          <button class="linkish" data-go="home">Today</button>
+        </div>
+        <p class="plan-kicker">How long each step actually took. Use it to tighten the morning without starving the Word.</p>
+        ${liveLine}
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 5000 ? fmt(todayMs) : "Not yet"}</span></div>
+          ${todayParts.length
+            ? todayParts.map((p) => `<div class="time-day"><span>${escapeHtml(p.title)}</span><b>${fmt(p.ms)}</b></div>`).join("")
+            : `<p class="hint" style="margin:0">Open a step. When you finish it, the minutes land here.</p>`}
+        </div>
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This week</h4><span>${thisW.daysN ? thisW.daysN + " morning" + (thisW.daysN === 1 ? "" : "s") : "—"}</span></div>
+          <div class="pulse-stats" style="margin:0;padding:0;border:0">
+            <div><b>${thisW.daysN ? fmt(thisW.avg) : "—"}</b><span>Avg path</span></div>
+            <div><b>${thisW.total ? fmt(thisW.total) : "—"}</b><span>This week</span></div>
+            <div><b>${lastW.daysN ? fmt(lastW.avg) : "—"}</b><span>Last week</span></div>
+          </div>
+          ${notes.map((n) => `<p class="hint" style="margin:10px 0 0">${escapeHtml(n)}</p>`).join("")}
+          ${areaRows}
+        </div>
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4></div>
+          ${stepRows || `<p class="hint" style="margin:0">Walk the path. Each step writes a time.</p>`}
+        </div>
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>Days</h4></div>
+          ${dayRows}
+        </div>
       </div>
     `;
   };
@@ -3163,6 +3321,7 @@
       splash: viewSplash,
       onboard: viewOnboard,
       home: viewHome,
+      time: viewTime,
       plan: viewPlan,
       ready: viewReady,
       exercise: viewExercise,

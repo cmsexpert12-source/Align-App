@@ -496,8 +496,27 @@ window.AlignDB = (() => {
         remoteSteps = (got && got[0] && got[0].steps) || {};
       } catch { remoteSteps = {}; }
       const localSteps = p.steps || {};
-      const merged = Object.assign({}, remoteSteps, localSteps);
-      Object.keys(merged).forEach((k) => { merged[k] = !!(remoteSteps[k] || localSteps[k]); });
+      const merged = {};
+      const keys = new Set([].concat(Object.keys(remoteSteps || {}), Object.keys(localSteps || {})));
+      keys.forEach((k) => {
+        if (!k || k.charAt(0) === "_") return;
+        merged[k] = !!(remoteSteps[k] || localSteps[k]);
+      });
+      const a = (remoteSteps && remoteSteps._times) || {};
+      const b = (localSteps && localSteps._times) || {};
+      const times = Object.assign({}, a);
+      Object.keys(b).forEach((k) => {
+        const y = b[k];
+        if (!y || typeof y !== "object") return;
+        const x = times[k];
+        if (!x || typeof x !== "object") { times[k] = y; return; }
+        times[k] = {
+          open: Math.min(x.open || y.open || 0, y.open || x.open || 0) || x.open || y.open,
+          close: Math.max(x.close || 0, y.close || 0) || x.close || y.close,
+          ms: Math.max(x.ms || 0, y.ms || 0)
+        };
+      });
+      if (Object.keys(times).length) merged._times = times;
       err = await restUpsert("mornings", {
         user_id: userId, date: p.iso, steps: merged, updated_at: now
       }, "user_id,date");
@@ -729,10 +748,20 @@ window.AlignDB = (() => {
     const mornings = readJSON("align-morning", {});
     const plans = readJSON("align-plans", {});
     const journals = readJSON("align-journal", {});
+    const timing = readJSON("align-timing", {});
     days.forEach((iso) => {
       const st = mornings[iso];
-      if (st && typeof st === "object" && Object.keys(st).some((k) => k !== "updated_at" && st[k])) {
-        enqueue("morning", iso, { iso, steps: st });
+      if (st && typeof st === "object" && Object.keys(st).some((k) => k !== "updated_at" && k !== "_times" && st[k])) {
+        const payload = Object.assign({}, st);
+        const t = timing[iso];
+        if (t && typeof t === "object") {
+          const times = {};
+          Object.keys(t).forEach((k) => {
+            if (k !== "updated_at" && t[k] && typeof t[k] === "object") times[k] = t[k];
+          });
+          if (Object.keys(times).length) payload._times = times;
+        }
+        enqueue("morning", iso, { iso, steps: payload });
       }
       if (plans[iso]) enqueue("plan", iso, { iso, plan: plans[iso] });
     });
@@ -787,8 +816,21 @@ window.AlignDB = (() => {
     return flush();
   };
 
-  const saveMorning = async (iso, steps, opts) =>
-    queueAndFlush("morning", iso, { iso, steps }, opts || { delay: 0 });
+  const saveMorning = async (iso, steps, opts) => {
+    const row = Object.assign({}, steps || {});
+    if (!row._times) {
+      try {
+        const tAll = readJSON("align-timing", {});
+        const t = tAll[iso] || {};
+        const times = {};
+        Object.keys(t).forEach((k) => {
+          if (k !== "updated_at" && t[k] && typeof t[k] === "object") times[k] = t[k];
+        });
+        if (Object.keys(times).length) row._times = times;
+      } catch { /* local times optional */ }
+    }
+    return queueAndFlush("morning", iso, { iso, steps: row }, opts || { delay: 0 });
+  };
 
   const saveDayPlan = async (iso, plan, opts) =>
     queueAndFlush("plan", iso, { iso, plan }, opts || { delay: 450 });

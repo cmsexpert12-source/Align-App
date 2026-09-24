@@ -235,11 +235,134 @@ window.ALIGN_LIFE = (() => {
     return all[iso];
   };
 
+  const LS_T = "align-timing";
+  const MAX_STEP_MS = 3 * 60 * 60 * 1000;
+  const timesAll = () => loadJSON(LS_T, {});
+  const timesOf = (iso) => {
+    const row = timesAll()[iso];
+    return (row && typeof row === "object") ? row : {};
+  };
+  const saveTimes = (iso, row) => {
+    const all = timesAll();
+    const next = Object.assign({}, row);
+    next.updated_at = new Date().toISOString();
+    all[iso] = next;
+    saveJSON(LS_T, all);
+    return next;
+  };
+  const stepTime = (row, id) => (row && row[id] && typeof row[id] === "object") ? row[id] : null;
+  const markOpen = (iso, id) => {
+    if (!iso || !id || String(id).charAt(0) === "_") return timesOf(iso);
+    const row = Object.assign({}, timesOf(iso));
+    const cur = Object.assign({}, stepTime(row, id) || {});
+    if (cur.ms) return row;
+    if (!cur.open) cur.open = Date.now();
+    row[id] = cur;
+    return saveTimes(iso, row);
+  };
+  const markClose = (iso, id, extraMs) => {
+    if (!iso || !id || String(id).charAt(0) === "_") return timesOf(iso);
+    const row = Object.assign({}, timesOf(iso));
+    const cur = Object.assign({}, stepTime(row, id) || {});
+    const extra = Math.max(0, Number(extraMs) || 0);
+    if (cur.ms) {
+      if (extra > cur.ms) {
+        cur.ms = Math.min(MAX_STEP_MS, extra);
+        row[id] = cur;
+        return saveTimes(iso, row);
+      }
+      return row;
+    }
+    const now = Date.now();
+    if (!cur.open) cur.open = now;
+    cur.close = now;
+    let span = Math.max(0, now - cur.open);
+    if (span > MAX_STEP_MS) span = MAX_STEP_MS;
+    cur.ms = Math.max(span, extra);
+    if (cur.ms > MAX_STEP_MS) cur.ms = MAX_STEP_MS;
+    row[id] = cur;
+    return saveTimes(iso, row);
+  };
+  const mergeTimesDay = (a, b) => {
+    const out = Object.assign({}, a && typeof a === "object" ? a : {});
+    const src = b && typeof b === "object" ? b : {};
+    Object.keys(src).forEach((k) => {
+      if (k === "updated_at") {
+        const aAt = Date.parse(out.updated_at || "") || 0;
+        const bAt = Date.parse(src.updated_at || "") || 0;
+        if (bAt >= aAt) out.updated_at = src.updated_at;
+        return;
+      }
+      const y = src[k];
+      if (!y || typeof y !== "object") return;
+      const x = out[k] && typeof out[k] === "object" ? out[k] : null;
+      if (!x) { out[k] = Object.assign({}, y); return; }
+      const open = [x.open, y.open].filter((n) => n > 0);
+      const close = [x.close, y.close].filter((n) => n > 0);
+      out[k] = {
+        open: open.length ? Math.min.apply(null, open) : (x.open || y.open),
+        close: close.length ? Math.max.apply(null, close) : (x.close || y.close),
+        ms: Math.max(x.ms || 0, y.ms || 0)
+      };
+    });
+    return out;
+  };
+  const mergeTimesRemote = (mornings) => {
+    const all = timesAll();
+    (mornings || []).forEach((r) => {
+      if (!r || !r.date) return;
+      const remoteT = (r.steps && r.steps._times) || {};
+      all[r.date] = mergeTimesDay(all[r.date], remoteT);
+    });
+    saveJSON(LS_T, all);
+    return all;
+  };
+  const attachTimes = (iso, steps) => {
+    const row = Object.assign({}, steps || {});
+    const t = timesOf(iso);
+    const times = {};
+    Object.keys(t).forEach((k) => {
+      if (k === "updated_at") return;
+      if (t[k] && typeof t[k] === "object" && (t[k].ms || t[k].open)) times[k] = t[k];
+    });
+    row._times = times;
+    return row;
+  };
+  const fmtSpan = (ms) => {
+    const s = Math.round(Math.max(0, Number(ms) || 0) / 1000);
+    if (s < 60) return s < 5 ? "—" : s + "s";
+    const m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm ? (h + "h " + mm + "m") : (h + "h");
+  };
+  const dayTotalMs = (iso) => {
+    const t = timesOf(iso);
+    let n = 0;
+    Object.keys(t).forEach((k) => {
+      if (k === "updated_at") return;
+      n += (t[k] && t[k].ms) || 0;
+    });
+    return n;
+  };
+  const timingParts = (iso) => {
+    const t = timesOf(iso);
+    return STEPS.concat(EVENING).map((s) => ({
+      id: s.id,
+      title: s.title,
+      ms: (t[s.id] && t[s.id].ms) || 0
+    })).filter((x) => x.ms >= 5000);
+  };
+
   const setStep = (iso, id, val) => {
     const all = loadJSON(LS_M, {});
     if (!all[iso]) all[iso] = emptyMorning();
     all[iso][id] = val;
     saveJSON(LS_M, all);
+    if (val) {
+      try { markClose(iso, id); } catch { /* timing is optional */ }
+    }
     return all[iso];
   };
 
@@ -674,6 +797,7 @@ window.ALIGN_LIFE = (() => {
     clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
+    timesOf, markOpen, markClose, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
     planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
