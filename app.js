@@ -2522,7 +2522,7 @@
             <h3>Evening</h3>
             <p>${nightSp && nightSp.answered ? "Night test " + nightSp.correct + "/" + nightSp.answered : "Night Word, then the same chapters again."}</p>
           </button>
-          <button class="hub-card" data-go="library">
+          <button class="hub-card" type="button" data-act="open-library">
             <div class="tile">${stepIcon("read")}</div>
             <h3>Books</h3>
             <p>${B().list().length ? B().list().length + " in your library" : "Titles sync to this account. Upload a PDF or open after signing in."}</p>
@@ -3211,27 +3211,34 @@
     </div>
   `;
 
+  const bookCat = (c) => {
+    try { if (B() && B().catLabel) return B().catLabel(c); } catch { /* local */ }
+    const s = String(c == null ? "" : c).trim();
+    return s || "Unfiled";
+  };
+
   const bookCardHtml = (b, iso) => {
-    const due = B().dueToday(iso).some((x) => x.id === b.id);
+    if (!b || !b.id) return "";
+    const due = (B().dueToday(iso) || []).some((x) => x.id === b.id);
     const pct = Math.round(B().progress(b) * 100);
     return `
       <button class="book-card" data-act="open-book-meta" data-id="${b.id}">
-        <div class="book-shelf">${escapeHtml(B().catLabel(b.category))}</div>
-        <h3>${escapeHtml(b.title)}</h3>
+        <div class="book-shelf">${escapeHtml(bookCat(b.category))}</div>
+        <h3>${escapeHtml(b.title || "Untitled")}</h3>
         <p>${b.pages ? "p. " + (b.current_page || 1) + " of " + b.pages : "Opening will count pages"} · ${B().slotLabel(b.slot)} · ${B().daysLabel(b.days)}${due ? " · due today" : ""}</p>
         <div class="book-prog"><i style="width:${pct}%"></i></div>
       </button>`;
   };
 
   const viewLibrary = () => {
-    const books = B().list();
+    const books = (B() && B().list && B().list()) || [];
     const iso = today().iso;
     const filter = state.bookShelf || "all";
-    const shelves = B().shelvesOf(books);
+    const shelves = (B().shelvesOf && B().shelvesOf(books)) || [];
     const chips = [`<button class="${filter === "all" ? "on" : ""}" data-act="lib-shelf" data-shelf="all">All</button>`]
       .concat(shelves.map((s) => `<button class="${filter === s ? "on" : ""}" data-act="lib-shelf" data-shelf="${escapeAttr(s)}">${escapeHtml(s)}</button>`))
       .join("");
-    const match = (b, s) => B().catLabel(b.category) === s;
+    const match = (b, s) => bookCat(b.category) === s;
     let body = "";
     if (!books.length) {
       body = `<div class="empty">${state.session ? "Titles on this account show here even before the PDF is on this device. Open Word → Books after signing in, or upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</div>`;
@@ -3511,7 +3518,22 @@
       journalwrite: viewJournalWrite
     };
     const tab = tabFor(state.view);
-    app.innerHTML = (map[state.view] || viewHome)() + (tab ? nav(tab) : "") + overlays();
+    let main = "";
+    try {
+      main = (map[state.view] || viewHome)();
+    } catch (err) {
+      console.warn("ALIGN view", state.view, err);
+      if (state.view === "library" || state.view === "book" || state.view === "reader") {
+        try { main = viewLibrary(); } catch {
+          main = `<div class="screen home"><div class="page-title"><div class="tag">Library</div><h1>Books.</h1></div><div class="empty" style="padding:16px">Couldn’t open the library. Refresh once.</div></div>`;
+        }
+      } else {
+        try { main = viewHome(); } catch { main = `<div class="screen home"></div>`; }
+      }
+    }
+    let extra = "";
+    try { extra = (tab ? nav(tab) : "") + overlays(); } catch { extra = tab ? nav(tab) : ""; }
+    app.innerHTML = main + extra;
     try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
     bind();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
@@ -3520,8 +3542,12 @@
   const bind = () => {
     app.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
       if (state.view === "drill") stopDrillTick();
-      state.view = b.dataset.go;
+      const go = b.dataset.go;
+      state.view = go;
       render();
+      if (go === "library" || go === "word") {
+        pullBooksCloud().then(() => { if (state.view === go) render(); }).catch(() => {});
+      }
     }));
     app.querySelectorAll("[data-go-day]").forEach(b => b.addEventListener("click", () => {
       const d = days.find(x => x.dow === Number(b.dataset.goDay));
@@ -4300,6 +4326,10 @@
     } else if (act === "lib-shelf") {
       state.bookShelf = el.dataset.shelf || "all";
       render();
+    } else if (act === "open-library") {
+      state.view = "library";
+      render();
+      pullBooksCloud().then(() => { if (state.view === "library") render(); }).catch(() => {});
     } else if (act === "open-book-meta") {
       state.bookId = el.dataset.id;
       state.view = "book";

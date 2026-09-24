@@ -320,12 +320,13 @@ window.ALIGN_BOOKS = (() => {
   };
 
   return {
-    MAX_BYTES, DOW,
+    MAX_BYTES, DOW, SHELVES,
     list, byId, addFromFile, update, remove,
     getFile, putFile,
     loggedToday, markRead, dueToday,
     remaining, progress, targetEnd,
     mergeRemote, mergeRemoteLog,
+    coerceCat, catLabel, shelvesOf,
     ensurePdfjs, loadPdfjs, countPages, fmtSize, slotLabel, daysLabel
   };
 })();
