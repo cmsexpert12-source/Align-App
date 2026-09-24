@@ -64,12 +64,34 @@ window.ALIGN_BOOKS = (() => {
     });
   };
 
+  const SHELVES = ["Scripture", "Devotional", "Study", "Growth", "Other"];
   const coerceDays = (d) => {
     if (Array.isArray(d)) return d.map(Number).filter((n) => n >= 0 && n <= 6);
     if (typeof d === "string") {
       return d.replace(/[{}\s]/g, "").split(",").map(Number).filter((n) => n >= 0 && n <= 6);
     }
     return [1, 2, 3, 4, 5, 6];
+  };
+  const coerceCat = (c) => {
+    const s = String(c == null ? "" : c).trim().replace(/\s+/g, " ").slice(0, 40);
+    const hit = SHELVES.find((x) => x.toLowerCase() === s.toLowerCase());
+    return hit || s;
+  };
+  const catLabel = (c) => coerceCat(c) || "Unfiled";
+  const shelvesOf = (books) => {
+    const seen = {};
+    const extra = [];
+    (books || list()).forEach((b) => {
+      const c = coerceCat(b && b.category);
+      const k = c || "Unfiled";
+      if (seen[k]) return;
+      seen[k] = true;
+      if (c && SHELVES.indexOf(c) < 0) extra.push(c);
+    });
+    extra.sort((a, b) => a.localeCompare(b));
+    const out = SHELVES.filter((s) => seen[s]).concat(extra);
+    if (seen.Unfiled) out.push("Unfiled");
+    return out;
   };
   const coerceBook = (b) => {
     if (!b || !b.id) return b;
@@ -79,7 +101,8 @@ window.ALIGN_BOOKS = (() => {
       pages: Number(b.pages) || 0,
       pages_per_day: Number(b.pages_per_day) || 8,
       enabled: b.enabled !== false,
-      slot: b.slot === "morning" ? "morning" : "evening"
+      slot: b.slot === "morning" ? "morning" : "evening",
+      category: coerceCat(b.category)
     });
   };
   const list = () => (loadJSON(LS, []) || []).map(coerceBook);
@@ -162,6 +185,7 @@ window.ALIGN_BOOKS = (() => {
       days: [1, 2, 3, 4, 5, 6],
       pages_per_day: 8,
       enabled: true,
+      category: "",
       storage_path: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -251,6 +275,8 @@ window.ALIGN_BOOKS = (() => {
       if (!next.storage_path && cur.storage_path) next.storage_path = cur.storage_path;
       next.current_page = Math.max(Number(cur.current_page) || 1, Number(remote.current_page) || 1);
       if ((Number(remote.pages) || 0) > (Number(next.pages) || 0)) next.pages = Number(remote.pages);
+      if (!coerceCat(remote.category) && cur.category) next.category = cur.category;
+      next.category = coerceCat(next.category);
       by[r.id] = coerceBook(next);
     });
     const arr = Object.values(by).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));

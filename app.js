@@ -71,6 +71,7 @@
     spurgeonPm: null,
     odb: null,
     bookId: null,
+    bookShelf: "all",
     pdfErr: "",
     pdfBusy: false,
     pdfPage: 1,
@@ -3210,30 +3211,56 @@
     </div>
   `;
 
+  const bookCardHtml = (b, iso) => {
+    const due = B().dueToday(iso).some((x) => x.id === b.id);
+    const pct = Math.round(B().progress(b) * 100);
+    return `
+      <button class="book-card" data-act="open-book-meta" data-id="${b.id}">
+        <div class="book-shelf">${escapeHtml(B().catLabel(b.category))}</div>
+        <h3>${escapeHtml(b.title)}</h3>
+        <p>${b.pages ? "p. " + (b.current_page || 1) + " of " + b.pages : "Opening will count pages"} · ${B().slotLabel(b.slot)} · ${B().daysLabel(b.days)}${due ? " · due today" : ""}</p>
+        <div class="book-prog"><i style="width:${pct}%"></i></div>
+      </button>`;
+  };
+
   const viewLibrary = () => {
     const books = B().list();
     const iso = today().iso;
+    const filter = state.bookShelf || "all";
+    const shelves = B().shelvesOf(books);
+    const chips = [`<button class="${filter === "all" ? "on" : ""}" data-act="lib-shelf" data-shelf="all">All</button>`]
+      .concat(shelves.map((s) => `<button class="${filter === s ? "on" : ""}" data-act="lib-shelf" data-shelf="${escapeAttr(s)}">${escapeHtml(s)}</button>`))
+      .join("");
+    const match = (b, s) => B().catLabel(b.category) === s;
+    let body = "";
+    if (!books.length) {
+      body = `<div class="empty">${state.session ? "Titles on this account show here even before the PDF is on this device. Open Word → Books after signing in, or upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</div>`;
+    } else if (filter !== "all") {
+      const rows = books.filter((b) => match(b, filter));
+      body = rows.length ? rows.map((b) => bookCardHtml(b, iso)).join("") : `<div class="empty">Nothing on this shelf yet.</div>`;
+    } else {
+      const order = (B().SHELVES || []).concat(shelves.filter((s) => s !== "Unfiled" && (B().SHELVES || []).indexOf(s) < 0));
+      if (shelves.indexOf("Unfiled") >= 0) order.push("Unfiled");
+      const seen = {};
+      body = order.filter((s) => { if (seen[s]) return false; seen[s] = true; return true; }).map((s) => {
+        const rows = books.filter((b) => match(b, s));
+        if (!rows.length) return "";
+        return `<div class="set-label">${escapeHtml(s)}</div>` + rows.map((b) => bookCardHtml(b, iso)).join("");
+      }).join("");
+    }
     return `
       <div class="screen home">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Library</div>
           <h1>Books.</h1>
-          <p>Upload a PDF. Schedule a sitting. Read it here, offline${state.session ? " — synced to your account" : ""}.</p>
+          <p>Upload a PDF. Put it on a shelf. Read it here, offline${state.session ? " — synced to your account" : ""}.</p>
         </div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
           <button class="btn" data-act="pick-pdf" style="margin-bottom:14px">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
-          ${!books.length ? `<div class="empty">${state.session ? "Titles on this account show here even before the PDF is on this device. Open Word → Books after signing in, or upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</div>` : books.map((b) => {
-            const due = B().dueToday(iso).some((x) => x.id === b.id);
-            const pct = Math.round(B().progress(b) * 100);
-            return `
-              <button class="book-card" data-act="open-book-meta" data-id="${b.id}">
-                <h3>${escapeHtml(b.title)}</h3>
-                <p>${b.pages ? "p. " + (b.current_page || 1) + " of " + b.pages : "Opening will count pages"} · ${B().slotLabel(b.slot)} · ${B().daysLabel(b.days)}${due ? " · due today" : ""}</p>
-                <div class="book-prog"><i style="width:${pct}%"></i></div>
-              </button>`;
-          }).join("")}
+          ${books.length ? `<div class="shelf-chips">${chips}</div>` : ""}
+          ${body}
         </div>
       </div>
     `;
@@ -3254,6 +3281,13 @@
         <div class="scroll-body" style="padding:0 16px 20px">
           <div class="field"><label>Title</label>
             <input id="book-title" value="${escapeAttr(b.title)}" />
+          </div>
+          <div class="field"><label>Shelf</label>
+            <div class="shelf-chips">
+              ${(B().SHELVES || []).map((s) => `<button type="button" class="${B().catLabel(b.category)===s?"on":""}" data-act="book-shelf" data-shelf="${s}">${s}</button>`).join("")}
+              <button type="button" class="${!B().coerceCat(b.category)?"on":""}" data-act="book-shelf" data-shelf="">Unfiled</button>
+            </div>
+            <input id="book-cat" placeholder="Or type a shelf — Leadership, work…" value="${(B().SHELVES || []).indexOf(B().coerceCat(b.category)) >= 0 || !b.category ? "" : escapeAttr(b.category)}" />
           </div>
           <div class="field"><label>When</label>
             <div class="seg">
@@ -3602,6 +3636,12 @@
     if (bt) bt.addEventListener("change", () => {
       const next = B().update(state.bookId, { title: bt.value.trim() || "Untitled" });
       if (next) syncBook(next);
+    });
+    const bc = document.getElementById("book-cat");
+    if (bc) bc.addEventListener("change", () => {
+      const next = B().update(state.bookId, { category: (bc.value || "").trim() });
+      if (next) syncBook(next);
+      render();
     });
     const ppd = document.getElementById("book-ppd");
     if (ppd) ppd.addEventListener("change", () => {
@@ -4257,6 +4297,9 @@
     } else if (act === "pick-pdf") {
       const inp = document.getElementById("pdf-file");
       if (inp) inp.click();
+    } else if (act === "lib-shelf") {
+      state.bookShelf = el.dataset.shelf || "all";
+      render();
     } else if (act === "open-book-meta") {
       state.bookId = el.dataset.id;
       state.view = "book";
@@ -4302,6 +4345,10 @@
       closePdf();
       toast("Reading logged");
       goNext();
+    } else if (act === "book-shelf") {
+      const next = B().update(state.bookId, { category: el.dataset.shelf || "" });
+      if (next) syncBook(next);
+      render();
     } else if (act === "book-slot") {
       const b = B().update(state.bookId, { slot: el.dataset.slot });
       if (b) syncBook(b);

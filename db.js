@@ -687,7 +687,7 @@ window.AlignDB = (() => {
     } else if (item.kind === "book") {
       if (!p.id) err = null;
       else {
-        err = await restUpsert("books", {
+        const bookRow = {
           id: p.id,
           user_id: userId,
           title: p.title || "Untitled",
@@ -701,8 +701,14 @@ window.AlignDB = (() => {
           days: Array.isArray(p.days) ? p.days : [1, 2, 3, 4, 5, 6],
           pages_per_day: Number(p.pages_per_day) || 8,
           enabled: p.enabled !== false,
+          category: String(p.category || "").trim().slice(0, 40),
           updated_at: now
-        }, "id");
+        };
+        err = await restUpsert("books", bookRow, "id");
+        if (err && /category|PGRST204|schema cache|column/i.test(err.message || "")) {
+          delete bookRow.category;
+          err = await restUpsert("books", bookRow, "id");
+        }
         if (err && missingTable(err)) err = null;
       }
     } else if (item.kind === "reading") {

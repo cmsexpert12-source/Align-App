@@ -1031,6 +1031,16 @@ img { max-width: 100%; display: block; }
 }
 .book-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
 .book-card p { font-size: 12px; color: var(--muted); }
+.book-shelf {
+  font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--lime); margin-bottom: 4px;
+}
+.shelf-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+.shelf-chips button {
+  height: 32px; padding: 0 12px; border-radius: 99px; font-size: 12px; font-weight: 700;
+  background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+}
+.shelf-chips button.on { background: var(--lime); color: #111; border-color: var(--lime); }
 .book-prog { height: 6px; background: #1c1f28; border-radius: 99px; overflow: hidden; margin-top: 10px; }
 .book-prog i { display: block; height: 100%; background: var(--lime); border-radius: 99px; }
 .day-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }

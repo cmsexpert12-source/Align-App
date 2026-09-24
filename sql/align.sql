@@ -115,9 +115,12 @@ create table if not exists public.books (
   days int[] not null default '{1,2,3,4,5,6}',
   pages_per_day int not null default 8,
   enabled boolean not null default true,
+  category text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.books add column if not exists category text not null default '';
 
 create index if not exists books_user_idx on public.books (user_id);
 
