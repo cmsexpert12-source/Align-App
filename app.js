@@ -84,7 +84,9 @@
     planJustSaved: false,
     journalIso: "",
     journalNoteId: "",
-    showHow: false
+    showHow: false,
+    verseSitOn: false,
+    verseSitSec: 0
   };
 
   /* ---------- SVG poses ---------- */
@@ -803,9 +805,19 @@
     }
     const m = L().morningOf(iso);
     if (id === "move") return !!(m.move || completedOn(iso));
-    if (id === "drill" || id === "verse" || id === "affirm") {
+    if (id === "drill" || id === "affirm") {
       if (m[id]) return true;
       if (m[id] == null && m.word && (m.plan || m.ready || m.go)) return true;
+      return false;
+    }
+    if (id === "verse") {
+      if (m.verse) return true;
+      if (m.verse == null && m.word) return true;
+      return false;
+    }
+    if (id === "recite") {
+      if (m.recite) return true;
+      if (m.recite == null && m.go) return true;
       return false;
     }
     if (id === "read") {
@@ -871,6 +883,16 @@
           if (el) el.textContent = fmtClock(state.readySec);
         }
       }
+      if (state.verseSitOn && state.verseSitSec < 120) {
+        state.verseSitSec += 1;
+        if (state.view === "verse") {
+          const el = app.querySelector(".verse-sit");
+          if (el) el.textContent = fmtClock(state.verseSitSec);
+          if (state.verseSitSec >= 120) {
+            try { render(); } catch { /* keep clock */ }
+          }
+        }
+      }
     }, 1000);
   };
 
@@ -899,56 +921,59 @@
     render();
   };
 
-  const openVerseTutor = (forceToday) => {
+  const lockDevotionVerse = () => {
     const iso = today().iso;
-    const a = L().todayAssignment(iso);
-    const read = a.read || [];
-    if (read.length || forceToday) {
-      S().ensureTodayVerse(iso, read, state.readPacks || []);
+    const raw = (state.spurgeonAm && state.spurgeonAm.v)
+      || ((L().journalOf(iso) || {}).anchorVerse)
+      || "";
+    let parsed = null;
+    try { parsed = L().parseDevotionVerse && L().parseDevotionVerse(raw); } catch { parsed = null; }
+    if (parsed && parsed.text && S().setTodayVerse) {
+      S().setTodayVerse(iso, parsed);
+      return parsed;
     }
-    const tv = S().todayVerse(iso);
-    const daily = S().load().daily[iso] || {};
-    if (daily.verseDone || stepIsDone("verse")) {
-      goAffirm();
-      return;
-    }
-    const queue = [];
-    const seen = new Set();
-    if (tv && !daily.verseDone) {
-      queue.push({ kind: "today", verse: tv });
-      seen.add(tv.id);
-    }
-    S().dueVerses().forEach((row) => {
-      const v = row.v;
-      if (!v || seen.has(v.id)) return;
-      if (queue.length >= 6) return;
-      queue.push({ kind: "review", verse: v });
-      seen.add(v.id);
-    });
-    if (!queue.length && tv) queue.push({ kind: "review", verse: tv });
-    if (!queue.length) {
-      toast("Read today’s Scripture first. The verse is picked from those chapters.");
-      return;
-    }
-    const first = queue[0];
-    state.verseSess = {
-      queue, i: 0,
-      phase: first.kind === "today" ? "learn" : "recall",
-      cloze: null, filled: [], chips: [], used: [], misses: 0, revealed: false
-    };
-    if (state.verseSess.phase === "learn") { /* stay */ }
-    state.view = "verse";
-    render();
+    return S().todayVerse(iso);
   };
 
-  const goAffirm = () => {
+  const finishMemory = () => {
     const iso = today().iso;
+    state.verseSitOn = false;
     try { S().markVerseDone(iso); } catch { /* local */ }
     if (!stepIsDone("verse")) {
       const steps = L().setStep(iso, "verse", true);
       AlignDB.saveMorning(iso, steps).catch(() => {});
       toast("Verse hidden.");
     }
+    const a = L().todayAssignment(iso);
+    openBible(a.next.book, a.next.chapter);
+  };
+
+  const openVerseTutor = (forceToday) => {
+    const iso = today().iso;
+    const tv = lockDevotionVerse() || S().todayVerse(iso);
+    const daily = S().load().daily[iso] || {};
+    if ((daily.verseDone || stepIsDone("verse")) && !forceToday) {
+      finishMemory();
+      return;
+    }
+    if (!tv || !tv.text) {
+      toast("Save today’s devotion first. The verse is the line from that reading.");
+      return;
+    }
+    const queue = [{ kind: "today", verse: tv }];
+    state.verseSitOn = true;
+    if (!state.verseSitSec) state.verseSitSec = 0;
+    ensureLifeTick();
+    state.verseSess = {
+      queue, i: 0,
+      phase: "sit",
+      cloze: null, filled: [], chips: [], used: [], misses: 0, revealed: false
+    };
+    state.view = "verse";
+    render();
+  };
+
+  const goAffirm = () => {
     state.view = "affirm";
     render();
   };
@@ -956,26 +981,8 @@
   const advanceVerse = () => {
     const sess = state.verseSess;
     if (!sess) return;
-    const item = currentVerse();
-    const wasToday = !!(item && item.kind === "today");
-    if (wasToday) {
-      try { S().markVerseDone(today().iso); } catch { /* local */ }
-    }
-    sess.i += 1;
-    sess.cloze = null;
-    sess.filled = [];
-    sess.chips = [];
-    sess.used = [];
-    sess.misses = 0;
-    sess.revealed = false;
-    const next = currentVerse();
-    if (wasToday || !next) {
-      sess.phase = "done";
-      goAffirm();
-      return;
-    }
-    sess.phase = next.kind === "today" ? "learn" : "recall";
-    render();
+    sess.phase = "done";
+    finishMemory();
   };
 
   let drillTick = null;
@@ -1137,7 +1144,7 @@
   const tabFor = (view) => {
     if (view === "home") return "home";
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
-    if (["word", "library", "pray", "devotion", "bible", "verse", "drill", "affirm", "devotionlog", "evening"].includes(view)) return "word";
+    if (["word", "library", "pray", "devotion", "bible", "verse", "drill", "affirm", "devotionlog", "evening", "recite", "lights"].includes(view)) return "word";
     if (view === "journal") return "journal";
     if (view === "profile" || view === "sound") return "profile";
     return null;
@@ -1348,8 +1355,8 @@
     const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
     const planNote = String(plan.note || "").trim();
     const jn = L().journalOf(t.iso);
-    if ((morn.word || morn.devotion) && (assign.read || []).length) {
-      try { S().ensureTodayVerse(t.iso, assign.read, state.readPacks || []); } catch { /* ok */ }
+    if (morn.devotion) {
+      try { lockDevotionVerse(); } catch { /* ok */ }
     }
     const tv = S().todayVerse(t.iso);
     const verseRef = (tv && S().refOf) ? S().refOf(tv) : "";
@@ -1392,6 +1399,9 @@
       }
       if (s.id === "affirm") {
         return morn.affirm ? "Spoken" : s.sub;
+      }
+      if (s.id === "recite") {
+        return morn.recite ? "Read again" : s.sub;
       }
       return s.sub;
     };
@@ -2061,7 +2071,7 @@
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
-        <p class="plan-kicker">Pray. Devotion. Scripture. Sprint. Memory. Affirm. Then the day unlocks.</p>
+        <p class="plan-kicker">Pray. Devotion. Two minutes on the verse. Hide it. Scripture. Sprint. Affirm. Read it again before you go — and before bed.</p>
         <div class="hub-grid">
           <button class="hub-card" data-act="open-step" data-step="pray">
             <div class="tile">${stepIcon("pray")}</div>
@@ -2144,9 +2154,9 @@
       return `
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-          <div class="page-title"><div class="tag">Memory</div><h1>Hide the Word.</h1>
-            <p>Read today’s chapters first. ALIGN picks one line worth hiding — inspiring, known, or the bottom of the text. Miss it and it returns tomorrow. Grade it well and it waits longer.</p></div>
-          <div style="padding:0 22px"><button class="btn" data-act="verse-continue">Continue</button></div>
+          <div class="page-title"><div class="tag">Memory</div><h1>The devotion verse.</h1>
+            <p>Two minutes on the line from this morning’s devotion. Then hide the words.</p></div>
+          <div style="padding:0 22px"><button class="btn" data-act="open-step" data-step="verse">Begin</button></div>
         </div>`;
     }
     const item = currentVerse();
@@ -2158,14 +2168,41 @@
           <div class="done-hero" style="padding:24px 22px">
             <div class="kicker">Memory</div>
             <h1>Hidden.</h1>
-            <p class="lead" style="color:var(--muted)">Spaced repetition will bring it back. Affirm next, then the day unlocks.</p>
+            <p class="lead" style="color:var(--muted)">Scripture is next. You’ll read this line again before you go, and once more at lights out.</p>
           </div>
           <div class="sticky-cta">
-            <button class="btn" data-act="verse-continue">Continue to affirm</button>
+            <button class="btn" data-act="verse-continue">Continue to Scripture</button>
           </div>
         </div>`;
     }
     const phase = sess.phase;
+    if (phase === "sit") {
+      const left = Math.max(0, 120 - (state.verseSitSec || 0));
+      const ready = left <= 0;
+      return `
+        <div class="screen full has-cta">
+          <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+          <div class="page-title" style="padding-bottom:4px">
+            <div class="tag">From today’s devotion</div>
+            <h1>Read it for 2 minutes.</h1>
+            <p>Stay with the line. Don’t rush it. Then you’ll hide the words.</p>
+          </div>
+          <div class="pray-stage">
+            <div class="pray-time verse-sit">${fmtClock(state.verseSitSec || 0)}</div>
+            <p class="hint">${ready ? "Two minutes. Now hide it." : "Keep reading until the clock hits 2:00."}</p>
+          </div>
+          <div class="verse-body">
+            <div class="verse-card">
+              <div class="verse-theme">Devotion</div>
+              <div class="ref">${escapeHtml(S().refOf(v))}</div>
+              <q class="mv-text">${escapeHtml(v.text)}</q>
+            </div>
+          </div>
+          <div class="sticky-cta">
+            <button class="btn" data-act="verse-sit-done" ${ready ? "" : "disabled"}>${ready ? "I’ve read it · revise" : "Keep reading"}</button>
+          </div>
+        </div>`;
+    }
     const n = sess.queue.length;
     const tag = item.kind === "today" ? "Today’s verse" : "Review";
     const clozeHtml = () => {
@@ -2195,7 +2232,7 @@
         <div class="page-title" style="padding-bottom:4px">
           <div class="tag">${tag} · ${escapeHtml(v.theme || "The Word")}</div>
           <h1>${phase === "grade" ? "How did it sit?" : phase === "cloze" ? "Fill the line." : phase === "recall" ? "Say it." : "Hide it."}</h1>
-          <p>${phase === "learn" ? escapeHtml(v.why || "A line worth keeping.") : phase === "recall" ? "First letters. Speak it. Then grade yourself honestly." : phase === "cloze" ? "Tap the missing words, in order." : "Again if it slipped. Easy if you could preach it."}</p>
+          <p>${phase === "learn" ? "The line from this morning’s devotion." : phase === "recall" ? "First letters. Speak it. Then grade yourself honestly." : phase === "cloze" ? "Tap the missing words, in order." : "Again if it slipped. Easy if you could preach it."}</p>
         </div>
         <div class="verse-body">
           <div class="verse-card">
@@ -2225,7 +2262,7 @@
               <button class="g-good" data-act="verse-grade" data-g="2">Good</button>
               <button class="g-easy" data-act="verse-grade" data-g="3">Easy</button>
             </div>` : ""}
-          ${(S().load().daily[today().iso] || {}).verseDone ? `<button class="btn ghost" style="margin-top:8px" data-act="verse-continue">Continue to affirm</button>` : ""}
+          ${(S().load().daily[today().iso] || {}).verseDone ? `<button class="btn ghost" style="margin-top:8px" data-act="verse-continue">Continue to Scripture</button>` : ""}
         </div>
       </div>
     `;
@@ -2252,7 +2289,7 @@
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" ${nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`}>${nQ ? "Start the clock" : "Read first"}</button>
-            <p class="next-up">${night ? "Then lights out." : "Then hide today’s verse. Then affirm."}</p>
+            <p class="next-up">${night ? "Then read today’s verse. Then lights out." : "Then affirm."}</p>
           </div>
         </div>`;
     }
@@ -2274,7 +2311,7 @@
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             ${d.mode === "night"
               ? `<button class="btn" data-act="complete-step" data-step="nightquiz">Continue</button>`
-              : `<button class="btn" data-act="open-step" data-step="verse">Continue to memory</button>`}
+              : `<button class="btn" data-act="open-step" data-step="affirm">Continue to affirm</button>`}
             <button class="btn ghost" style="margin-top:8px" data-act="drill-start">Go again</button>
           </div>
         </div>`;
@@ -2537,6 +2574,12 @@
           <p>Read this. Then the phone goes down.</p>
         </div>
         <div class="scripture">
+          ${(() => {
+            const v = lockDevotionVerse() || S().todayVerse(today().iso);
+            return v && v.text ? `<div class="tag">Morning verse · once more</div>
+            <div class="devotion-verse">${escapeHtml(S().refOf(v))}</div>
+            <div class="devotion-body">${escapeHtml(v.text)}</div>` : "";
+          })()}
           ${sp ? `
             <div class="tag">Spurgeon · Evening</div>
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
@@ -2544,8 +2587,8 @@
           ` : `<p class="hint">Loading evening reading…</p>`}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="open-nightdrill">Test today’s reading</button>
-          <button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="evening">Amen · I’m done</button>
+          <button class="btn" data-act="open-step" data-step="lights">Read the verse · lights out</button>
+          <button class="btn ghost" style="margin-top:8px" data-act="open-nightdrill">Test today’s reading</button>
         </div>
       </div>
     `;
@@ -2553,16 +2596,29 @@
 
   const viewLights = () => {
     const clk = L().clocksFor(today().date);
+    const v = lockDevotionVerse() || S().todayVerse(today().iso);
+    const read = !!L().morningOf(today().iso).nightverse;
     return `
-      <div class="screen full">
+      <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-        <div class="done-hero" style="padding:24px 22px">
-          <div class="kicker">Lights out</div>
-          <h1>${clk.tonightLabel}</h1>
-          <p class="lead" style="color:var(--muted)">${clk.sunday ? "Sunday. Rise at 4:00 AM." : "Rise at 5:00 AM."} The morning path is already waiting.</p>
+        <div class="page-title">
+          <div class="tag">Lights out · ${clk.tonightLabel}</div>
+          <h1>${read ? "Phone down." : "Read it before bed."}</h1>
+          <p>${read
+            ? (clk.sunday ? "Sunday. Rise at 4:00 AM." : "Rise at 5:00 AM.") + " The morning path is already waiting."
+            : "The same line from this morning’s devotion. Read it once more. Then the phone goes down."}</p>
         </div>
-        <div style="padding:0 22px calc(22px + var(--safe-b))">
-          <button class="btn" data-act="complete-step" data-step="lights">Phone down</button>
+        <div class="verse-body">
+          <div class="verse-card">
+            <div class="verse-theme">Tonight</div>
+            <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
+            <q class="mv-text">${v ? escapeHtml(v.text) : "This morning’s devotion verse will show here."}</q>
+          </div>
+        </div>
+        <div class="sticky-cta">
+          ${read
+            ? `<button class="btn" data-act="complete-step" data-step="lights">Phone down</button>`
+            : `<button class="btn" data-act="night-verse">I’ve read it · phone down</button>`}
         </div>
       </div>
     `;
@@ -2677,6 +2733,32 @@
   `;
   };
 
+
+  const viewRecite = () => {
+    const v = lockDevotionVerse() || S().todayVerse(today().iso);
+    const sunday = L().clocksFor(today().date).sunday;
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">Before you go</div>
+          <h1>Read it again.</h1>
+          <p>The same line from this morning’s devotion. Say it. Then ${sunday ? "leave for church." : "begin the day."}</p>
+        </div>
+        <div class="verse-body">
+          <div class="verse-card">
+            <div class="verse-theme">Devotion</div>
+            <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
+            <q class="mv-text">${v ? escapeHtml(v.text) : "Save the devotion first."}</q>
+          </div>
+        </div>
+        <div class="sticky-cta">
+          <button class="btn" data-act="recite-done" ${v && v.text ? "" : "disabled"}>I’ve read it</button>
+        </div>
+      </div>
+    `;
+  };
+
   const viewGo = () => {
     const sunday = L().clocksFor(today().date).sunday;
     return `
@@ -2686,7 +2768,7 @@
         <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
         <div class="kicker">${sunday ? "Leave by 5:45" : "The morning is complete"}</div>
         <h1>${sunday ? "Go<br>to church." : "Begin<br>the day."}</h1>
-        <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "Train. Pray. Word. Plan. Ready. You don’t need another app until evening."}</p>
+        <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "The verse is in you. Go well. Read it once more before bed."}</p>
       </div>
       <div style="padding:0 22px calc(22px + var(--safe-b))">
         <button class="btn" data-act="complete-step" data-step="go">Step out</button>
@@ -2947,6 +3029,7 @@
       dayplan: viewDayPlan,
       getready: viewGetReady,
       go: viewGo,
+      recite: viewRecite,
       biblepick: viewBiblePick,
       evening: viewEvening,
       lights: viewLights,
@@ -3592,7 +3675,15 @@
         state.view = "drill";
         render();
       } else if (step === "verse") {
-        openVerseTutor(false);
+        const run = () => openVerseTutor(true);
+        if (state.spurgeonAm && state.spurgeonAm.v) run();
+        else {
+          (L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; run(); }).catch(() => run()));
+        }
+      } else if (step === "recite") {
+        const go = () => { state.view = "recite"; render(); };
+        if (state.spurgeonAm && state.spurgeonAm.v) go();
+        else (L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; go(); }).catch(() => go()));
       } else if (step === "affirm") {
         state.view = "affirm";
         render();
@@ -3702,8 +3793,14 @@
       AlignDB.saveJournal(iso, j).catch(() => {});
       completeStep("devotion");
       toast("Devotion saved");
-      state.view = "home";
-      render();
+      const startMem = () => {
+        lockDevotionVerse();
+        openVerseTutor(true);
+      };
+      if (state.spurgeonAm && state.spurgeonAm.v) startMem();
+      else {
+        L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; startMem(); }).catch(() => startMem());
+      }
     } else if (act === "bible-done") {
       if (!state.readBook) return;
       const verses = (state.bibleData && state.bibleData.verses && state.bibleData.verses.length) || 0;
@@ -3937,7 +4034,34 @@
       if (state.verseSess) state.verseSess.revealed = true;
       render();
     } else if (act === "verse-continue") {
-      goAffirm();
+      finishMemory();
+    } else if (act === "verse-sit-done") {
+      if ((state.verseSitSec || 0) < 120) {
+        toast("Stay with it until 2:00.");
+        return;
+      }
+      state.verseSitOn = false;
+      const sess = state.verseSess;
+      const item = currentVerse();
+      if (!sess || !item) return;
+      startCloze(item.verse);
+      sess.phase = (sess.cloze && sess.cloze.answers && sess.cloze.answers.length) ? "cloze" : "grade";
+      render();
+    } else if (act === "recite-done") {
+      completeStep("recite");
+      sfx("ok");
+      toast("Amen.");
+      state.view = "go";
+      render();
+    } else if (act === "night-verse") {
+      const iso = today().iso;
+      const steps = L().setStep(iso, "nightverse", true);
+      AlignDB.saveMorning(iso, steps).catch(() => {});
+      completeStep("lights");
+      sfx("done");
+      toast("Phone down.");
+      state.view = "home";
+      render();
     } else if (act === "verse-grade") {
       const item = currentVerse();
       if (!item) return;

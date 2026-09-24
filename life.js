@@ -189,12 +189,13 @@ window.ALIGN_LIFE = (() => {
     { id: "move", title: "Train", sub: "Body first, while the mind is quiet.", icon: "move" },
     { id: "pray", title: "Pray", sub: "Before you read. Before you plan.", icon: "pray" },
     { id: "devotion", title: "Devotion", sub: "Your daily reading. Capture what stays.", icon: "book" },
+    { id: "verse", title: "Memory", sub: "Two minutes on the devotion verse. Then hide it.", icon: "verse" },
     { id: "word", title: "Scripture", sub: "Three or four chapters. Stay with it.", icon: "word" },
     { id: "drill", title: "Sprint", sub: "Thirty questions. Meaning, not trivia.", icon: "drill" },
-    { id: "verse", title: "Memory", sub: "Hide one line from today’s reading.", icon: "verse" },
     { id: "affirm", title: "Affirm", sub: "Read today’s word over yourself.", icon: "spark" },
     { id: "plan", title: "Plan the day", sub: "Three true priorities. Then the rest.", icon: "plan" },
     { id: "ready", title: "Get ready", sub: "Bath, dress, leave the room in order.", icon: "ready" },
+    { id: "recite", title: "Verse again", sub: "Read the devotion line once more before you go.", icon: "verse" },
     { id: "go", title: "Begin", sub: "Step into the day. Nothing else to open.", icon: "go" }
   ];
 
@@ -214,12 +215,13 @@ window.ALIGN_LIFE = (() => {
     return STEPS.map((s) => {
       if (s.id === "move") return { ...s, sub: "Twelve minutes. Then Word." };
       if (s.id === "devotion") return { ...s, sub: "Short. One line that stays." };
+      if (s.id === "verse") return { ...s, sub: "Two minutes. Then hide it. Then one chapter." };
       if (s.id === "word") return { ...s, sub: "One chapter. That’s Sunday." };
       if (s.id === "drill") return { ...s, sub: "Thirty questions on the one chapter." };
-      if (s.id === "verse") return { ...s, sub: "Hide the line. Then church." };
       if (s.id === "affirm") return { ...s, sub: "Speak it. Then get ready." };
       if (s.id === "plan") return { ...s, sub: "Church first. Keep the rest light." };
       if (s.id === "ready") return { ...s, sub: "Dress for church. Leave by 5:45." };
+      if (s.id === "recite") return { ...s, sub: "The devotion verse once more. Then go." };
       if (s.id === "go") return { ...s, sub: "Out the door by 5:45." };
       return s;
     });
@@ -565,6 +567,29 @@ window.ALIGN_LIFE = (() => {
     return DEFAULT_AFFIRMS[((day % DEFAULT_AFFIRMS.length) + DEFAULT_AFFIRMS.length) % DEFAULT_AFFIRMS.length];
   };
 
+  const parseDevotionVerse = (raw) => {
+    const s = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!s) return null;
+    let text = s;
+    let ref = "";
+    const cut = s.match(/^(?:["“](.+?)["”]|(.+?))\s*[—–-]\s*(.+)$/);
+    if (cut) {
+      text = String(cut[1] || cut[2] || "").replace(/^["“]|["”]$/g, "").trim();
+      ref = String(cut[3] || "").trim();
+    }
+    const rm = ref.match(/^(.+?)\s+(\d+):(\d+)(?:[-–](\d+))?$/);
+    const book = rm ? rm[1].trim() : "";
+    const chapter = rm ? Number(rm[2]) : 0;
+    const verse = rm ? Number(rm[3]) : 0;
+    const thru = rm && rm[4] ? Number(rm[4]) : verse;
+    const id = "dev:" + (book || "verse").replace(/\s+/g, "").toLowerCase() + "-" + (chapter || 0) + "-" + (verse || 0);
+    return {
+      id, book: book || "Scripture", chapter: chapter || 1, verse: verse || 1, thru: thru || 1,
+      text, theme: "Devotion", why: "The line from this morning’s devotion.",
+      custom: true, source: "devotion", ref: ref || ""
+    };
+  };
+
   const devotionLog = () => {
     const all = journalsAll();
     return Object.keys(all).sort().reverse().map((iso) => {
@@ -589,6 +614,6 @@ window.ALIGN_LIFE = (() => {
     fetchChapter, markChapterRead, todayAssignment,
     planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
-    affirmationPref, saveAffirmationPref, todayAffirmation
+    affirmationPref, saveAffirmationPref, todayAffirmation, parseDevotionVerse
   };
 })();

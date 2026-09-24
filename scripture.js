@@ -576,9 +576,33 @@ window.ALIGN_SCRIPTURE = (() => {
     return VERSES.find((v) => v.id === "ps119-11") || VERSES[0];
   };
 
+  const setTodayVerse = (iso, verse) => {
+    if (!verse) return null;
+    const data = load();
+    const row = data.daily[iso] || {};
+    const snap = {
+      id: verse.id, book: verse.book, chapter: verse.chapter, verse: verse.verse,
+      thru: verse.thru || verse.verse, text: verse.text, theme: verse.theme || "Devotion",
+      why: verse.why || "", custom: true, source: verse.source || "devotion", ref: verse.ref || ""
+    };
+    data.daily[iso] = Object.assign({}, row, { verseId: snap.id, verseSnap: snap });
+    if (!data.verses[snap.id]) {
+      data.verses[snap.id] = {
+        ease: 2.5, interval: 0, reps: 0, lapses: 0, due: Date.now(), last: 0,
+        added: Date.now(), book: snap.book, chapter: snap.chapter, verse: snap.verse,
+        thru: snap.thru, text: snap.text, theme: snap.theme, why: snap.why
+      };
+    }
+    save(data);
+    return { verse: snap, daily: data.daily[iso] };
+  };
+
   const ensureTodayVerse = (iso, readings, chapterPacks) => {
     const data = load();
     const row = data.daily[iso] || {};
+    if (row.verseSnap && row.verseSnap.source === "devotion") {
+      return { verse: row.verseSnap, daily: row, reused: true };
+    }
     if (row.verseId) {
       const known = byId(row.verseId);
       if (known) return { verse: known, daily: row, reused: true };
@@ -944,7 +968,7 @@ window.ALIGN_SCRIPTURE = (() => {
     load, save, refOf, byId,
     review, gradeQuiz, gradeVerse,
     dueVerses, learnedCount, verseStreak,
-    pickFromReadings, fromChapter, ensureTodayVerse,
+    pickFromReadings, fromChapter, ensureTodayVerse, setTodayVerse,
     markVerseDone, todayVerse,
     shuffle, optionsOf, dailyQueue, markSprint, sprintOf, nightSprintOf,
     ingestReading, enrichReading, readingQs, fromPacks,
