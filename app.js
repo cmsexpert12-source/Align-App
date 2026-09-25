@@ -509,11 +509,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -571,6 +571,21 @@
   const B = () => window.ALIGN_BOOKS;
   const S = () => window.ALIGN_SCRIPTURE;
   let pdfDoc = null;
+  let pdfRenderTask = null;
+  let pdfPaintGen = 0;
+  let pdfZoom = 1;
+  let pdfWake = null;
+  let pdfChromeTimer = 0;
+  let pdfResizeOn = false;
+  const pdfPrefs = { theme: "paper", fit: "width" };
+  try {
+    const pr = JSON.parse(localStorage.getItem("align-reader") || "null") || {};
+    if (pr.theme === "night" || pr.theme === "sepia" || pr.theme === "paper") pdfPrefs.theme = pr.theme;
+    if (pr.fit === "page" || pr.fit === "width") pdfPrefs.fit = pr.fit;
+  } catch { /* paper */ }
+  const savePdfPrefs = () => {
+    try { localStorage.setItem("align-reader", JSON.stringify(pdfPrefs)); } catch { /* ignore */ }
+  };
 
   const pathSteps = () => {
     const t = today();
@@ -817,23 +832,114 @@
     focusAi();
   };
 
+  const dropPdfWake = () => {
+    try { if (pdfWake) pdfWake.release(); } catch { /* ignore */ }
+    pdfWake = null;
+  };
+  const holdPdfWake = async () => {
+    dropPdfWake();
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        pdfWake = await navigator.wakeLock.request("screen");
+        pdfWake.addEventListener("release", () => { pdfWake = null; });
+      }
+    } catch { pdfWake = null; }
+  };
+  const armPdfResize = () => {
+    if (pdfResizeOn) return;
+    pdfResizeOn = true;
+    window.addEventListener("resize", () => {
+      if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.view === "reader") holdPdfWake();
+    });
+    window.addEventListener("keydown", (e) => {
+      if (state.view !== "reader") return;
+      if (e.key === "ArrowRight" || e.key === "PageDown") { e.preventDefault(); goPdfPage(state.pdfPage + 1); }
+      else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); goPdfPage(state.pdfPage - 1); }
+      else if (e.key === "Escape") handle("close-reader", app);
+    });
+  };
+  const updatePdfChrome = () => {
+    const root = app.querySelector(".reader");
+    if (!root) return;
+    const pg = root.querySelector(".pg");
+    if (pg) pg.textContent = state.pdfPage + (state.pdfPages ? " / " + state.pdfPages : "");
+    const scrub = document.getElementById("pdf-scrub");
+    if (scrub) {
+      scrub.max = String(Math.max(1, state.pdfPages || 1));
+      scrub.value = String(state.pdfPage || 1);
+    }
+    const bar = root.querySelector(".pdf-progress > i");
+    if (bar && state.pdfPages) bar.style.width = Math.max(2, 100 * state.pdfPage / state.pdfPages) + "%";
+    try {
+      const b = B().byId(state.bookId);
+      const goalBtn = root.querySelector("[data-act='reading-done']");
+      if (goalBtn && b && !B().loggedToday(today().iso, b.id)) {
+        goalBtn.textContent = "Through p. " + B().targetEnd(b);
+      }
+    } catch { /* keep label */ }
+  };
+  const setPdfChrome = (on) => {
+    const root = app.querySelector(".reader");
+    if (!root) return;
+    root.classList.toggle("chrome-off", !on);
+    clearTimeout(pdfChromeTimer);
+    if (on) pdfChromeTimer = setTimeout(() => setPdfChrome(false), 4200);
+  };
   const paintPdf = async () => {
     if (!pdfDoc || state.view !== "reader") return;
     const canvas = document.getElementById("pdf-canvas");
-    if (!canvas) return;
-    const page = await pdfDoc.getPage(state.pdfPage);
     const wrap = document.getElementById("pdf-wrap");
-    const width = (wrap && wrap.clientWidth) || 390;
+    if (!canvas || !wrap) return;
+    const gen = ++pdfPaintGen;
+    try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
+    const page = await pdfDoc.getPage(state.pdfPage);
+    if (gen !== pdfPaintGen) return;
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
     const unscaled = page.getViewport({ scale: 1 });
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const vp = page.getViewport({ scale: (width / unscaled.width) * dpr });
+    const maxW = Math.max(160, wrap.clientWidth || 390);
+    const maxH = Math.max(160, wrap.clientHeight || 520);
+    let scale = maxW / unscaled.width;
+    if (pdfPrefs.fit === "page") scale = Math.min(maxW / unscaled.width, maxH / unscaled.height);
+    scale *= Math.max(1, pdfZoom || 1);
+    scale = Math.max(0.55, Math.min(3.2, scale));
+    const vp = page.getViewport({ scale: scale * dpr });
     canvas.width = vp.width;
     canvas.height = vp.height;
-    canvas.style.width = "100%";
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    canvas.style.width = Math.round(vp.width / dpr) + "px";
+    canvas.style.height = Math.round(vp.height / dpr) + "px";
+    canvas.style.transform = "";
+    const ctx = canvas.getContext("2d", { alpha: false });
+    pdfRenderTask = page.render({ canvasContext: ctx, viewport: vp });
+    try {
+      await pdfRenderTask.promise;
+    } catch (e) {
+      if (e && /cancel/i.test(e.name || e.message || "")) return;
+    }
+    pdfRenderTask = null;
+    if (gen !== pdfPaintGen) return;
+    updatePdfChrome();
+  };
+  const goPdfPage = (n) => {
+    if (!pdfDoc) return;
+    const max = state.pdfPages || 1;
+    const next = Math.max(1, Math.min(max, Number(n) || 1));
+    if (next === state.pdfPage) return;
+    state.pdfPage = next;
+    const row = B().update(state.bookId, { current_page: next });
+    if (row && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(row, { delay: 800 });
+    updatePdfChrome();
+    paintPdf();
   };
 
   const closePdf = () => {
+    clearTimeout(pdfChromeTimer);
+    dropPdfWake();
+    try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
+    pdfRenderTask = null;
+    pdfZoom = 1;
     if (pdfDoc) {
       try { pdfDoc.destroy(); } catch { /* ignore */ }
       pdfDoc = null;
@@ -911,8 +1017,12 @@
       const cur = B().byId(id);
       state.pdfPage = Math.min(Math.max(1, cur.current_page || 1), state.pdfPages || 1);
       if (cur && !cur.pages && state.pdfPages) B().update(id, { pages: state.pdfPages });
+      pdfZoom = 1;
       state.pdfBusy = false;
       render();
+      armPdfResize();
+      holdPdfWake();
+      setPdfChrome(true);
     } catch (e) {
       state.pdfBusy = false;
       state.pdfErr = (e && e.message) || "Could not open this PDF.";
@@ -3428,28 +3538,35 @@
     const iso = today().iso;
     const done = B().loggedToday(iso, b.id);
     const goal = B().targetEnd(b);
+    const theme = pdfPrefs.theme || "paper";
+    const pages = Math.max(1, state.pdfPages || b.pages || 1);
+    const pct = Math.max(2, 100 * (state.pdfPage || 1) / pages);
     return `
-      <div class="screen full has-cta" style="background:#0b0c10">
-        <div class="back-row">
-          <button class="icon-btn" data-act="close-reader">${chev()}</button>
-          <div style="flex:1;min-width:0">
-            <div class="tag" style="color:var(--lime)">${escapeHtml(b.title)}</div>
+      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""}">
+        <div class="pdf-progress"><i style="width:${pct}%"></i></div>
+        <div class="pdf-chrome pdf-top">
+          <button class="icon-btn" data-act="close-reader" title="Close">${chev()}</button>
+          <div class="pdf-title">
+            <b>${escapeHtml(b.title || "Book")}</b>
+            <span class="pg">${state.pdfPage}${state.pdfPages ? " / " + state.pdfPages : ""}</span>
           </div>
+          <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
+          <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "page" ? "Page" : "Width"}</button>
         </div>
         <div class="pdf-wrap" id="pdf-wrap">
-          ${state.pdfBusy ? `<p class="hint" style="padding:24px">Opening book…</p>` : ""}
-          ${state.pdfErr ? `<div class="err" style="margin:16px">${escapeHtml(state.pdfErr)}</div>` : ""}
+          ${state.pdfBusy ? `<p class="pdf-busy hint">Opening book…</p>` : ""}
+          ${state.pdfErr ? `<div class="pdf-err err">${escapeHtml(state.pdfErr)}</div>` : ""}
           <canvas id="pdf-canvas"></canvas>
         </div>
-        <div class="pdf-tools">
-          <button class="btn ghost" data-act="pdf-prev" style="height:44px">Prev</button>
-          <div class="pg">${state.pdfPage}${state.pdfPages ? " / " + state.pdfPages : ""}</div>
-          <button class="btn ghost" data-act="pdf-next" style="height:44px">Next</button>
-        </div>
-        <div class="sticky-cta" style="margin-top:0">
-          ${done
-            ? `<button class="btn ghost" data-act="close-reader">Sitting done</button>`
-            : `<button class="btn" data-act="reading-done">Done · through page ${goal}</button>`}
+        <div class="pdf-chrome pdf-bottom">
+          <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
+          <div class="pdf-tools">
+            <button class="btn ghost" data-act="pdf-prev">Prev</button>
+            ${done
+              ? `<button class="btn ghost" data-act="close-reader">Sitting done</button>`
+              : `<button class="btn" data-act="reading-done">Through p. ${goal}</button>`}
+            <button class="btn ghost" data-act="pdf-next">Next</button>
+          </div>
         </div>
       </div>
     `;
@@ -3820,6 +3937,104 @@
       if (saved) toast(state.session ? "Saved to your account" : "Saved on this phone");
       render();
     });
+    const scrub = document.getElementById("pdf-scrub");
+    if (scrub) {
+      scrub.addEventListener("input", () => {
+        const n = Number(scrub.value) || 1;
+        const pg = app.querySelector(".reader .pg");
+        if (pg) pg.textContent = n + (state.pdfPages ? " / " + state.pdfPages : "");
+        setPdfChrome(true);
+      });
+      scrub.addEventListener("change", () => {
+        goPdfPage(Number(scrub.value) || 1);
+        setPdfChrome(true);
+      });
+    }
+    bindReaderGestures();
+  };
+
+  const bindReaderGestures = () => {
+    const wrap = document.getElementById("pdf-wrap");
+    if (!wrap || state.view !== "reader") return;
+    let startX = 0, startY = 0, moved = false, pointers = new Map();
+    let pinching = false, pinchStart = 0, pinchZoom = 1, lastTap = 0;
+    const dist = () => {
+      const pts = Array.from(pointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].x - pts[1].x, dy = pts[0].y - pts[1].y;
+      return Math.hypot(dx, dy);
+    };
+    wrap.addEventListener("pointerdown", (e) => {
+      if (e.target && e.target.closest && e.target.closest("button, input")) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      startX = e.clientX; startY = e.clientY; moved = false;
+      if (pointers.size === 2) {
+        pinching = true;
+        pinchStart = dist() || 1;
+        pinchZoom = pdfZoom;
+      }
+      try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    });
+    wrap.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinching && pointers.size >= 2) {
+        const d = dist();
+        if (d && pinchStart) {
+          const live = Math.max(1, Math.min(2.8, pinchZoom * (d / pinchStart)));
+          const canvas = document.getElementById("pdf-canvas");
+          if (canvas) canvas.style.transform = "scale(" + (live / Math.max(1, pdfZoom)) + ")";
+        }
+        moved = true;
+        return;
+      }
+      if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) moved = true;
+    });
+    const endPtr = (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.delete(e.pointerId);
+      if (pinching && pointers.size < 2) {
+        pinching = false;
+        const canvas = document.getElementById("pdf-canvas");
+        let live = pdfZoom;
+        if (canvas && canvas.style.transform) {
+          const m = /scale\(([-0-9.]+)\)/.exec(canvas.style.transform);
+          if (m) live = pdfZoom * Number(m[1]);
+          canvas.style.transform = "";
+        }
+        pdfZoom = Math.max(1, Math.min(2.8, live));
+        const root = app.querySelector(".reader");
+        if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
+        paintPdf();
+        return;
+      }
+      if (pointers.size) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (!moved) {
+        const now = Date.now();
+        if (now - lastTap < 280) {
+          lastTap = 0;
+          pdfZoom = pdfZoom > 1.2 ? 1 : 1.8;
+          const root = app.querySelector(".reader");
+          if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
+          paintPdf();
+          return;
+        }
+        lastTap = now;
+        const r = wrap.getBoundingClientRect();
+        const x = (e.clientX - r.left) / Math.max(1, r.width);
+        if (x < 0.28) goPdfPage(state.pdfPage - 1);
+        else if (x > 0.72) goPdfPage(state.pdfPage + 1);
+        else setPdfChrome(!!app.querySelector(".reader.chrome-off"));
+        return;
+      }
+      if (pdfZoom <= 1.05 && Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+        if (dx < 0) goPdfPage(state.pdfPage + 1);
+        else goPdfPage(state.pdfPage - 1);
+      }
+    };
+    wrap.addEventListener("pointerup", endPtr);
+    wrap.addEventListener("pointercancel", endPtr);
   };
 
   const buzz = (ms = 18) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
@@ -4440,21 +4655,34 @@
       state.view = "library";
       render();
     } else if (act === "pdf-prev") {
-      if (!pdfDoc) return;
-      state.pdfPage = Math.max(1, state.pdfPage - 1);
-      const prev = B().update(state.bookId, { current_page: state.pdfPage });
-      if (prev && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(prev, { delay: 800 });
-      const elPg = app.querySelector(".pg");
-      if (elPg) elPg.textContent = state.pdfPage + (state.pdfPages ? " / " + state.pdfPages : "");
-      paintPdf();
+      goPdfPage(state.pdfPage - 1);
+      setPdfChrome(true);
     } else if (act === "pdf-next") {
-      if (!pdfDoc) return;
-      state.pdfPage = Math.min(state.pdfPages || state.pdfPage + 1, state.pdfPage + 1);
-      const nxt = B().update(state.bookId, { current_page: state.pdfPage });
-      if (nxt && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(nxt, { delay: 800 });
-      const elPg = app.querySelector(".pg");
-      if (elPg) elPg.textContent = state.pdfPage + (state.pdfPages ? " / " + state.pdfPages : "");
+      goPdfPage(state.pdfPage + 1);
+      setPdfChrome(true);
+    } else if (act === "pdf-theme") {
+      pdfPrefs.theme = pdfPrefs.theme === "paper" ? "sepia" : pdfPrefs.theme === "sepia" ? "night" : "paper";
+      savePdfPrefs();
+      const root = app.querySelector(".reader");
+      if (root) {
+        root.classList.remove("theme-paper", "theme-sepia", "theme-night");
+        root.classList.add("theme-" + pdfPrefs.theme);
+        const lab = root.querySelector("[data-act='pdf-theme']");
+        if (lab) lab.textContent = pdfPrefs.theme === "night" ? "Night" : pdfPrefs.theme === "sepia" ? "Sepia" : "Paper";
+      }
+      setPdfChrome(true);
+    } else if (act === "pdf-fit") {
+      pdfPrefs.fit = pdfPrefs.fit === "width" ? "page" : "width";
+      savePdfPrefs();
+      pdfZoom = 1;
+      const root = app.querySelector(".reader");
+      if (root) {
+        root.classList.remove("zoomed");
+        const lab = root.querySelector("[data-act='pdf-fit']");
+        if (lab) lab.textContent = pdfPrefs.fit === "page" ? "Page" : "Width";
+      }
       paintPdf();
+      setPdfChrome(true);
     } else if (act === "reading-done") {
       const b = B().byId(state.bookId);
       if (!b) return;
