@@ -577,7 +577,34 @@
   let pdfWake = null;
   let pdfChromeTimer = 0;
   let pdfResizeOn = false;
+  let pdfPaper = "#f6f1e4";
   let pdfTextCache = { page: 0, bookId: "", text: "" };
+  const themePaper = () =>
+    pdfPrefs.theme === "night" ? "#0b0c10" : pdfPrefs.theme === "sepia" ? "#e8d5b0" : "#f6f1e4";
+  const applyPaper = (color) => {
+    pdfPaper = color || themePaper();
+    const root = app.querySelector(".reader");
+    const wrap = document.getElementById("pdf-wrap");
+    if (root) root.style.background = pdfPaper;
+    if (wrap) wrap.style.background = pdfPaper;
+  };
+  const samplePaper = (ctx, w, h) => {
+    if (pdfPrefs.theme === "night") return "#0b0c10";
+    try {
+      const inset = Math.max(2, Math.min(16, Math.floor(Math.min(w, h) * 0.03)));
+      const pts = [[inset, inset], [w - inset - 1, inset], [inset, h - inset - 1], [w - inset - 1, h - inset - 1]];
+      let r = 0, g = 0, b = 0, n = 0;
+      pts.forEach(([x, y]) => {
+        const d = ctx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data;
+        if (d[3] < 80) return;
+        r += d[0]; g += d[1]; b += d[2]; n += 1;
+      });
+      if (!n) return themePaper();
+      return "rgb(" + Math.round(r / n) + "," + Math.round(g / n) + "," + Math.round(b / n) + ")";
+    } catch {
+      return themePaper();
+    }
+  };
   const pdfPrefs = { theme: "paper", fit: "page" };
   try {
     const pr = JSON.parse(localStorage.getItem("align-reader") || "null") || {};
@@ -918,9 +945,12 @@
   };
   const paintPdf = async () => {
     if (!pdfDoc || state.view !== "reader") return;
-    const canvas = document.getElementById("pdf-canvas");
+    const a = document.getElementById("pdf-canvas");
+    const b = document.getElementById("pdf-canvas-b");
     const wrap = document.getElementById("pdf-wrap");
-    if (!canvas || !wrap) return;
+    if (!a || !wrap) return;
+    const shown = (b && b.classList.contains("show")) ? b : a;
+    const dest = (b && shown === a) ? b : (b && shown === b) ? a : a;
     const gen = ++pdfPaintGen;
     try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
     const page = await pdfDoc.getPage(state.pdfPage);
@@ -946,16 +976,18 @@
     if (zoom <= 1.05) scale = Math.min(scale, byW, byH);
     scale = Math.max(0.2, Math.min(3, scale));
     const vp = page.getViewport({ scale: scale * dpr });
-    canvas.width = vp.width;
-    canvas.height = vp.height;
     const cssW = Math.min(maxW, Math.round(vp.width / dpr));
     const cssH = Math.min(maxH, Math.round(vp.height / dpr));
-    canvas.style.width = cssW + "px";
-    canvas.style.height = cssH + "px";
-    canvas.style.maxWidth = maxW + "px";
-    canvas.style.maxHeight = maxH + "px";
-    canvas.style.transform = "";
-    const ctx = canvas.getContext("2d", { alpha: false });
+    dest.width = vp.width;
+    dest.height = vp.height;
+    dest.style.width = cssW + "px";
+    dest.style.height = cssH + "px";
+    dest.style.maxWidth = maxW + "px";
+    dest.style.maxHeight = maxH + "px";
+    dest.style.transform = "translate(-50%, -50%)";
+    const ctx = dest.getContext("2d", { alpha: false });
+    ctx.fillStyle = pdfPaper || themePaper();
+    ctx.fillRect(0, 0, dest.width, dest.height);
     pdfRenderTask = page.render({ canvasContext: ctx, viewport: vp });
     try {
       await pdfRenderTask.promise;
@@ -964,6 +996,9 @@
     }
     pdfRenderTask = null;
     if (gen !== pdfPaintGen) return;
+    applyPaper(samplePaper(ctx, dest.width, dest.height));
+    dest.classList.add("show");
+    if (shown !== dest) shown.classList.remove("show");
     updatePdfChrome();
     grabPdfText(state.pdfPage).catch(() => {});
   };
@@ -3603,7 +3638,8 @@
         <div class="pdf-wrap" id="pdf-wrap">
           ${state.pdfBusy ? `<p class="pdf-busy hint">Opening book…</p>` : ""}
           ${state.pdfErr ? `<div class="pdf-err err">${escapeHtml(state.pdfErr)}</div>` : ""}
-          <canvas id="pdf-canvas"></canvas>
+          <canvas id="pdf-canvas" class="show"></canvas>
+          <canvas id="pdf-canvas-b"></canvas>
         </div>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
@@ -4029,8 +4065,8 @@
         const d = dist();
         if (d && pinchStart) {
           const live = Math.max(1, Math.min(2.8, pinchZoom * (d / pinchStart)));
-          const canvas = document.getElementById("pdf-canvas");
-          if (canvas) canvas.style.transform = "scale(" + (live / Math.max(1, pdfZoom)) + ")";
+          const canvas = wrap.querySelector("canvas.show") || document.getElementById("pdf-canvas");
+          if (canvas) canvas.style.transform = "translate(-50%, -50%) scale(" + (live / Math.max(1, pdfZoom)) + ")";
         }
         moved = true;
         return;
@@ -4047,7 +4083,7 @@
         if (canvas && canvas.style.transform) {
           const m = /scale\(([-0-9.]+)\)/.exec(canvas.style.transform);
           if (m) live = pdfZoom * Number(m[1]);
-          canvas.style.transform = "";
+          canvas.style.transform = "translate(-50%, -50%)";
         }
         pdfZoom = Math.max(1, Math.min(2.8, live));
         const root = app.querySelector(".reader");
@@ -4710,6 +4746,7 @@
     } else if (act === "pdf-theme") {
       pdfPrefs.theme = pdfPrefs.theme === "paper" ? "sepia" : pdfPrefs.theme === "sepia" ? "night" : "paper";
       savePdfPrefs();
+      applyPaper(themePaper());
       const root = app.querySelector(".reader");
       if (root) {
         root.classList.remove("theme-paper", "theme-sepia", "theme-night");
