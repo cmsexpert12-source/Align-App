@@ -933,27 +933,27 @@
       maxW = wrap.clientWidth;
       maxH = wrap.clientHeight;
     }
-    maxW = Math.max(220, maxW || 390);
-    maxH = Math.max(320, maxH || 640);
-    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    maxW = Math.max(1, Math.floor(maxW || wrap.clientWidth || 390));
+    maxH = Math.max(1, Math.floor(maxH || wrap.clientHeight || 640));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const unscaled = page.getViewport({ scale: 1 });
     const byW = maxW / unscaled.width;
     const byH = maxH / unscaled.height;
     const zoom = Math.max(1, pdfZoom || 1);
     let scale = Math.min(byW, byH);
     if (zoom > 1.05) scale = Math.min(byW, byH) * zoom;
-    else if (pdfPrefs.fit === "width") scale = byW;
-    scale = Math.max(0.5, Math.min(3.2, scale));
-    const cssW = unscaled.width * scale;
-    const cssH = unscaled.height * scale;
-    if (zoom <= 1.05 && (cssW > maxW + 1 || cssH > maxH + 1)) {
-      scale = Math.min(byW, byH);
-    }
+    else if (pdfPrefs.fit === "width") scale = Math.min(byW, byH * 8);
+    if (zoom <= 1.05) scale = Math.min(scale, byW, byH);
+    scale = Math.max(0.2, Math.min(3, scale));
     const vp = page.getViewport({ scale: scale * dpr });
     canvas.width = vp.width;
     canvas.height = vp.height;
-    canvas.style.width = Math.round(vp.width / dpr) + "px";
-    canvas.style.height = Math.round(vp.height / dpr) + "px";
+    const cssW = Math.min(maxW, Math.round(vp.width / dpr));
+    const cssH = Math.min(maxH, Math.round(vp.height / dpr));
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    canvas.style.maxWidth = maxW + "px";
+    canvas.style.maxHeight = maxH + "px";
     canvas.style.transform = "";
     const ctx = canvas.getContext("2d", { alpha: false });
     pdfRenderTask = page.render({ canvasContext: ctx, viewport: vp });

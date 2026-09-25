@@ -1086,10 +1086,10 @@ img { max-width: 100%; display: block; }
 .reader .pdf-wrap canvas {
   display: block;
   margin: 0 auto;
-  width: auto !important;
-  height: auto !important;
-  max-width: none;
-  flex-shrink: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  flex-shrink: 1;
   box-shadow: 0 24px 60px rgba(0,0,0,.32);
   transform-origin: center center;
   background: #fff;
