@@ -513,7 +513,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -540,7 +540,7 @@
           <button class="btn ghost" style="margin-top:10px" data-act="sheet-no">${escapeHtml(state.sheet.cancel || "Cancel")}</button>
         </div>
       </div>` : ""}
-    ${!hideFab && !state.ai.open ? `<button class="ai-fab ${state.view === "reader" ? "read" : withNav ? "up" : "low"}" data-act="ai-open" title="Ask ALIGN">${stepIcon("spark")}</button>` : ""}
+    ${!hideFab && !state.ai.open ? `<button class="ai-fab ${withNav ? "up" : "low"}" data-act="ai-open" title="Ask ALIGN">${stepIcon("spark")}</button>` : ""}
     ${state.ai.open ? `
       <div class="ai-bg" data-act="ai-close">
         <div class="ai-sheet" data-act="ai-nop">
@@ -578,11 +578,12 @@
   let pdfChromeTimer = 0;
   let pdfResizeOn = false;
   let pdfTextCache = { page: 0, bookId: "", text: "" };
-  const pdfPrefs = { theme: "paper", fit: "fill" };
+  const pdfPrefs = { theme: "paper", fit: "page" };
   try {
     const pr = JSON.parse(localStorage.getItem("align-reader") || "null") || {};
     if (pr.theme === "night" || pr.theme === "sepia" || pr.theme === "paper") pdfPrefs.theme = pr.theme;
-    if (pr.fit === "page" || pr.fit === "width" || pr.fit === "fill") pdfPrefs.fit = pr.fit;
+    if (pr.fit === "width") pdfPrefs.fit = "width";
+    else pdfPrefs.fit = "page";
   } catch { /* paper */ }
   const savePdfPrefs = () => {
     try { localStorage.setItem("align-reader", JSON.stringify(pdfPrefs)); } catch { /* ignore */ }
@@ -938,11 +939,16 @@
     const unscaled = page.getViewport({ scale: 1 });
     const byW = maxW / unscaled.width;
     const byH = maxH / unscaled.height;
-    let scale = byW;
-    if (pdfPrefs.fit === "page") scale = Math.min(byW, byH);
-    else if (pdfPrefs.fit !== "width") scale = Math.max(byW, byH);
-    scale *= Math.max(1, pdfZoom || 1);
-    scale = Math.max(0.55, Math.min(3.4, scale));
+    const zoom = Math.max(1, pdfZoom || 1);
+    let scale = Math.min(byW, byH);
+    if (zoom > 1.05) scale = Math.min(byW, byH) * zoom;
+    else if (pdfPrefs.fit === "width") scale = byW;
+    scale = Math.max(0.5, Math.min(3.2, scale));
+    const cssW = unscaled.width * scale;
+    const cssH = unscaled.height * scale;
+    if (zoom <= 1.05 && (cssW > maxW + 1 || cssH > maxH + 1)) {
+      scale = Math.min(byW, byH);
+    }
     const vp = page.getViewport({ scale: scale * dpr });
     canvas.width = vp.width;
     canvas.height = vp.height;
@@ -3582,7 +3588,7 @@
     const pages = Math.max(1, state.pdfPages || b.pages || 1);
     const pct = Math.max(2, 100 * (state.pdfPage || 1) / pages);
     return `
-      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""}">
+      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""}${pdfPrefs.fit === "width" ? " fit-width" : ""}">
         <div class="pdf-progress"><i style="width:${pct}%"></i></div>
         <div class="pdf-chrome pdf-top">
           <button class="icon-btn" data-act="close-reader" title="Close">${chev()}</button>
@@ -3592,14 +3598,13 @@
           </div>
           <button class="txt-btn" data-act="ai-open" title="Ask ALIGN">Ask</button>
           <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
-          <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "page" ? "Page" : pdfPrefs.fit === "width" ? "Width" : "Fill"}</button>
+          <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
         </div>
         <div class="pdf-wrap" id="pdf-wrap">
           ${state.pdfBusy ? `<p class="pdf-busy hint">Opening book…</p>` : ""}
           ${state.pdfErr ? `<div class="pdf-err err">${escapeHtml(state.pdfErr)}</div>` : ""}
           <canvas id="pdf-canvas"></canvas>
         </div>
-        <button class="pdf-ask" data-act="ai-open" title="Ask ALIGN">${stepIcon("spark")}<span>Ask</span></button>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
           <div class="pdf-tools">
@@ -4714,14 +4719,15 @@
       }
       setPdfChrome(true);
     } else if (act === "pdf-fit") {
-      pdfPrefs.fit = pdfPrefs.fit === "fill" ? "width" : pdfPrefs.fit === "width" ? "page" : "fill";
+      pdfPrefs.fit = pdfPrefs.fit === "width" ? "page" : "width";
       savePdfPrefs();
       pdfZoom = 1;
       const root = app.querySelector(".reader");
       if (root) {
         root.classList.remove("zoomed");
+        root.classList.toggle("fit-width", pdfPrefs.fit === "width");
         const lab = root.querySelector("[data-act='pdf-fit']");
-        if (lab) lab.textContent = pdfPrefs.fit === "page" ? "Page" : pdfPrefs.fit === "width" ? "Width" : "Fill";
+        if (lab) lab.textContent = pdfPrefs.fit === "width" ? "Width" : "Page";
       }
       paintPdf();
       setPdfChrome(true);

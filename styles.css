@@ -1073,14 +1073,16 @@ img { max-width: 100%; display: block; }
   position: absolute; inset: 0;
   z-index: 1;
   display: flex; justify-content: center; align-items: center;
-  overflow: auto;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: hidden;
   -webkit-overflow-scrolling: touch;
   touch-action: none;
   background: transparent;
 }
-.reader.zoomed .pdf-wrap { touch-action: pan-x pan-y; }
+.reader.zoomed .pdf-wrap,
+.reader.fit-width .pdf-wrap {
+  overflow: auto;
+  touch-action: pan-y;
+}
 .reader .pdf-wrap canvas {
   display: block;
   margin: 0 auto;
@@ -1163,26 +1165,6 @@ img { max-width: 100%; display: block; }
   display: grid; place-items: center; padding: 24px; text-align: center;
 }
 .reader.theme-paper .pdf-busy, .reader.theme-sepia .pdf-busy { color: #3a3428; }
-.reader .pdf-ask {
-  position: absolute;
-  right: 10px;
-  top: 42%;
-  z-index: 6;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  width: 48px; min-height: 56px; padding: 8px 0;
-  border-radius: 16px;
-  background: var(--lime); color: #111;
-  font-size: 10px; font-weight: 800; letter-spacing: .06em;
-  box-shadow: 0 10px 28px rgba(0,0,0,.28);
-}
-.reader .pdf-ask svg { width: 18px; height: 18px; }
-.reader.chrome-off .pdf-ask { opacity: 1; pointer-events: auto; }
-.ai-fab.read {
-  z-index: 24;
-  right: 12px;
-  bottom: auto;
-  top: 42%;
-}
 
 .ai-fab {
   position: absolute; right: 16px; z-index: 18;
