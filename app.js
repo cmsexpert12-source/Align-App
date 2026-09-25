@@ -577,6 +577,7 @@
   let pdfWake = null;
   let pdfChromeTimer = 0;
   let pdfResizeOn = false;
+  let pdfTextCache = { page: 0, bookId: "", text: "" };
   const pdfPrefs = { theme: "paper", fit: "width" };
   try {
     const pr = JSON.parse(localStorage.getItem("align-reader") || "null") || {};
@@ -641,7 +642,9 @@
       ["Three priorities", "From my notes and context, propose three true priorities for today. Short labels only, then one line each."]
     ];
     if (v === "library" || v === "book" || v === "reader") return [
-      ["Today's sitting", "Give a simple aim for today's pages. One question to carry while I read."]
+      ["Clarify", "Help me understand something on this sitting. Use the current page text in the live facts. If the line is not there, ask me to type it. Do not invent a quote."],
+      ["Verify", "I want to check a claim from this book. Use only the page text in the live facts. If you cannot see it, say so — do not guess."],
+      ["Today's sitting", "Give a simple aim for today's pages. One question to carry while I read. Do not invent the book's argument."]
     ];
     if (v === "evening" || v === "lights") return [
       ["Wind down", "A short thought to close the day. No new tasks."]
@@ -764,6 +767,13 @@
         if (b) lines.push("Open book: " + b.title + ", page " + (state.pdfPage || b.current_page) + (b.pages ? " of " + b.pages : "") + (b.category ? ", shelf " + b.category : "") + ".");
       } catch { /* optional */ }
     }
+    if (state.view === "reader" || state.view === "book") {
+      if (pdfTextCache.text && pdfTextCache.page) {
+        lines.push("Selectable text from PDF page " + pdfTextCache.page + ": " + pdfTextCache.text);
+      } else if (state.view === "reader") {
+        lines.push("No selectable text from this page yet (scan or still loading). Do not invent the page. Ask them to type the line they want verified or clarified.");
+      }
+    }
     try {
       const plan = L().planOf(t.iso);
       const pri = (plan.priorities || []).map(prioOf).map((x) => x.text).filter(Boolean);
@@ -813,6 +823,9 @@
     try { render(); } catch { /* keep sheet */ }
     focusAi();
     try {
+      if (state.view === "reader" || state.view === "book") {
+        try { await grabPdfText(); } catch { /* page text optional */ }
+      }
       const res = await AI().ask({ prompt: q, context: aiContext() });
       state.ai.reply = (res && res.text) || "";
       state.ai.provider = (res && res.provider) || "";
@@ -886,7 +899,21 @@
     if (!root) return;
     root.classList.toggle("chrome-off", !on);
     clearTimeout(pdfChromeTimer);
-    if (on) pdfChromeTimer = setTimeout(() => setPdfChrome(false), 4200);
+    if (on) pdfChromeTimer = setTimeout(() => { if (!state.ai.open) setPdfChrome(false); }, 4200);
+  };
+  const grabPdfText = async (pageNo) => {
+    const n = pageNo || state.pdfPage;
+    if (!pdfDoc) return pdfTextCache.text || "";
+    if (pdfTextCache.bookId === state.bookId && pdfTextCache.page === n && pdfTextCache.text) return pdfTextCache.text;
+    try {
+      const page = await pdfDoc.getPage(n);
+      const tc = await page.getTextContent();
+      const text = (tc.items || []).map((i) => i.str || "").join(" ").replace(/\s+/g, " ").trim();
+      pdfTextCache = { page: n, bookId: state.bookId || "", text: text.slice(0, 2800) };
+      return pdfTextCache.text;
+    } catch {
+      return pdfTextCache.text || "";
+    }
   };
   const paintPdf = async () => {
     if (!pdfDoc || state.view !== "reader") return;
@@ -921,6 +948,7 @@
     pdfRenderTask = null;
     if (gen !== pdfPaintGen) return;
     updatePdfChrome();
+    grabPdfText(state.pdfPage).catch(() => {});
   };
   const goPdfPage = (n) => {
     if (!pdfDoc) return;
@@ -940,6 +968,7 @@
     try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
     pdfRenderTask = null;
     pdfZoom = 1;
+    pdfTextCache = { page: 0, bookId: "", text: "" };
     if (pdfDoc) {
       try { pdfDoc.destroy(); } catch { /* ignore */ }
       pdfDoc = null;
@@ -3550,6 +3579,7 @@
             <b>${escapeHtml(b.title || "Book")}</b>
             <span class="pg">${state.pdfPage}${state.pdfPages ? " / " + state.pdfPages : ""}</span>
           </div>
+          <button class="txt-btn" data-act="ai-open" title="Ask ALIGN">Ask</button>
           <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
           <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "page" ? "Page" : "Width"}</button>
         </div>
@@ -4736,10 +4766,15 @@
       /* keep the sheet open */
     } else if (act === "ai-open") {
       state.ai.open = true;
+      if (state.view === "reader") {
+        setPdfChrome(true);
+        grabPdfText().catch(() => {});
+      }
       render();
     } else if (act === "ai-close") {
       state.ai.open = false;
       render();
+      if (state.view === "reader") setPdfChrome(true);
     } else if (act === "ai-send") {
       const elIn = document.getElementById("ai-input");
       const text = elIn ? elIn.value : state.ai.input;
