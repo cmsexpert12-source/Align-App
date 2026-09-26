@@ -3044,7 +3044,7 @@
         <div class="page-title">
           <div class="tag">Sound</div>
           <h1>Stay in ALIGN.</h1>
-          <p>Open recordings in the library. Your own files upload to your account.</p>
+          <p>Open recordings in the library. Your own files stay on this account. 50 MB for books and audio, together.</p>
         </div>
         <div class="scroll-body" style="padding:0 16px calc(var(--nav-h) + 24px)">
           <div class="set-label" style="padding-top:0">ALIGN library</div>
@@ -3900,7 +3900,7 @@
         <div class="page-title">
           <div class="tag">Library</div>
           <h1>Books.</h1>
-          <p>Upload a PDF. Put it on a shelf. Read it here, offline${state.session ? " — synced to your account" : ""}.</p>
+          <p>Upload a PDF. Put it on a shelf. Read it here, offline${state.session ? " — on your account" : ""}. 50 MB for books and audio, together.</p>
         </div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
@@ -4430,10 +4430,7 @@
       render();
       let saved = 0;
       for (const f of picked) {
-        if (!f || f.size > 40 * 1024 * 1024) {
-          toast("Audio can be up to 40 MB.");
-          continue;
-        }
+        if (!f) continue;
         try {
           const id = await ALIGN_SOUND.saveTrack(f);
           saved += 1;

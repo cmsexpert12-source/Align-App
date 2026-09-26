@@ -46,7 +46,7 @@ values (
   'sounds',
   'sounds',
   false,
-  41943040,
+  52428800,
   array['audio/mpeg','audio/mp4','audio/aac','audio/wav','audio/ogg','audio/flac','audio/webm','audio/x-m4a','audio/x-wav','application/ogg']
 )
 on conflict (id) do update set

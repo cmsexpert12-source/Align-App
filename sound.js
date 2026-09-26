@@ -83,7 +83,7 @@ window.ALIGN_SOUND = (() => {
       blobs.clear();
       list.forEach((row) => {
         if (!row || !row.id || !row.blob) return;
-        tracks.push({ id: row.id, name: row.name || "Track" });
+        tracks.push({ id: row.id, name: row.name || "Track", bytes: (row.blob && row.blob.size) || row.bytes || 0 });
         blobs.set(row.id, row.blob);
       });
       emit();
@@ -91,15 +91,24 @@ window.ALIGN_SOUND = (() => {
   };
 
   const saveTrack = async (file) => {
+    if (!file) throw new Error("No file");
+    const cap = (window.ALIGN_BOOKS && ALIGN_BOOKS.ACCOUNT_CAP) || (50 * 1024 * 1024);
+    if (file.size > cap) throw new Error("This account can hold 50 MB.");
+    const blocked = (window.ALIGN_BOOKS && ALIGN_BOOKS.quotaError) ? ALIGN_BOOKS.quotaError(file.size) : "";
+    if (blocked) throw new Error(blocked);
+    if (window.AlignDB && AlignDB.assertQuota) {
+      const q = await AlignDB.assertQuota(file.size);
+      if (q && q.ok === false) throw new Error(q.error || "This account can hold 50 MB.");
+    }
     const id = uid();
-    const row = { id, name: file.name.replace(/\.[^.]+$/, ""), blob: file, type: file.type || "audio/mpeg" };
+    const row = { id, name: file.name.replace(/\.[^.]+$/, ""), blob: file, type: file.type || "audio/mpeg", bytes: file.size };
     const db = await dbp();
     await new Promise((res, rej) => {
       const q = db.transaction("tracks", "readwrite").objectStore("tracks").put(row, id);
       q.onsuccess = () => res();
       q.onerror = () => rej(q.error);
     });
-    tracks.push({ id, name: row.name });
+    tracks.push({ id, name: row.name, bytes: file.size });
     blobs.set(id, file);
     emit();
     return id;
@@ -416,9 +425,9 @@ window.ALIGN_SOUND = (() => {
     }
     mine.forEach((r) => {
       if (!tracks.some((t) => t.id === r.id)) {
-        tracks.push({ id: r.id, name: r.title, title: r.title, storage_path: r.storage_path, source_url: r.source_url, is_public: false, remote: true });
+        tracks.push({ id: r.id, name: r.title, title: r.title, storage_path: r.storage_path, source_url: r.source_url, bytes: Number(r.bytes) || 0, is_public: false, remote: true });
       } else {
-        tracks = tracks.map((t) => t.id === r.id ? { ...t, name: r.title, storage_path: r.storage_path, remote: true } : t);
+        tracks = tracks.map((t) => t.id === r.id ? { ...t, name: r.title, storage_path: r.storage_path, bytes: Number(r.bytes) || t.bytes || 0, remote: true } : t);
       }
     });
     emit();

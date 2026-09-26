@@ -1187,10 +1187,70 @@ window.AlignDB = (() => {
     return queueAndFlush("book", book.id, book, opts || { delay: 0 });
   };
 
+  const ACCOUNT_CAP = 50 * 1024 * 1024;
+  const fmtQuota = (n) => {
+    const x = Number(n) / (1024 * 1024);
+    if (x < 0.1) return Math.max(1, Math.round(Number(n) / 1024)) + " KB";
+    return (Math.round(x * 10) / 10) + " MB";
+  };
+  const localUploadBytes = (exclude) => {
+    let n = 0;
+    try {
+      (window.ALIGN_BOOKS && ALIGN_BOOKS.list() || []).forEach((b) => {
+        if (exclude && exclude.bookId && b.id === exclude.bookId) return;
+        n += Number(b.bytes) || 0;
+      });
+    } catch { /* optional */ }
+    try {
+      const tracks = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot && ALIGN_SOUND.snapshot().tracks) || [];
+      tracks.forEach((t) => {
+        if (exclude && exclude.soundId && t.id === exclude.soundId) return;
+        n += Number(t.bytes) || 0;
+      });
+    } catch { /* optional */ }
+    return n;
+  };
+  const remoteUploadBytes = async (userId, exclude) => {
+    if (!userId) return 0;
+    const books = await restSelect("books", "select=id,bytes&user_id=eq." + encodeURIComponent(userId));
+    const sounds = await restSelect("sounds", "select=id,bytes&user_id=eq." + encodeURIComponent(userId) + "&is_public=eq.false");
+    let n = 0;
+    (books || []).forEach((r) => {
+      if (exclude && exclude.bookId && r.id === exclude.bookId) return;
+      n += Number(r.bytes) || 0;
+    });
+    (sounds || []).forEach((r) => {
+      if (exclude && exclude.soundId && r.id === exclude.soundId) return;
+      n += Number(r.bytes) || 0;
+    });
+    return n;
+  };
+  const assertQuota = async (addBytes, exclude) => {
+    const add = Number(addBytes) || 0;
+    if (add <= 0) return ok(true);
+    if (add > ACCOUNT_CAP) return fail("This account can hold 50 MB.");
+    const userId = await uidOf();
+    let used = localUploadBytes(exclude);
+    if (userId) {
+      try {
+        const remote = await remoteUploadBytes(userId, exclude);
+        if (remote > used) used = remote;
+      } catch { /* stay on local */ }
+    }
+    if (used + add > ACCOUNT_CAP) {
+      const left = Math.max(0, ACCOUNT_CAP - used);
+      return fail("This account can hold 50 MB. You’re using " + fmtQuota(used) + " · " + fmtQuota(left) + " left.");
+    }
+    return ok(true);
+  };
+
   const uploadBookFile = async (bookId, blob) => {
     const sb = client();
     const userId = await uidOf();
     if (!sb || !userId) return ok(null);
+    const size = blob && blob.size ? blob.size : 0;
+    const q = await assertQuota(size, { bookId });
+    if (!q.ok) return q;
     const path = userId + "/" + bookId + ".pdf";
     const { error } = await sb.storage.from("reading").upload(path, blob, {
       contentType: "application/pdf",
@@ -1270,6 +1330,9 @@ window.AlignDB = (() => {
       : (mime || "").includes("mp4") || (mime || "").includes("m4a") || (mime || "").includes("aac") ? "m4a"
       : "bin";
     const path = userId + "/" + soundId + "." + ext;
+    const size = blob && blob.size ? blob.size : 0;
+    const q = await assertQuota(size, { soundId });
+    if (!q.ok) return q;
     const { error } = await sb.storage.from("sounds").upload(path, blob, {
       contentType: mime || "application/octet-stream",
       upsert: true
@@ -1432,6 +1495,7 @@ window.AlignDB = (() => {
     saveRoutineCloud,
     saveAffirmation: (row, opts) => queueAndFlush("affirm", "affirm", row || {}, opts || { delay: 0 }),
     pullLife,
+    ACCOUNT_CAP, assertQuota,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,

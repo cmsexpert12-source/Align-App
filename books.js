@@ -4,7 +4,29 @@ window.ALIGN_BOOKS = (() => {
   const LS_LOG = "align-reading-log";
   const DB_NAME = "align-pdfs";
   const STORE = "files";
-  const MAX_BYTES = 50 * 1024 * 1024;
+  const ACCOUNT_CAP = 50 * 1024 * 1024;
+  const MAX_BYTES = ACCOUNT_CAP;
+
+  const usedBytes = () => {
+    let n = 0;
+    list().forEach((b) => { n += Number(b.bytes) || 0; });
+    try {
+      const tracks = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot && ALIGN_SOUND.snapshot().tracks) || [];
+      tracks.forEach((t) => { n += Number(t.bytes) || 0; });
+    } catch { /* sound optional */ }
+    return n;
+  };
+  const quotaError = (add, used) => {
+    const have = used == null ? usedBytes() : used;
+    const left = Math.max(0, ACCOUNT_CAP - have);
+    if (add <= left) return "";
+    const mb = (n) => {
+      const x = n / (1024 * 1024);
+      if (x < 0.1) return Math.max(1, Math.round(n / 1024)) + " KB";
+      return (Math.round(x * 10) / 10) + " MB";
+    };
+    return "This account can hold 50 MB. You’re using " + mb(have) + " · " + mb(left) + " left.";
+  };
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const loadJSON = (k, fallback) => {
@@ -172,7 +194,13 @@ window.ALIGN_BOOKS = (() => {
     if (type && type !== "application/pdf" && !name.toLowerCase().endsWith(".pdf")) {
       throw new Error("That doesn’t look like a PDF.");
     }
-    if (file.size > MAX_BYTES) throw new Error("PDFs can be up to 50 MB.");
+    if (file.size > MAX_BYTES) throw new Error("This account can hold 50 MB.");
+    const blocked = quotaError(file.size);
+    if (blocked) throw new Error(blocked);
+    if (window.AlignDB && AlignDB.assertQuota) {
+      const q = await AlignDB.assertQuota(file.size);
+      if (q && q.ok === false) throw new Error(q.error || blocked || "This account can hold 50 MB.");
+    }
     const book = {
       id: uid(),
       title: titleFromName(name),
@@ -320,7 +348,7 @@ window.ALIGN_BOOKS = (() => {
   };
 
   return {
-    MAX_BYTES, DOW, SHELVES,
+    ACCOUNT_CAP, MAX_BYTES, usedBytes, quotaError, DOW, SHELVES,
     list, byId, addFromFile, update, remove,
     getFile, putFile,
     loggedToday, markRead, dueToday,
