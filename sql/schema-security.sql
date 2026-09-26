@@ -8,7 +8,16 @@
 --   values (1, 'paste-vercel-CRON_SECRET')
 --   on conflict (id) do update set secret = excluded.secret, updated_at = now();
 
--- ---------- push: no public secret ----------
+-- ---------- push: no public secret; uses each person's rise / lights ----------
+alter table public.notification_prefs add column if not exists sun_wake_h int not null default 4;
+alter table public.notification_prefs add column if not exists sun_wake_m int not null default 0;
+alter table public.notification_prefs add column if not exists wk_wake_h int not null default 5;
+alter table public.notification_prefs add column if not exists wk_wake_m int not null default 0;
+alter table public.notification_prefs add column if not exists sun_lights_h int not null default 0;
+alter table public.notification_prefs add column if not exists sun_lights_m int not null default 0;
+alter table public.notification_prefs add column if not exists wk_lights_h int not null default 1;
+alter table public.notification_prefs add column if not exists wk_lights_m int not null default 0;
+
 drop function if exists public.align_due_push(text);
 drop function if exists public.align_due_push();
 
@@ -39,7 +48,15 @@ begin
       coalesce(nullif(btrim(p.timezone), ''), 'Africa/Lagos') as tz,
       p.last_wake_sent,
       p.last_lights_sent,
-      public.align_safe_local(p.timezone) as local_ts
+      public.align_safe_local(p.timezone) as local_ts,
+      coalesce(p.sun_wake_h, 4) as sun_wake_h,
+      coalesce(p.sun_wake_m, 0) as sun_wake_m,
+      coalesce(p.wk_wake_h, 5) as wk_wake_h,
+      coalesce(p.wk_wake_m, 0) as wk_wake_m,
+      coalesce(p.sun_lights_h, 0) as sun_lights_h,
+      coalesce(p.sun_lights_m, 0) as sun_lights_m,
+      coalesce(p.wk_lights_h, 1) as wk_lights_h,
+      coalesce(p.wk_lights_m, 0) as wk_lights_m
     from public.notification_prefs p
     where p.enabled is true
   ),
@@ -53,7 +70,9 @@ begin
       extract(hour from loc.local_ts)::int as hr,
       extract(minute from loc.local_ts)::int as mn,
       (loc.local_ts)::date as local_date,
-      ((loc.local_ts)::date + 1) as next_date
+      ((loc.local_ts)::date + 1) as next_date,
+      loc.sun_wake_h, loc.sun_wake_m, loc.wk_wake_h, loc.wk_wake_m,
+      loc.sun_lights_h, loc.sun_lights_m, loc.wk_lights_h, loc.wk_lights_m
     from loc
   ),
   classified as (
@@ -63,21 +82,51 @@ begin
       s.last_wake_sent,
       s.last_lights_sent,
       case
-        when (s.dow = 0 and ((s.hr = 3 and s.mn >= 55) or (s.hr = 4 and s.mn < 8)))
-          or (s.dow <> 0 and ((s.hr = 4 and s.mn >= 55) or (s.hr = 5 and s.mn < 8)))
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 8
           then 'wake'
-        when (s.dow = 6 and s.hr = 23 and s.mn >= 50)
-          or (s.dow = 0 and s.hr = 0 and s.mn < 8)
+        when s.pre_wake_tom < 0
+          and s.local_mins >= (1440 + s.pre_wake_tom)
+          and s.local_mins < (1440 + s.pre_wake_tom + 8)
+          then 'wake'
+        when s.pre_lights >= 0
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 8
           then 'lights'
-        when (s.dow <> 0 and ((s.hr = 0 and s.mn >= 50) or (s.hr = 1 and s.mn < 8)))
+        when s.pre_lights_tom < 0
+          and s.local_mins >= (1440 + s.pre_lights_tom)
+          and s.local_mins < (1440 + s.pre_lights_tom + 8)
           then 'lights'
         else null
       end as knd,
       case
-        when (s.dow = 6 and s.hr = 23 and s.mn >= 50) then s.next_date
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 8
+          then s.local_date
+        when s.pre_wake_tom < 0
+          and s.local_mins >= (1440 + s.pre_wake_tom)
+          and s.local_mins < (1440 + s.pre_wake_tom + 8)
+          then s.next_date
+        when s.pre_lights >= 0
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 8
+          then s.local_date
+        when s.pre_lights_tom < 0
+          and s.local_mins >= (1440 + s.pre_lights_tom)
+          and s.local_mins < (1440 + s.pre_lights_tom + 8)
+          then s.next_date
         else s.local_date
       end as morn
-    from stamped s
+    from (
+      select
+        stamped.*,
+        (stamped.hr * 60 + stamped.mn) as local_mins,
+        ((case when stamped.dow = 0 then stamped.sun_wake_h else stamped.wk_wake_h end) * 60
+          + (case when stamped.dow = 0 then stamped.sun_wake_m else stamped.wk_wake_m end) - 5) as pre_wake,
+        ((case when ((stamped.dow + 1) % 7) = 0 then stamped.sun_wake_h else stamped.wk_wake_h end) * 60
+          + (case when ((stamped.dow + 1) % 7) = 0 then stamped.sun_wake_m else stamped.wk_wake_m end) - 5) as pre_wake_tom,
+        ((case when stamped.dow = 0 then stamped.sun_lights_h else stamped.wk_lights_h end) * 60
+          + (case when stamped.dow = 0 then stamped.sun_lights_m else stamped.wk_lights_m end) - 10) as pre_lights,
+        ((case when ((stamped.dow + 1) % 7) = 0 then stamped.sun_lights_h else stamped.wk_lights_h end) * 60
+          + (case when ((stamped.dow + 1) % 7) = 0 then stamped.sun_lights_m else stamped.wk_lights_m end) - 10) as pre_lights_tom
+      from stamped
+    ) s
   ),
   due as (
     select distinct c.uid as user_id, c.tz, c.last_wake_sent, c.last_lights_sent, c.knd, c.morn
