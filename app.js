@@ -555,27 +555,64 @@
 
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
-    const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
+    const live = !!(snd && (snd.playing || snd.id));
     return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
+  };
+
+  const nowChipHtml = () => {
+    if (nowHidden()) return "";
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
+    return `<div class="now-chip">
+        <button type="button" class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
+        <button type="button" class="now-meta" data-go="sound">
+          <b>${escapeHtml(snd.title || "Sound")}</b>
+          <span>${snd.playing ? "Playing" : "Paused"}</span>
+        </button>
+        <button type="button" class="now-x" data-act="sound-stop" title="Stop">×</button>
+      </div>`;
+  };
+
+  const bindNowChip = (el) => {
+    if (!el) return;
+    el.querySelectorAll("[data-act]").forEach((b) => {
+      b.addEventListener("click", (e) => { e.stopPropagation(); handle(b.dataset.act, b); });
+    });
+    el.querySelectorAll("[data-go]").forEach((b) => {
+      b.addEventListener("click", () => { state.view = b.dataset.go; render(); });
+    });
+  };
+
+  const paintNow = () => {
+    try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
+    let el = app.querySelector(".now-chip");
+    if (nowHidden()) {
+      if (el) el.remove();
+      return;
+    }
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
+    if (!el) {
+      app.insertAdjacentHTML("beforeend", nowChipHtml());
+      bindNowChip(app.querySelector(".now-chip"));
+      return;
+    }
+    const play = el.querySelector(".now-play");
+    const title = el.querySelector(".now-meta b");
+    const sub = el.querySelector(".now-meta span");
+    if (play) {
+      play.textContent = snd.playing ? "❚❚" : "▶";
+      play.dataset.act = snd.playing ? "sound-pause" : "sound-resume";
+      play.title = snd.playing ? "Pause" : "Play";
+    }
+    if (title) title.textContent = snd.title || "Sound";
+    if (sub) sub.textContent = snd.playing ? "Playing" : "Paused";
   };
 
   const overlays = () => {
     const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
-    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
-    const hideNow = nowHidden();
-    const nowBar = hideNow ? "" : `
-      <div class="now-chip">
-        <button class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
-        <button class="now-meta" data-go="sound">
-          <b>${escapeHtml(snd.title || "Sound")}</b>
-          <span>${snd.playing ? "Playing" : "Paused"}</span>
-        </button>
-        <button class="now-x" data-act="sound-stop" title="Stop">×</button>
-      </div>`;
     return `
-    ${nowBar}
+    ${nowChipHtml()}
     ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
     ${state.sheet ? `
       <div class="sheet-bg" data-act="sheet-no">
@@ -2087,21 +2124,6 @@
             })()}
           </div>
         </div>
-        ${(() => {
-          const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", id: "" };
-          if (!(snd.playing || snd.id)) return "";
-          const line = snd.playing
-            ? ("Playing · " + (snd.title || "Sound"))
-            : ((snd.title || "Sound") + " · paused");
-          return `
-        <div class="sound-now">
-          <button class="now-play" data-act="sound-toggle" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
-          <button class="sound-now-meta" data-go="sound">
-            <h4>${escapeHtml(snd.title || "Sound")}</h4>
-            <p>${escapeHtml(line)}</p>
-          </button>
-        </div>`;
-        })()}
         ${wordToday}
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
@@ -4206,8 +4228,8 @@
       });
       if (best) best.scrollTop = keepY;
     }
-    try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
     bind();
+    paintNow();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
 
@@ -5399,25 +5421,25 @@
         else if (snap.id) ALIGN_SOUND.resume();
         else ALIGN_SOUND.playStation("rise");
       }
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-station") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-library") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playLibrary(el.dataset.id);
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-track") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.playTrack(el.dataset.id);
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-pause") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.pause();
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-resume") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.resume();
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-stop") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.stop();
-      render();
+      if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-sfx") {
       if (window.ALIGN_SOUND) ALIGN_SOUND.setSfx(!ALIGN_SOUND.snapshot().sfxOn);
       render();
@@ -5603,21 +5625,7 @@
     if (window.ALIGN_SOUND && ALIGN_SOUND.loadTracks) ALIGN_SOUND.loadTracks().then(() => {}).catch(() => {});
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
       if (["splash", "onboard"].includes(state.view)) return;
-      try {
-        const snap = ALIGN_SOUND.snapshot();
-        app.classList.toggle("has-now", !nowHidden());
-        const bar = app.querySelector(".now-chip b");
-        if (bar) {
-          bar.textContent = snap.title || "Sound";
-          const sub = app.querySelector(".now-chip span");
-          if (sub) sub.textContent = snap.playing ? "Playing" : "Paused";
-          const play = app.querySelector(".now-play");
-          if (play) {
-            play.textContent = snap.playing ? "❚❚" : "▶";
-            play.dataset.act = snap.playing ? "sound-pause" : "sound-resume";
-          }
-        }
-      } catch { /* keep UI */ }
+      try { paintNow(); } catch { /* keep UI */ }
     });
     window.addEventListener("online", () => {
       state.offline = false;
