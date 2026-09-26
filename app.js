@@ -559,17 +559,57 @@
     return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
   };
 
+  const fmtSound = (sec) => {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+  };
+
+  const nowLine = (snd) => {
+    if (!snd) return "Sound";
+    if (snd.live || snd.kind === "station") return snd.playing ? "Live" : "Paused";
+    return fmtSound(snd.current) + " / " + (snd.duration ? fmtSound(snd.duration) : "—");
+  };
+
   const nowChipHtml = () => {
     if (nowHidden()) return "";
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
+    const live = !!(snd.live || snd.kind === "station");
+    const pct = snd.seekable && snd.duration ? Math.round((snd.current / snd.duration) * 1000) : 0;
+    const bar = live
+      ? `<div class="now-live" aria-hidden="true"><i></i></div>`
+      : `<input class="now-scrub" type="range" min="0" max="1000" value="${pct}" aria-label="Position" />`;
     return `<div class="now-chip">
         <button type="button" class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
-        <button type="button" class="now-meta" data-go="sound">
-          <b>${escapeHtml(snd.title || "Sound")}</b>
-          <span>${snd.playing ? "Playing" : "Paused"}</span>
-        </button>
+        <div class="now-body">
+          <button type="button" class="now-meta" data-go="sound">
+            <b>${escapeHtml(snd.title || "Sound")}</b>
+            <span class="now-time">${escapeHtml(nowLine(snd))}</span>
+          </button>
+          ${bar}
+        </div>
         <button type="button" class="now-x" data-act="sound-stop" title="Stop">×</button>
       </div>`;
+  };
+
+  let soundScrub = false;
+  let nowTick = null;
+  const paintNowProgress = (el) => {
+    if (!el || soundScrub) return;
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
+    const time = el.querySelector(".now-time");
+    const scrub = el.querySelector(".now-scrub");
+    if (time) time.textContent = nowLine(snd);
+    if (scrub && snd.seekable && snd.duration) {
+      scrub.value = String(Math.round((snd.current / snd.duration) * 1000));
+    }
+  };
+  const armNowTick = () => {
+    if (nowTick) return;
+    nowTick = setInterval(() => {
+      const el = app.querySelector(".now-chip");
+      if (!el) { clearInterval(nowTick); nowTick = null; return; }
+      paintNowProgress(el);
+    }, 250);
   };
 
   const bindNowChip = (el) => {
@@ -580,6 +620,28 @@
     el.querySelectorAll("[data-go]").forEach((b) => {
       b.addEventListener("click", () => { state.view = b.dataset.go; render(); });
     });
+    const scrub = el.querySelector(".now-scrub");
+    if (scrub) {
+      const pos = (el) => {
+        const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
+        if (!snd.duration) return 0;
+        return (Number(el.value) / 1000) * snd.duration;
+      };
+      scrub.addEventListener("pointerdown", () => { soundScrub = true; });
+      scrub.addEventListener("pointerup", (e) => {
+        soundScrub = false;
+        if (window.ALIGN_SOUND && ALIGN_SOUND.seek) ALIGN_SOUND.seek(pos(e.target));
+      });
+      scrub.addEventListener("change", (e) => {
+        soundScrub = false;
+        if (window.ALIGN_SOUND && ALIGN_SOUND.seek) ALIGN_SOUND.seek(pos(e.target));
+      });
+      scrub.addEventListener("input", (e) => {
+        const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
+        const time = el.querySelector(".now-time");
+        if (time && snd.duration) time.textContent = fmtSound(pos(e.target)) + " / " + fmtSound(snd.duration);
+      });
+    }
   };
 
   const paintNow = () => {
@@ -587,24 +649,29 @@
     let el = app.querySelector(".now-chip");
     if (nowHidden()) {
       if (el) el.remove();
+      if (nowTick) { clearInterval(nowTick); nowTick = null; }
       return;
     }
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
-    if (!el) {
+    const wantLive = !!(snd.live || snd.kind === "station");
+    const hasLive = !!(el && el.querySelector(".now-live"));
+    if (!el || wantLive !== hasLive) {
+      if (el) el.remove();
       app.insertAdjacentHTML("beforeend", nowChipHtml());
       bindNowChip(app.querySelector(".now-chip"));
+      armNowTick();
       return;
     }
     const play = el.querySelector(".now-play");
     const title = el.querySelector(".now-meta b");
-    const sub = el.querySelector(".now-meta span");
     if (play) {
       play.textContent = snd.playing ? "❚❚" : "▶";
       play.dataset.act = snd.playing ? "sound-pause" : "sound-resume";
       play.title = snd.playing ? "Pause" : "Play";
     }
     if (title) title.textContent = snd.title || "Sound";
-    if (sub) sub.textContent = snd.playing ? "Playing" : "Paused";
+    paintNowProgress(el);
+    armNowTick();
   };
 
   const overlays = () => {

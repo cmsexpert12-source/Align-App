@@ -542,8 +542,33 @@ window.ALIGN_SOUND = (() => {
     });
   };
 
+  const progressOf = () => {
+    const el = audioEl;
+    if (!el || kind === "station") {
+      return { current: 0, duration: 0, seekable: false, live: kind === "station" };
+    }
+    const dur = Number(el.duration);
+    const cur = Number(el.currentTime);
+    const ok = Number.isFinite(dur) && dur > 0;
+    return {
+      current: Number.isFinite(cur) ? cur : 0,
+      duration: ok ? dur : 0,
+      seekable: ok,
+      live: false
+    };
+  };
+
+  const seek = (sec) => {
+    if (!audioEl || kind === "station") return;
+    const dur = Number(audioEl.duration);
+    if (!Number.isFinite(dur) || dur <= 0) return;
+    const t = Math.max(0, Math.min(dur, Number(sec) || 0));
+    try { audioEl.currentTime = t; } catch { /* ignore */ }
+  };
+
   const snapshot = () => {
     const s = load();
+    const p = progressOf();
     return {
       playing,
       kind,
@@ -554,7 +579,11 @@ window.ALIGN_SOUND = (() => {
       station: s.station,
       tracks: tracks.slice(),
       library: library.slice(),
-      stations: STATIONS
+      stations: STATIONS,
+      current: p.current,
+      duration: p.duration,
+      seekable: p.seekable,
+      live: p.live || kind === "station"
     };
   };
 
@@ -570,7 +599,7 @@ window.ALIGN_SOUND = (() => {
 
   return {
     STATIONS, load, snapshot, onChange, unlock,
-    playStation, playTrack, playLibrary, playUrl, pause, resume, stop, next,
+    playStation, playTrack, playLibrary, playUrl, pause, resume, stop, next, seek,
     setVolume, setSfx, sfx, saveTrack, removeTrack, loadTracks, mergeRemote
   };
 })();
