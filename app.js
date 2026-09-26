@@ -533,11 +533,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader", "circle", "routine"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader", "circle", "routine"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -751,7 +751,7 @@
       ["Verify", "I want to check a claim from this book. Use only the page text in the live facts. If you cannot see it, say so — do not guess."],
       ["Today's sitting", "Give a simple aim for today's pages. One question to carry while I read. Do not invent the book's argument."]
     ];
-    if (v === "evening" || v === "lights") return [
+    if (v === "evening" || v === "nightverse" || v === "lights") return [
       ["Wind down", "A short thought to close the day. No new tasks."]
     ];
     if (v === "journal" || v === "journalwrite") return [
@@ -1198,8 +1198,11 @@
     iso = iso || today().iso;
     const id = typeof s === "string" ? s : (s && s.id);
     if (!id) return false;
-    if (id === "evening" || id === "nightquiz" || id === "lights") {
-      return !!L().morningOf(iso)[id];
+    if (id === "evening" || id === "nightquiz" || id === "nightverse" || id === "lights") {
+      const m = L().morningOf(iso);
+      if (id === "nightverse") return !!(m.nightverse || m.lights);
+      if (id === "evening") return !!(m.evening || m.lights);
+      return !!m[id];
     }
     const m = L().morningOf(iso);
     if (id === "move") return !!(m.move || completedOn(iso));
@@ -1226,11 +1229,17 @@
     return !!m[id];
   };
 
-  const currentStep = () => pathSteps().find((s) => !stepIsDone(s)) || null;
+  const eveningSteps = () => (L().EVENING || []).slice();
+  const currentStep = () => {
+    const morn = pathSteps().find((s) => !stepIsDone(s));
+    if (morn) return morn;
+    if (L().isEvening && L().isEvening()) return eveningSteps().find((s) => !stepIsDone(s)) || null;
+    return null;
+  };
 
   const canComplete = (id) => {
     if (!id) return false;
-    if (id === "evening" || id === "nightquiz" || id === "lights") return true;
+    if (id === "evening" || id === "nightquiz" || id === "nightverse" || id === "lights") return true;
     if (stepIsDone(id)) return true;
     const cur = currentStep();
     return !!(cur && cur.id === id);
@@ -1238,7 +1247,7 @@
 
   const canOpenStep = (id) => {
     if (!id) return true;
-    if (id === "evening" || id === "nightquiz" || id === "lights") return true;
+    if (id === "evening" || id === "nightquiz" || id === "nightverse" || id === "lights") return true;
     if (stepIsDone(id)) return true;
     const cur = currentStep();
     return !!(cur && cur.id === id);
@@ -1309,6 +1318,11 @@
       state.drill = null;
       state.drillMode = "night";
       state.view = "drill";
+      render();
+      return;
+    }
+    if (step === "nightverse") {
+      state.view = "nightverse";
       render();
       return;
     }
@@ -1553,8 +1567,8 @@
     }, state.drill.mode || "morning");
     if ((state.drill.mode || "") === "night") {
       completeStep("nightquiz");
-      toast((state.drill.correct || 0) + " right. Read the verse, then lights out.");
-      openPathStep("lights");
+      toast((state.drill.correct || 0) + " right. Now the verse.");
+      openPathStep("nightverse");
       return;
     }
     completeStep("drill");
@@ -1986,7 +2000,7 @@
     }).join("");
 
     const nextCta = cur
-      ? (cur.id === "rise" ? "I’m up" : cur.id === "move" ? "Open session" : cur.id === "go" ? "Step out" : "Continue")
+      ? (cur.id === "rise" ? "I’m up" : cur.id === "move" ? "Open session" : cur.id === "go" ? "Step out" : cur.id === "evening" ? "Open" : cur.id === "nightverse" ? "Read it" : cur.id === "lights" ? "Goodnight" : "Continue")
       : "Begin the day";
 
     const mStreak = morningStreak();
@@ -2053,9 +2067,9 @@
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
-          <h3>${allDone ? (clk.sunday ? "Go to church." : "Day is open.") : escapeHtml(cur ? cur.title : "Rise")}</h3>
+          <h3>${allDone ? (clk.sunday ? "Go to church." : (evening ? "Rest." : "Day is open.")) : escapeHtml(cur ? cur.title : "Rise")}</h3>
           <p>${allDone
-            ? (clk.sunday ? "The light path is done. Church is the first appointment." : "You walked the whole path. Go well.")
+            ? (clk.sunday ? "The light path is done. Church is the first appointment." : (evening ? "Night devotion, the verse, goodnight — done. Phone down." : "You walked the whole path. Go well."))
             : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Mark rise and the morning begins.")}</p>
           ${allDone
             ? ""
@@ -2093,6 +2107,23 @@
             r.now,
             r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
           )).join("")}</div>` : ""}`;
+        })()}
+        ${(() => {
+          const eve = eveningSteps();
+          if (!eve.length) return "";
+          const rows = eve.map((s) => {
+            const done = stepIsDone(s);
+            const now = !!(cur && cur.id === s.id && !done);
+            return { s, done, now };
+          });
+          return `
+        <div class="section-h" style="padding:16px 16px 0"><h4>Tonight</h4><span>${rows.filter((r) => r.done).length}/${rows.length}</span></div>
+        <div class="path">${rows.map((r) => stepRow(
+            Object.assign({}, r.s),
+            r.done,
+            r.now,
+            ("data-act=\"open-step\" data-step=\"" + r.s.id + "\"")
+          )).join("")}</div>`;
         })()}
       </div>
     `;
@@ -2791,7 +2822,10 @@
     plan: { why: "Three true priorities. Decide once, then walk. The day does not get to invent itself.", keep: "Plan is how the morning becomes a day. Skip it and you will be pulled." },
     ready: { why: "Bath, dress, leave the room in order. The body follows the soul out the door.", keep: "Get ready is the bridge into the world. Without it the path stops in the room." },
     recite: { why: "The devotion verse once more before you go. Take it with you.", keep: "Verse again is the last look at the line. Removing it leaves the morning in the house." },
-    go: { why: "Step into the day. Nothing else to open. You already began.", keep: "Begin closes the path. Without it ALIGN never knows the morning is done." }
+    go: { why: "Step into the day. Nothing else to open. You already began.", keep: "Begin closes the path. Without it ALIGN never knows the morning is done." },
+    evening: { why: "Close the day the way you opened it. One reading before the phone goes down." },
+    nightverse: { why: "The same line from the morning. Take it into sleep." },
+    lights: { why: "Goodnight is how tomorrow’s rise stays intact." }
   };
 
   const viewRoutine = () => {
@@ -2801,45 +2835,60 @@
     const ordered = (r.order || []).map((id) => byId[id]).filter(Boolean);
     const onSteps = ordered.filter((s) => r.on[s.id] !== false);
     const offSteps = ordered.filter((s) => r.on[s.id] === false);
+    const riseStep = onSteps.find((s) => s.id === "rise") || byId.rise;
+    const goStep = onSteps.find((s) => s.id === "go") || byId.go;
+    const midOn = onSteps.filter((s) => s.id !== "rise" && s.id !== "go");
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
+    const eve = L().EVENING || [];
     const grip = `<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4.5" r="1.35"/><circle cx="12" cy="4.5" r="1.35"/><circle cx="6" cy="9" r="1.35"/><circle cx="12" cy="9" r="1.35"/><circle cx="6" cy="13.5" r="1.35"/><circle cx="12" cy="13.5" r="1.35"/></svg>`;
-    const rowOf = (s, i, on) => {
-      const locked = s.id === "rise" || s.id === "go";
+    const rowOf = (s, i, opts) => {
+      const on = !opts || opts.on !== false;
+      const pinned = !!(opts && opts.pinned);
+      const drag = !!(opts && opts.drag);
       const why = (PATH_WHY[s.id] && PATH_WHY[s.id].why) || s.sub;
-      return `<div class="routine-step ${on ? "" : "off"}" data-id="${escapeAttr(s.id)}">
+      const mins = on && !pinned;
+      return `<div class="routine-step ${on ? "" : "off"} ${pinned ? "pinned" : ""}" data-id="${escapeAttr(s.id)}">
         <div class="path-card-top">
-          ${on ? `<button type="button" class="path-handle" data-drag="1" aria-label="Hold and drag to reorder">${grip}</button>` : `<span class="path-num ghost">+</span>`}
-          ${on ? `<span class="path-num">${i + 1}</span>` : ""}
+          ${drag ? `<button type="button" class="path-handle" data-drag="1" aria-label="Hold and drag to reorder">${grip}</button>` : `<span class="path-num ${on ? "" : "ghost"}">${on ? (i + 1) : "+"}</span>`}
+          ${drag ? `<span class="path-num">${i + 1}</span>` : ""}
           <div class="grow">
             <h3>${escapeHtml(s.title)}</h3>
             <p>${escapeHtml(why)}</p>
           </div>
         </div>
         <div class="path-card-actions">
-          ${on ? `<div class="path-aim">
+          ${mins ? `<div class="path-aim">
             <label>Weekdays <input id="rt-min-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.min[s.id] || 0}" /> min</label>
             <label>Sunday <input id="rt-sun-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.minSun[s.id] || 0}" /> min</label>
-          </div>` : `<input type="hidden" id="rt-min-${escapeAttr(s.id)}" value="${r.min[s.id] || 0}" /><input type="hidden" id="rt-sun-${escapeAttr(s.id)}" value="${r.minSun[s.id] || 0}" />`}
-          ${locked ? `<span class="path-lock">Always on</span>` : (on
+          </div>` : (r.min && r.min[s.id] != null ? `<input type="hidden" id="rt-min-${escapeAttr(s.id)}" value="${r.min[s.id] || 0}" /><input type="hidden" id="rt-sun-${escapeAttr(s.id)}" value="${r.minSun[s.id] || 0}" />` : "")}
+          ${pinned ? `<span class="path-lock">${s.id === "rise" ? "First · always" : (s.id === "go" ? "Last · always" : "Fixed")}</span>` : (on
             ? `<button type="button" class="path-remove" data-act="drop-step" data-id="${escapeAttr(s.id)}">Remove</button>`
             : `<button type="button" class="btn ghost sm" data-act="restore-step" data-id="${escapeAttr(s.id)}">Add back</button>`)}
         </div>
       </div>`;
     };
-    const rows = onSteps.map((s, i) => rowOf(s, i, true)).join("");
-    const offRows = offSteps.map((s, i) => rowOf(s, i, false)).join("");
+    const riseRow = riseStep ? rowOf(riseStep, 1, { on: true, pinned: true }) : "";
+    const rows = midOn.map((s, i) => rowOf(s, i + 2, { on: true, drag: true })).join("");
+    const goRow = goStep ? rowOf(goStep, 1 + midOn.length + 1, { on: true, pinned: true }) : "";
+    const offRows = offSteps.map((s) => rowOf(s, 0, { on: false })).join("");
+    const eveRows = eve.map((s, i) => rowOf(s, i + 1, { on: true, pinned: true })).join("");
     return `
       <div class="screen full has-cta routine">
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Edit</div>
           <h1>Your path.</h1>
-          <p>Hold the dots to move a step. Remove only what you will not walk. Rise and Begin stay.</p>
+          <p>Rise is first. Begin is last. Hold the dots to order the middle. The night path does not move.</p>
         </div>
         <div class="scroll-body routine-scroll">
-          <div class="set-label">Morning order · ${onSteps.length} steps</div>
+          <div class="set-label">Morning · ${onSteps.length} steps</div>
+          <div class="circle-list">${riseRow}</div>
           <div class="circle-list path-edit-list">${rows}</div>
+          <div class="circle-list">${goRow}</div>
           ${offRows ? `<div class="set-label">Off the path</div><p class="hint" style="margin-top:0">You can add these back anytime.</p><div class="circle-list">${offRows}</div>` : ""}
+          <div class="set-label">Tonight · fixed</div>
+          <p class="hint" style="margin-top:0">Night devotion, the verse, then goodnight. Every night. Not editable.</p>
+          <div class="circle-list">${eveRows}</div>
           <div class="set-label">When you rise</div>
           <div class="hours-block">
             <p class="hours-kicker">Sunday</p>
@@ -3088,9 +3137,9 @@
             })()}</p>
           </button>
           <button class="hub-card" data-act="open-step" data-step="evening">
-            <div class="tile">${stepIcon("rise")}</div>
-            <h3>Evening</h3>
-            <p>${nightSp && nightSp.answered ? "Night test " + nightSp.correct + "/" + nightSp.answered : "Night Word, then the same chapters again."}</p>
+            <div class="tile">${stepIcon("book")}</div>
+            <h3>Night devotion</h3>
+            <p>${L().morningOf(iso).lights ? "Goodnight is in." : (L().morningOf(iso).nightverse ? "Verse read. Goodnight next." : (L().morningOf(iso).evening ? "Verse, then goodnight." : "Night devotion, the verse, then goodnight."))}</p>
           </button>
           <button class="hub-card" type="button" data-act="open-library">
             <div class="tile">${stepIcon("read")}</div>
@@ -3271,7 +3320,7 @@
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" ${nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`}>${nQ ? "Start the clock" : "Read first"}</button>
-            <p class="next-up">${night ? "Then read today’s verse. Then lights out." : "Then affirm."}</p>
+            <p class="next-up">${night ? "Then the memory verse. Then goodnight." : "Then affirm."}</p>
           </div>
         </div>`;
     }
@@ -3543,17 +3592,11 @@
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Evening · lights out ${clk.tonightLabel}</div>
-          <h1>Night Word.</h1>
-          <p>Read this. Then the phone goes down.</p>
+          <div class="tag">Tonight · lights ${clk.tonightLabel}</div>
+          <h1>Night devotion.</h1>
+          <p>Read this. Then the verse. Then goodnight.</p>
         </div>
         <div class="scripture">
-          ${(() => {
-            const v = lockDevotionVerse() || S().todayVerse(today().iso);
-            return v && v.text ? `<div class="tag">Morning verse · once more</div>
-            <div class="devotion-verse">${escapeHtml(S().refOf(v))}</div>
-            <div class="devotion-body">${escapeHtml(v.text)}</div>` : "";
-          })()}
           ${sp ? `
             <div class="tag">Spurgeon · Evening</div>
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
@@ -3561,8 +3604,32 @@
           ` : `<p class="hint">Loading evening reading…</p>`}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="open-step" data-step="lights">Read the verse · lights out</button>
+          <button class="btn" data-act="complete-step" data-step="evening">Devotion done · verse next</button>
           <button class="btn ghost" style="margin-top:8px" data-act="open-nightdrill">Test today’s reading</button>
+        </div>
+      </div>
+    `;
+  };
+
+  const viewNightVerse = () => {
+    const v = lockDevotionVerse() || S().todayVerse(today().iso);
+    return `
+      <div class="screen full has-cta">
+        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">Tonight</div>
+          <h1>Memory verse.</h1>
+          <p>The same line from this morning’s devotion. Read it once more. Then goodnight.</p>
+        </div>
+        <div class="verse-body">
+          <div class="verse-card">
+            <div class="verse-theme">Devotion</div>
+            <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
+            <q class="mv-text">${v ? escapeHtml(v.text) : "This morning’s devotion verse will show here."}</q>
+          </div>
+        </div>
+        <div class="sticky-cta">
+          <button class="btn" data-act="night-verse" ${v && v.text ? "" : "disabled"}>I’ve read it</button>
         </div>
       </div>
     `;
@@ -3570,29 +3637,19 @@
 
   const viewLights = () => {
     const clk = L().clocksFor(today().date);
-    const v = lockDevotionVerse() || S().todayVerse(today().iso);
-    const read = !!L().morningOf(today().iso).nightverse;
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Lights out · ${clk.tonightLabel}</div>
-          <h1>${read ? "Phone down." : "Read it before bed."}</h1>
-          <p>${read
-            ? (clk.sunday ? "Sunday. Rise at 4:00 AM." : "Rise at 5:00 AM.") + " The morning path is already waiting."
-            : "The same line from this morning’s devotion. Read it once more. Then the phone goes down."}</p>
+          <div class="tag">Goodnight · ${clk.tonightLabel}</div>
+          <h1>Phone down.</h1>
+          <p>${clk.sunday ? "Sunday. Rise at 4:00 AM." : "Rise at " + clk.wakeLabel + "."} The morning path is already waiting.</p>
         </div>
-        <div class="verse-body">
-          <div class="verse-card">
-            <div class="verse-theme">Tonight</div>
-            <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
-            <q class="mv-text">${v ? escapeHtml(v.text) : "This morning’s devotion verse will show here."}</q>
-          </div>
+        <div class="done-hero" style="padding:12px 22px 0">
+          <p class="lead" style="color:var(--muted)">You closed the day. Sleep like the first appointment is His.</p>
         </div>
         <div class="sticky-cta">
-          ${read
-            ? `<button class="btn" data-act="complete-step" data-step="lights">Phone down</button>`
-            : `<button class="btn" data-act="night-verse">I’ve read it · phone down</button>`}
+          <button class="btn" data-act="complete-step" data-step="lights">Goodnight</button>
         </div>
       </div>
     `;
@@ -4043,7 +4100,7 @@
         pray: "pray", devotion: "devotion", bible: "word", verse: "verse", drill: "drill",
         affirm: "affirm", dayplan: "plan", getready: "ready", go: "go",
         ready: "move", exercise: "move", player: "move", rest: "move", done: "move",
-        recite: "recite", evening: "evening", lights: "lights", reader: "read"
+        recite: "recite", evening: "evening", nightverse: "nightverse", lights: "lights", reader: "read"
       };
       const sid = viewStep[state.view];
       if (sid && L().markOpen) L().markOpen(iso, sid);
@@ -4076,6 +4133,7 @@
       recite: viewRecite,
       biblepick: viewBiblePick,
       evening: viewEvening,
+      nightverse: viewNightVerse,
       lights: viewLights,
       library: viewLibrary,
       book: viewBook,
@@ -4137,10 +4195,10 @@
       if (!dragEl) return;
       dragEl.classList.remove("dragging");
       dragEl = null;
-      const visible = idsNow();
+      const visible = idsNow().filter((id) => id !== "rise" && id !== "go");
       const patch = readPathForm();
-      const rest = (patch.order || []).filter((id) => visible.indexOf(id) < 0);
-      patch.order = visible.concat(rest);
+      const rest = (patch.order || []).filter((id) => id !== "rise" && id !== "go" && visible.indexOf(id) < 0);
+      patch.order = ["rise"].concat(visible, ["go"], rest);
       pushRoutine(patch);
     };
     list.addEventListener("pointerdown", (e) => {
@@ -4757,7 +4815,7 @@
         toast("Note deleted");
       } else if (kind === "drop-step") {
         const id = stepId;
-        if (!id || id === "rise" || id === "go") { render(); return; }
+        if (!id || id === "rise" || id === "go" || id === "evening" || id === "nightverse" || id === "lights") { render(); return; }
         const patch = readPathForm();
         patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
         patch.on[id] = false;
@@ -4860,8 +4918,8 @@
     } else if (act === "drop-step") {
       const id = el && el.dataset ? el.dataset.id : "";
       if (!id) return;
-      if (id === "rise" || id === "go") {
-        toast("Rise and Begin hold the morning. They stay.");
+      if (id === "rise" || id === "go" || id === "evening" || id === "nightverse" || id === "lights") {
+        toast(id === "rise" || id === "go" ? "Rise and Begin hold the morning. They stay." : "The night path is fixed.");
         return;
       }
       const why = PATH_WHY[id] || {};
@@ -4974,6 +5032,16 @@
       }
       completeStep(step);
       sfx("done");
+      if (step === "evening") {
+        toast("Amen.");
+        openPathStep("nightverse");
+        return;
+      }
+      if (step === "nightverse") {
+        toast("Amen.");
+        openPathStep("lights");
+        return;
+      }
       if (step === "lights") {
         toast("Phone down.");
         state.view = "home";
@@ -5362,14 +5430,10 @@
       state.view = "go";
       render();
     } else if (act === "night-verse") {
-      const iso = today().iso;
-      const steps = L().setStep(iso, "nightverse", true);
-      AlignDB.saveMorning(iso, steps).catch(() => {});
-      completeStep("lights");
-      sfx("done");
-      toast("Phone down.");
-      state.view = "home";
-      render();
+      completeStep("nightverse");
+      sfx("ok");
+      toast("Amen.");
+      openPathStep("lights");
     } else if (act === "verse-grade") {
       const item = currentVerse();
       if (!item) return;

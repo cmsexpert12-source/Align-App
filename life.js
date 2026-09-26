@@ -84,12 +84,16 @@ window.ALIGN_LIFE = (() => {
       d.minSun[id] = clampMin(raw.minSun && raw.minSun[id], d.minSun[id]);
     });
     const seen = {};
-    const order = [];
+    const mid = [];
     (Array.isArray(raw.order) ? raw.order : []).forEach((id) => {
-      if (STEP_IDS.indexOf(id) >= 0 && !seen[id]) { seen[id] = 1; order.push(id); }
+      if (id === "rise" || id === "go") return;
+      if (STEP_IDS.indexOf(id) >= 0 && !seen[id]) { seen[id] = 1; mid.push(id); }
     });
-    STEP_IDS.forEach((id) => { if (!seen[id]) order.push(id); });
-    d.order = order;
+    STEP_IDS.forEach((id) => {
+      if (id === "rise" || id === "go") return;
+      if (!seen[id]) mid.push(id);
+    });
+    d.order = ["rise"].concat(mid, ["go"]);
     d.trainPlan = ["energy", "strength", "mobility", "capacity"].indexOf(raw.trainPlan) >= 0 ? raw.trainPlan : "energy";
     d.updated_at = raw.updated_at || "";
     return d;
@@ -303,9 +307,9 @@ window.ALIGN_LIFE = (() => {
   };
 
   const EVENING = [
-    { id: "evening", title: "Evening Word", sub: "Spurgeon for the night. Then test the day’s chapters.", icon: "word" },
-    { id: "nightquiz", title: "Night test", sub: "Same reading. Misses first. Then lights out.", icon: "drill" },
-    { id: "lights", title: "Lights out", sub: "Bed at the hour you set. The morning is already planned.", icon: "ready" }
+    { id: "evening", title: "Night devotion", sub: "Spurgeon for the night. Then the verse once more.", icon: "book" },
+    { id: "nightverse", title: "Memory verse", sub: "The devotion line. Read it again before you sleep.", icon: "verse" },
+    { id: "lights", title: "Goodnight", sub: "Phone down at the hour you set. Rise is already waiting.", icon: "ready" }
   ];
 
   const STEPS = [
@@ -489,7 +493,7 @@ window.ALIGN_LIFE = (() => {
     })).filter((x) => x.ms >= 1000 || (x.done && x.id !== "rise" && x.id !== "go" && x.id !== "lights"));
   };
 
-  const HOLD_IDS = { pray: 1, devotion: 1, verse: 1, word: 1, recite: 1, affirm: 1, evening: 1 };
+  const HOLD_IDS = { pray: 1, devotion: 1, verse: 1, word: 1, recite: 1, affirm: 1, evening: 1, nightverse: 1 };
   const idealMinFor = (iso, id, opts) => {
     const r = loadRoutine();
     const [y, m, d] = String(iso).split("-").map(Number);
@@ -498,6 +502,7 @@ window.ALIGN_LIFE = (() => {
     if (id === "move" && opts && opts.trainMin != null) return Math.max(1, Number(opts.trainMin) || table.move || 1);
     if (id === "read") return 8;
     if (id === "evening") return 8;
+    if (id === "nightverse") return 2;
     if (id === "nightquiz") return 2;
     if (id === "lights") return 1;
     return table[id] || 0;

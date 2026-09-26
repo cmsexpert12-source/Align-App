@@ -2106,6 +2106,8 @@ img { max-width: 100%; display: block; }
 .routine-step .grow h3 { font-size: 16px; font-weight: 800; margin: 0 0 4px; }
 .routine-step .grow p { font-size: 13px; line-height: 1.4; color: var(--muted); margin: 0; }
 .path-card-actions { padding-left: 72px; }
+.routine-step.pinned .path-card-actions { padding-left: 36px; }
+.routine-step.pinned { background: color-mix(in srgb, var(--surface) 88%, #000); }
 .plan-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 16px; }
 .plan-card {
   text-align: left; color: inherit;
