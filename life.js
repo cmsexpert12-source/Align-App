@@ -419,6 +419,30 @@ window.ALIGN_LIFE = (() => {
     row[id] = cur;
     return saveTimes(iso, row);
   };
+  const fmtClockAt = (ms) => {
+    const n = Number(ms) || 0;
+    if (!n) return "";
+    const d = new Date(n);
+    return fmtHM(d.getHours(), d.getMinutes());
+  };
+  const stampClock = (iso, id) => {
+    if (!iso || (id !== "rise" && id !== "lights")) return timesOf(iso);
+    const row = Object.assign({}, timesOf(iso));
+    const cur = Object.assign({}, stepTime(row, id) || {});
+    if (cur.at) return row;
+    const now = Date.now();
+    cur.at = now;
+    if (!cur.open) cur.open = now;
+    if (!cur.close) cur.close = now;
+    row[id] = cur;
+    return saveTimes(iso, row);
+  };
+  const clockAt = (iso, id) => {
+    const cur = stepTime(timesOf(iso), id) || {};
+    const at = Number(cur.at || cur.close || 0) || 0;
+    if (!at) return null;
+    return { at, label: fmtClockAt(at) };
+  };
   const mergeTimesDay = (a, b) => {
     const out = Object.assign({}, a && typeof a === "object" ? a : {});
     const src = b && typeof b === "object" ? b : {};
@@ -435,11 +459,14 @@ window.ALIGN_LIFE = (() => {
       if (!x) { out[k] = Object.assign({}, y); return; }
       const open = [x.open, y.open].filter((n) => n > 0);
       const close = [x.close, y.close].filter((n) => n > 0);
+      const at = [x.at, y.at].filter((n) => n > 0);
       out[k] = {
         open: open.length ? Math.min.apply(null, open) : (x.open || y.open),
         close: close.length ? Math.max.apply(null, close) : (x.close || y.close),
-        ms: Math.max(x.ms || 0, y.ms || 0)
+        ms: Math.max(x.ms || 0, y.ms || 0),
+        at: at.length ? Math.min.apply(null, at) : (x.at || y.at)
       };
+      if (!out[k].at) delete out[k].at;
     });
     return out;
   };
@@ -459,7 +486,7 @@ window.ALIGN_LIFE = (() => {
     const times = {};
     Object.keys(t).forEach((k) => {
       if (k === "updated_at") return;
-      if (t[k] && typeof t[k] === "object" && (t[k].ms || t[k].open)) times[k] = t[k];
+      if (t[k] && typeof t[k] === "object" && (t[k].ms || t[k].open || t[k].at || t[k].close)) times[k] = t[k];
     });
     row._times = times;
     return row;
@@ -1056,7 +1083,7 @@ window.ALIGN_LIFE = (() => {
     clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
-    timesOf, markOpen, markClose, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
+    timesOf, markOpen, markClose, stampClock, clockAt, fmtClockAt, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
     idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, prefetchChapter, bibleTr, setBibleTr, markChapterRead, todayAssignment,

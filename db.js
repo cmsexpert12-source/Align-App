@@ -608,11 +608,14 @@ window.AlignDB = (() => {
         if (!y || typeof y !== "object") return;
         const x = times[k];
         if (!x || typeof x !== "object") { times[k] = y; return; }
+        const at = [x.at, y.at].filter((n) => n > 0);
         times[k] = {
           open: Math.min(x.open || y.open || 0, y.open || x.open || 0) || x.open || y.open,
           close: Math.max(x.close || 0, y.close || 0) || x.close || y.close,
-          ms: Math.max(x.ms || 0, y.ms || 0)
+          ms: Math.max(x.ms || 0, y.ms || 0),
+          at: at.length ? Math.min.apply(null, at) : (x.at || y.at)
         };
+        if (!times[k].at) delete times[k].at;
       });
       if (Object.keys(times).length) merged._times = times;
       err = await restUpsert("mornings", {

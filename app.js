@@ -1414,7 +1414,8 @@
     try { if (step && L().markOpen) L().markOpen(iso, step); } catch { /* timing optional */ }
     if (step === "rise") {
       completeStep("rise");
-      toast("Good morning.");
+      const up = L().clockAt && L().clockAt(iso, "rise");
+      toast(up && up.label ? ("Good morning · " + up.label) : "Good morning.");
       goNext();
       return;
     }
@@ -1562,7 +1563,10 @@
     if (id === "move") {
       extra = (state.history || []).filter((h) => h && h.date === iso).reduce((a, h) => a + (h.minutes || 0), 0) * 60000;
     }
-    if (extra && L().markClose) L().markClose(iso, id, extra);
+    if (id === "rise" || id === "lights") {
+      try { if (L().stampClock) L().stampClock(iso, id); } catch { /* clock optional */ }
+    }
+    if ((extra || id === "rise" || id === "lights") && L().markClose) L().markClose(iso, id, extra);
     AlignDB.saveMorning(iso, steps).catch(() => {});
     return steps;
   };
@@ -2161,6 +2165,14 @@
         </div>` : "";
 
     const subFor = (s) => {
+      if (s.id === "rise") {
+        const up = L().clockAt && L().clockAt(t.iso, "rise");
+        return morn.rise ? ("Up at " + ((up && up.label) || "the tap")) : s.sub;
+      }
+      if (s.id === "lights") {
+        const down = L().clockAt && L().clockAt(t.iso, "lights");
+        return morn.lights ? ("Down at " + ((down && down.label) || "the tap")) : s.sub;
+      }
       if (s.id === "move") return moveDone ? "Session logged" : `${day.name} · ${day.minutes} min`;
       if (s.id === "word") {
         const n = (assign.read || []).length;
@@ -2479,12 +2491,19 @@
       ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)} of ${fmt((L().idealMsFor && L().idealMsFor(t.iso, cur.id, opts)) || 0)} ideal</p>`
       : "";
     const headHint = sunday ? "Sunday window 4:00–5:45 · 105 min" : "Weekday aim 90 min · don’t cut the Word to make it";
+    const clk = L().clocksFor(t.date);
+    const upAt = L().clockAt && L().clockAt(t.iso, "rise");
+    const downAt = L().clockAt && L().clockAt(t.iso, "lights");
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Time<h2>Pace.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="home">Today</button></div>
         </div>
         <p class="plan-kicker">${headHint}. Ideal is the mark. Actual is what happened. The gap is where to focus.</p>
+        <div class="pulse-stats" style="margin:0 16px 8px">
+          <div><b>${upAt && upAt.label ? escapeHtml(upAt.label) : "—"}</b><span>I’m up${clk.wakeLabel ? " · set " + escapeHtml(clk.wakeLabel) : ""}</span></div>
+          <div><b>${downAt && downAt.label ? escapeHtml(downAt.label) : "—"}</b><span>Goodnight${clk.tonightLabel ? " · set " + escapeHtml(clk.tonightLabel) : ""}</span></div>
+        </div>
         ${liveLine}
         <div class="time-area">
           <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : "—"} / ${fmt(idealMs)}</span></div>
@@ -5270,7 +5289,8 @@
         return;
       }
       if (step === "lights") {
-        toast("Phone down.");
+        const down = L().clockAt && L().clockAt(iso, "lights");
+        toast(down && down.label ? ("Phone down · " + down.label) : "Phone down.");
         state.view = "home";
         render();
         return;
