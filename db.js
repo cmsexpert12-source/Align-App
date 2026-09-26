@@ -541,6 +541,17 @@ window.AlignDB = (() => {
     } catch { return 0; }
   };
 
+  const clockIsoOf = (iso, id, times) => {
+    try {
+      const fromT = times && times[id] && typeof times[id] === "object" ? times[id] : null;
+      const local = ((readJSON("align-timing", {}) || {})[iso] || {})[id];
+      const row = fromT || (local && typeof local === "object" ? local : null) || {};
+      const at = Number(row.at || row.close || 0) || 0;
+      if (!at) return null;
+      return new Date(at).toISOString();
+    } catch { return null; }
+  };
+
   const patchPathDay = async (userId, iso, extra) => {
     if (!userId || !iso) return null;
     const now = new Date().toISOString();
@@ -563,9 +574,21 @@ window.AlignDB = (() => {
       book_page: Number(prev.book_page) || 0,
       book_pages: Number(prev.book_pages) || 0,
       read_ms: Number(prev.read_ms) || 0,
+      wake_at: prev.wake_at || null,
+      lights_at: prev.lights_at || null,
       updated_at: now
     }, extra || {});
+    if (prev.wake_at) row.wake_at = prev.wake_at;
+    if (prev.lights_at) row.lights_at = prev.lights_at;
+    if (!row.wake_at) delete row.wake_at;
+    if (!row.lights_at) delete row.lights_at;
     let err = await restUpsert("path_days", row, "user_id,date");
+    if (err && /column|schema cache|PGRST204/i.test(err.message || "")) {
+      const noClock = Object.assign({}, row);
+      delete noClock.wake_at;
+      delete noClock.lights_at;
+      err = await restUpsert("path_days", noClock, "user_id,date");
+    }
     if (err && (missingTable(err) || /column|schema cache|PGRST204/i.test(err.message || ""))) {
       err = await restUpsert("path_days", {
         user_id: userId,
@@ -628,7 +651,12 @@ window.AlignDB = (() => {
         const go = !!merged.go;
         const snap = bookSnap();
         const items = summarizeSchedule((readJSON("align-plans", {}) || {})[p.iso] || {});
-        await patchPathDay(userId, p.iso, {
+        const clocks = {};
+        const wakeIso = clockIsoOf(p.iso, "rise", merged._times);
+        const bedIso = clockIsoOf(p.iso, "lights", merged._times);
+        if (wakeIso) clocks.wake_at = wakeIso;
+        if (bedIso) clocks.lights_at = bedIso;
+        await patchPathDay(userId, p.iso, Object.assign({
           done: doneN,
           total: ids.length,
           go,
@@ -640,7 +668,7 @@ window.AlignDB = (() => {
           book_page: snap.page,
           book_pages: snap.pages,
           read_ms: Math.max(readMsOf(p.iso), (merged._times && merged._times.read && merged._times.read.ms) || 0)
-        });
+        }, clocks));
       }
     } else if (item.kind === "plan") {
       err = await restUpsert("day_plans", {

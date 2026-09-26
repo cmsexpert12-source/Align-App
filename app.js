@@ -2922,8 +2922,8 @@
           <div class="set-label">Circle</div>
           <button class="setting" data-go="circle">
             <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.members && state.circle.members.length
-              ? (state.circle.members.length + " people · path, schedule, book")
-              : "Invite people. They see path, schedule, and the book — not your journal."}</p></div>
+              ? (state.circle.members.length + " people · path, schedule, book, rise, sleep")
+              : "Invite people. They see path, schedule, the book, and when you rose and slept — not your journal."}</p></div>
           </button>
 
           <div class="set-label">Morning hours</div>
@@ -3155,6 +3155,15 @@
       const bookLine = (!mine && bookTitle)
         ? (bookTitle + " · p." + (todayRow.book_page || 1) + (todayRow.book_pages ? " of " + todayRow.book_pages : "") + (timeLine ? " · " + timeLine : ""))
         : (!mine && timeLine ? timeLine : "");
+      const clockLab = (iso) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        if (!d.getTime()) return "";
+        return (L().fmtClockAt && L().fmtClockAt(d.getTime())) || "";
+      };
+      const upLab = !mine ? clockLab(todayRow && todayRow.wake_at) : "";
+      const downLab = !mine ? clockLab(todayRow && todayRow.lights_at) : "";
+      const clockLine = [upLab ? ("Up " + upLab) : "", downLab ? ("Down " + downLab) : ""].filter(Boolean).join(" · ");
       return `<div class="circle-row">
         <div class="circle-who">
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
@@ -3165,6 +3174,7 @@
         </div>
         <div class="circle-dots">${dots}</div>
         ${schedList}
+        ${clockLine ? `<p class="circle-book">${escapeHtml(clockLine)}</p>` : ""}
         ${bookLine ? `<p class="circle-book">${escapeHtml(bookLine)}</p>` : ""}
       </div>`;
     };
@@ -3172,14 +3182,14 @@
       ? `<div class="room">
            <div class="tag">Together</div>
            <h3>Walk with someone.</h3>
-           <p>Sign in so a circle can see your path, today’s schedule, and the book you’re in — not your journal, notes, or affirmation.</p>
+           <p>Sign in so a circle can see your path, today’s schedule, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
            <button class="btn" data-go="auth">Create account</button>
          </div>`
       : !c
         ? `<div class="room">
            <div class="tag">Together</div>
            <h3>Invite a few.</h3>
-           <p>They see today’s path, the schedule and whether it’s done, and the book you’re in — not your journal, notes, or affirmation.</p>
+           <p>They see today’s path, the schedule and whether it’s done, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
            ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
@@ -3187,7 +3197,7 @@
            <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Join circle</button>
            <button class="btn ghost" data-act="create-circle" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>
          </div>`
-        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · path, schedule, book. Not the diary.</p>
+        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · path, schedule, book, rise, sleep. Not the diary.</p>
            <button class="btn ghost" data-act="copy-code" style="height:44px">Copy invite code</button>
            <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\"room\"><h3>Just you so far.</h3><p>Share the code. The circle fills when someone joins.</p></div>"}</div>
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
