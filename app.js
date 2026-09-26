@@ -170,9 +170,18 @@
     return ((p[0]?.[0] || "Y") + (p[1]?.[0] || "")).toUpperCase();
   };
 
-  const dayByDow = (dow) => days.find(d => d.dow === dow);
+  const weekDays = () => {
+    const id = (L().loadRoutine && L().loadRoutine().trainPlan) || "energy";
+    return (window.ALIGN_DATA && ALIGN_DATA.weekFor && ALIGN_DATA.weekFor(id)) || days;
+  };
+  const allPlanDays = () => {
+    if (window.ALIGN_DATA && ALIGN_DATA.allDays) return ALIGN_DATA.allDays();
+    return days;
+  };
+  const dayByDow = (dow) => weekDays().find(d => d.dow === dow) || days.find(d => d.dow === dow);
+  const dayById = (id) => weekDays().find(d => d.id === id) || allPlanDays().find(d => d.id === id) || days.find(d => d.id === id);
   const todayDay = () => dayByDow(today().dow);
-  const itemsOf = (w) => (w && w.items) || days.find(d => d.id === w.dayId).items;
+  const itemsOf = (w) => (w && w.items) || (dayById(w.dayId) || {}).items || [];
 
   const completedOn = (iso) => state.history.find(h => h.date === iso);
   const streak = () => {
@@ -190,7 +199,7 @@
 
   const weekVolume = () => {
     const acc = { push: 0, pull: 0, legs: 0, core: 0, mobility: 0, warmup: 0 };
-    days.forEach(day => {
+    weekDays().forEach(day => {
       day.items.forEach(it => {
         const ex = exercises[it.id];
         if (ex) acc[ex.pattern] = (acc[ex.pattern] || 0) + 1;
@@ -633,7 +642,7 @@
       if (a) min[id] = Math.max(0, Math.min(180, Number(a.value) || 0));
       if (b) minSun[id] = Math.max(0, Math.min(180, Number(b.value) || 0));
     });
-    return Object.assign(readHoursForm("rt-"), { min, minSun, on: r.on });
+    return Object.assign(readHoursForm("rt-"), { min, minSun, on: r.on, order: r.order, trainPlan: r.trainPlan });
   };
   let pdfDoc = null;
   let pdfRenderTask = null;
@@ -1721,8 +1730,8 @@
       `,
       `
         <div class="kicker">The path</div>
-        <h1>Same order.<br>Every day.</h1>
-        <p class="lead">A quiet sequence so the morning doesn’t have to be decided twice.</p>
+        <h1>Set it once.<br>Walk it daily.</h1>
+        <p class="lead">A morning sequence so the day doesn’t have to be decided twice. You can change the order later in You.</p>
         <div class="keep-list">
           <div class="keep"><div class="ic" style="background:#d6ff3f22;color:#d6ff3f">${stepIcon("rise")}</div><div><h4>Rise</h4><p>You’re up. The day is a gift.</p></div></div>
           <div class="keep"><div class="ic" style="background:#ff6b4a22;color:#ff6b4a">${stepIcon("move")}</div><div><h4>Train</h4><p>Body first, while the mind is quiet. Bodyweight, at home.</p></div></div>
@@ -1899,7 +1908,7 @@
     const moveDone = !!completedOn(t.iso) || morn.move;
     const clk = L().clocksFor(t.date);
     const evening = L().isEvening(t.date);
-    const allDone = !cur || !!morn.go;
+    const allDone = !cur;
     const install = state.installPrompt ? `
       <div class="install-banner">
         <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
@@ -2120,7 +2129,7 @@
     const optsFor = (iso) => {
       const parts = String(iso).split("-").map(Number);
       const dt = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
-      const day = days.find((x) => x.dow === dt.getDay()) || todayDay();
+      const day = weekDays().find((x) => x.dow === dt.getDay()) || todayDay();
       return { trainMin: day.minutes, chapters: L().chapterTarget(iso) };
     };
     const opts = optsFor(t.iso);
@@ -2297,10 +2306,16 @@
     const t = today();
     const todayD = todayDay();
     const moveDone = !!completedOn(t.iso);
+    const planId = (L().loadRoutine && L().loadRoutine().trainPlan) || "energy";
+    const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
+    const week = weekDays();
     return `
       <div class="screen plan">
         <div class="topbar"><div class="greet">Move<h2>This week.</h2></div>
           <button class="linkish" data-go="progress">Log</button>
+        </div>
+        <div class="shelf-chips" style="padding:0 16px 10px">
+          ${packs.map((p) => `<button type="button" class="${p.id===planId?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
         </div>
         <div class="hero p-${todayD.pattern}">
           <div class="tag">${moveDone ? "Logged today" : "Today · " + DOW_FULL[todayD.dow]}</div>
@@ -2309,8 +2324,8 @@
           <div class="hero-meta"><span><b>${todayD.minutes}</b> min</span><span><b>${todayD.items.length}</b> moves</span></div>
           <button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>
         </div>
-        <p class="plan-kicker">Bodyweight · no gear. One step on the morning path — Word and plan live on Today.</p>
-        ${days.map(d => `
+        <p class="plan-kicker">Bodyweight · no gear. Pick the week that matches the goal. Training is still one step on the path.</p>
+        ${week.map(d => `
           <button class="day-card p-${d.pattern} ${d.dow===t.dow?"today":""}" data-go-day="${d.dow}">
             <div class="when">${DOW[d.dow]}</div>
             <div>
@@ -2325,7 +2340,7 @@
   };
 
   const viewReady = () => {
-    const day = days.find(d => d.id === state.selectedDay) || todayDay();
+    const day = dayById(state.selectedDay) || todayDay();
     return `
       <div class="screen full has-cta p-${day.pattern}">
         <div class="back-row">
@@ -2392,7 +2407,7 @@
 
   const viewPlayer = () => {
     const w = state.workout;
-    const day = days.find(d => d.id === w.dayId);
+    const day = dayById(w.dayId);
     const it = itemsOf(w)[w.index];
     const ex = exercises[it.id];
     const total = itemsOf(w).length;
@@ -2470,7 +2485,7 @@
 
   const viewDone = () => {
     const w = state.workout;
-    const day = days.find(d => d.id === w.dayId);
+    const day = dayById(w.dayId);
     const sec = Math.max(1, Math.round((Date.now() - w.startedAt) / 1000));
     const mins = Math.floor(sec / 60);
     const logged = w.log.filter(x => x.status === "done").length;
@@ -2524,7 +2539,7 @@
         ${total === 0 ? `<div class="empty">No sessions yet. Finish today’s training and it lands here.</div>` : `
           <div class="hist">
             ${[...state.history].reverse().slice(0, 20).map(h => {
-              const d = days.find(x => x.id === h.dayId);
+              const d = dayById(h.dayId);
               return `
                 <div class="hist-row">
                   <div class="sw" style="background:${PATTERN_HEX[d?.pattern || "push"]}"></div>
@@ -2769,15 +2784,22 @@
 
   const viewRoutine = () => {
     const r = L().loadRoutine();
-    const steps = L().STEPS || [];
-    const rows = steps.map((s) => {
+    const byId = {};
+    (L().STEPS || []).forEach((s) => { byId[s.id] = s; });
+    const steps = (r.order || []).map((id) => byId[id]).filter(Boolean);
+    const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
+    const rows = steps.map((s, i) => {
       const locked = s.id === "rise" || s.id === "go";
       const on = r.on[s.id] !== false;
       return `<div class="routine-step ${on ? "" : "off"}">
         <div class="circle-who">
           <div class="grow">
-            <h3>${escapeHtml(s.title)}</h3>
+            <h3>${i + 1}. ${escapeHtml(s.title)}</h3>
             <p>${locked ? "Always on" : (on ? "On the path" : "Off · skipped")}</p>
+          </div>
+          <div class="order-btns">
+            <button type="button" class="icon-btn sm" data-act="path-up" data-id="${escapeAttr(s.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button>
+            <button type="button" class="icon-btn sm" data-act="path-down" data-id="${escapeAttr(s.id)}" ${i === steps.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button>
           </div>
           ${locked ? "" : `<button type="button" class="toggle ${on ? "on" : ""}" data-act="toggle-path-step" data-id="${escapeAttr(s.id)}"><i></i></button>`}
         </div>
@@ -2792,7 +2814,7 @@
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
         <div class="page-title"><div class="tag">You</div><h1>Your path.</h1></div>
         <div style="padding:0 16px calc(var(--safe-b) + 24px)">
-          <p class="hint">Same order as ALIGN. Set the hours, how long each step should take, and which ones you walk. Rise and Begin stay on.</p>
+          <p class="hint">Set hours, pick a training week, turn steps on or off, and drag the order with the arrows. After you save, ALIGN still walks one step at a time — in your order.</p>
           <div class="set-label">Hours</div>
           <div class="hours-grid">
             <div class="field"><label>Sunday rise</label><input id="rt-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
@@ -2805,6 +2827,10 @@
           <div class="hours-grid tight" style="margin-top:8px">
             <div class="field"><label>Weekday chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
             <div class="field"><label>Sunday chapters</label><input id="rt-ch-sun" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersSun}" /></div>
+          </div>
+          <div class="set-label">Training week</div>
+          <div class="plan-pick">
+            ${packs.map((p) => `<button type="button" class="plan-card ${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}"><h4>${escapeHtml(p.name)}</h4><p>${escapeHtml(p.blurb)}</p></button>`).join("")}
           </div>
           <div class="set-label">Steps</div>
           <div class="circle-list">${rows}</div>
@@ -4057,7 +4083,7 @@
       }
     }));
     app.querySelectorAll("[data-go-day]").forEach(b => b.addEventListener("click", () => {
-      const d = days.find(x => x.dow === Number(b.dataset.goDay));
+      const d = weekDays().find(x => x.dow === Number(b.dataset.goDay));
       if (d && d.dow === today().dow && !canOpenStep("move")) {
         gateStep("move");
         return;
@@ -4342,7 +4368,8 @@
   const clearTick = () => { if (state.tick) { clearInterval(state.tick); state.tick = null; } };
 
   const startWorkout = (dayId) => {
-    const day = days.find(d => d.id === dayId);
+    const day = dayById(dayId);
+    if (!day || !day.items || !day.items.length) { toast("No session for that day."); return; }
     const items = day.items.map(it => ({ ...it }));
     const first = items[0];
     const ex = exercises[first.id];
@@ -4458,7 +4485,7 @@
       render();
       return;
     }
-    const day = days.find(d => d.id === w.dayId) || todayDay();
+    const day = dayById(w.dayId) || todayDay();
     const minutes = Math.max(1, Math.round((Date.now() - w.startedAt) / 60000));
     const completed = w.log.filter(x => x.status === "done").length;
     const total = itemsOf(w).length;
@@ -4559,7 +4586,7 @@
       if (!gateStep("move")) return;
       startWorkout(todayDay().id);
     } else if (act === "start-day") {
-      const day = days.find((x) => x.id === el.dataset.day);
+      const day = dayById(el.dataset.day);
       if (day && day.dow === today().dow && !gateStep("move")) return;
       startWorkout(el.dataset.day);
     } else if (act === "toggle-how") {
@@ -4727,6 +4754,26 @@
       patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
       patch.on[id] = patch.on[id] === false;
       pushRoutine(patch);
+      render();
+    } else if (act === "path-up" || act === "path-down") {
+      const id = el && el.dataset ? el.dataset.id : "";
+      if (!id) return;
+      const patch = readPathForm();
+      const order = (patch.order || L().loadRoutine().order || []).slice();
+      const i = order.indexOf(id);
+      const j = act === "path-up" ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+      patch.order = order;
+      pushRoutine(patch);
+      render();
+    } else if (act === "train-plan") {
+      const id = el && el.dataset ? el.dataset.id : "";
+      if (!id) return;
+      const patch = (state.view === "routine") ? readPathForm() : Object.assign({}, L().loadRoutine());
+      patch.trainPlan = id;
+      pushRoutine(patch);
+      toast((((window.ALIGN_DATA && ALIGN_DATA.plans) || []).filter((p) => p.id === id).map((p) => p.name)[0]) || "Week saved");
       render();
     } else if (act === "sync-now") {
       if (!window.AlignDB) { toast("Cloud is not ready"); return; }

@@ -54,6 +54,8 @@ window.ALIGN_LIFE = (() => {
     chaptersWk: 3,
     chaptersSun: 1,
     on: Object.fromEntries(STEP_IDS.map((id) => [id, true])),
+    order: STEP_IDS.slice(),
+    trainPlan: "energy",
     min: Object.assign({}, DEFAULT_MIN),
     minSun: Object.assign({}, DEFAULT_MIN_SUN),
     updated_at: ""
@@ -81,6 +83,14 @@ window.ALIGN_LIFE = (() => {
       d.min[id] = clampMin(raw.min && raw.min[id], d.min[id]);
       d.minSun[id] = clampMin(raw.minSun && raw.minSun[id], d.minSun[id]);
     });
+    const seen = {};
+    const order = [];
+    (Array.isArray(raw.order) ? raw.order : []).forEach((id) => {
+      if (STEP_IDS.indexOf(id) >= 0 && !seen[id]) { seen[id] = 1; order.push(id); }
+    });
+    STEP_IDS.forEach((id) => { if (!seen[id]) order.push(id); });
+    d.order = order;
+    d.trainPlan = ["energy", "strength", "mobility", "capacity"].indexOf(raw.trainPlan) >= 0 ? raw.trainPlan : "energy";
     d.updated_at = raw.updated_at || "";
     return d;
   };
@@ -325,7 +335,10 @@ window.ALIGN_LIFE = (() => {
     const leave = clk.leaveLabel;
     const ch = sunday ? r.chaptersSun : r.chaptersWk;
     const train = sunday ? r.minSun.move : r.min.move;
-    const base = STEPS.filter((s) => r.on[s.id] !== false).map((s) => {
+    const byId = {};
+    STEPS.forEach((s) => { byId[s.id] = s; });
+    const ordered = (r.order || STEP_IDS).map((id) => byId[id]).filter(Boolean);
+    const base = ordered.filter((s) => r.on[s.id] !== false).map((s) => {
       if (s.id === "word") return Object.assign({}, s, { sub: ch === 1 ? "One chapter. Stay with it." : (ch + " chapters. Stay with it.") });
       if (s.id === "move") return Object.assign({}, s, { sub: train + " minutes. Body first, while the mind is quiet." });
       return s;

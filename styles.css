@@ -2019,3 +2019,15 @@ img { max-width: 100%; display: block; }
 .routine-step.off { opacity: .55; }
 .routine-step .circle-who { margin-bottom: 8px; }
 .field input[type="time"], .field input[type="number"] { color-scheme: dark; }
+.order-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.icon-btn.sm { width: 32px; height: 32px; border-radius: 10px; font-size: 14px; font-weight: 800; }
+.icon-btn.sm:disabled { opacity: .35; }
+.plan-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 16px; }
+.plan-card {
+  text-align: left; color: inherit;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 12px;
+}
+.plan-card h4 { font-size: 14px; font-weight: 800; margin: 0 0 4px; }
+.plan-card p { font-size: 11px; color: var(--muted); margin: 0; line-height: 1.35; }
+.plan-card.on { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, var(--surface)); }

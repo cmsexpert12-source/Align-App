@@ -353,6 +353,53 @@ window.ALIGN_DATA = (() => {
     }
   ];
 
+  const cloneDay = (d, extra) => {
+    const n = Object.assign({}, d, extra || {});
+    n.items = (extra && extra.items) ? extra.items : (d.items || []).map((it) => Object.assign({}, it));
+    return n;
+  };
+  const dAt = (dow) => days.find((d) => d.dow === dow);
+
+  const strengthDays = [
+    cloneDay(dAt(0), { id: "str-sun", name: "Sunday Press", subtitle: "Short press · church morning", minutes: 14, why: "A slightly fuller press still short enough to pray, read, and leave." }),
+    cloneDay(dAt(2), { id: "str-mon", dow: 1, name: "Pull Strength", subtitle: "Back, rows, posture", minutes: 30, why: "Start the week on pull so pressing later has something to sit on." }),
+    cloneDay(dAt(3), { id: "str-tue", dow: 2, name: "Leg Strength", subtitle: "Squat, lunge, hinge", minutes: 32, why: "The heaviest lower day. Home floor, no gear." }),
+    cloneDay(dAt(5), { id: "str-wed", dow: 3, name: "Upper Strength", subtitle: "Pikes, dips, back", minutes: 30, why: "The full upper mix in the middle of the week." }),
+    cloneDay(dAt(1), { id: "str-thu", dow: 4, name: "Core Strength", subtitle: "Abs, hollow, sides", minutes: 26, why: "Trunk work so the heavy days stay honest." }),
+    cloneDay(dAt(2), { id: "str-fri", dow: 5, name: "Pull again", subtitle: "Back and scapula", minutes: 28, why: "A second pull so the week does not lean forward." }),
+    cloneDay(dAt(6), { id: "str-sat", name: "Easy strength", subtitle: "Light legs, breath", minutes: 18, why: "Keep the pattern without grinding. Sunday can stay short." })
+  ];
+
+  const mobilityDays = [
+    cloneDay(dAt(6), { id: "mob-sun", dow: 0, name: "Sunday Open", subtitle: "Joints and breath", minutes: 10, pattern: "mobility", origin: "Light Sunday", why: "Open the body. Keep the rest of the morning free." }),
+    cloneDay(dAt(6), { id: "mob-mon", dow: 1, name: "Easy trunk", subtitle: "Hips, spine, breath", minutes: 16, why: "A light start. Move, don’t grind." }),
+    cloneDay(dAt(2), { id: "mob-tue", dow: 2, name: "Open the back", subtitle: "Pull, posture, stretch", minutes: 18, why: "Floor back work and length, not a heavy pull." }),
+    cloneDay(dAt(6), { id: "mob-wed", dow: 3, name: "Easy legs", subtitle: "Hinge, squat, stretch", minutes: 18, pattern: "legs", why: "Keep the legs alive without a long session." }),
+    cloneDay(dAt(6), { id: "mob-thu", dow: 4, name: "Spine and sides", subtitle: "Twist, plank, breath", minutes: 16, why: "Core as control, not a crunch marathon." }),
+    cloneDay(dAt(0), { id: "mob-fri", dow: 5, name: "Easy press", subtitle: "Short push, stretch", minutes: 16, why: "A little press so the pattern stays, then length." }),
+    cloneDay(dAt(6), { id: "mob-sat", name: "Recover", subtitle: "Mobility, easy legs, breathing", minutes: 16, why: "Open the joints, breathe. No grinding." })
+  ];
+
+  const capacityDays = [
+    cloneDay(dAt(0), { id: "cap-sun", name: "Sunday Pulse", subtitle: "Short · keep moving", minutes: 12, why: "Twelve minutes. Stay warm. Then Word and out the door." }),
+    cloneDay(dAt(1), { id: "cap-mon", name: "Core density", subtitle: "Abs plus climbers", minutes: 24, why: "The trunk circuit, kept honest and moving." }),
+    cloneDay(dAt(5), { id: "cap-tue", dow: 2, name: "Upper density", subtitle: "Burpees, press, back", minutes: 26, why: "A denser upper mix. Still bodyweight, still home." }),
+    cloneDay(dAt(3), { id: "cap-wed", name: "Lower density", subtitle: "Squat, lunge, hinge", minutes: 28, why: "Lower body with enough work to feel the week." }),
+    cloneDay(dAt(4), { id: "cap-thu", name: "Core control", subtitle: "Hollow, sides, plank", minutes: 22, why: "Second core day, cleaner finish." }),
+    cloneDay(dAt(5), { id: "cap-fri", name: "Full mix", subtitle: "Shoulders, back, snap", minutes: 26, why: "Close the work week with the upper mix." }),
+    cloneDay(dAt(6), { id: "cap-sat", name: "Recover", subtitle: "Mobility, easy legs, breathing", minutes: 16, why: "Open the joints. Sunday can stay short." })
+  ];
+
+  const plans = [
+    { id: "energy", name: "Stay ready", goal: "Energy and balance", blurb: "The ALIGN week: push, pull, legs, core, recover. Sunday stays short." },
+    { id: "strength", name: "Get stronger", goal: "Strength", blurb: "Heavier push, pull, and legs. Still bodyweight. Sunday still short." },
+    { id: "mobility", name: "Move easier", goal: "Mobility", blurb: "Joints, breath, light work. You still open the app every day." },
+    { id: "capacity", name: "Stay sharp", goal: "Work capacity", blurb: "Denser sessions, same floor. Recover Saturday, short Sunday." }
+  ];
+  const weeks = { energy: days, strength: strengthDays, mobility: mobilityDays, capacity: capacityDays };
+  const weekFor = (id) => weeks[id] || days;
+  const allDays = () => days.concat(strengthDays, mobilityDays, capacityDays);
+
   const insights = {
     old: { push: 72, pull: 12, legs: 4, core: 28, mobility: 18 },
     neu: { push: 28, pull: 22, legs: 24, core: 22, mobility: 18 },
@@ -455,5 +502,5 @@ window.ALIGN_DATA = (() => {
     return 15;
   };
 
-  return { exercises, days, insights, restAfter };
+  return { exercises, days, insights, restAfter, plans, weekFor, allDays };
 })();
