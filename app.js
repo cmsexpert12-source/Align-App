@@ -2722,12 +2722,6 @@
             <div class="grow"><h4>Play through the morning</h4><p>Stations in the app, or your own audio. Cues when a step lands.</p></div>
           </button>
 
-          <div class="set-label">Affirmation</div>
-          <div class="field"><label>Daily line</label>
-            <textarea class="note-box" id="pref-affirm" placeholder="The word you speak every morning.">${escapeHtml(L().affirmationPref())}</textarea>
-          </div>
-          <button class="btn ghost" data-act="save-affirm" style="height:44px">Save affirmation</button>
-
           <div class="set-label">Journal</div>
           <button class="setting" data-go="journal">
             <div class="grow"><h4>Notepad</h4><p>Write anything. New notes whenever you want. Not the devotion.</p></div>
@@ -3031,7 +3025,11 @@
           <button class="hub-card" data-act="open-step" data-step="affirm">
             <div class="tile">${stepIcon("spark")}</div>
             <h3>Affirm</h3>
-            <p>${L().morningOf(iso).affirm ? "Spoken today" : "Read today’s word over yourself."}</p>
+            <p>${(() => {
+              const line = (L().affirmationPref && L().affirmationPref()) || "";
+              if (line) return clipText(line, 72);
+              return L().morningOf(iso).affirm ? "Spoken today" : "Write the line you speak. Save it here.";
+            })()}</p>
           </button>
           <button class="hub-card" data-act="open-step" data-step="evening">
             <div class="tile">${stepIcon("rise")}</div>
@@ -3438,31 +3436,23 @@
 
 
   const viewAffirm = () => {
-    const iso = today().iso;
-    let line = "This is the day the Lord has made. I will rejoice and be glad in it.";
-    try { if (L().todayAffirmation) line = L().todayAffirmation(iso) || line; } catch { /* built-in */ }
     let custom = "";
     try { custom = (L().affirmationPref && L().affirmationPref()) || ""; } catch { custom = ""; }
-    const tv = S().todayVerse(iso);
-    const ref = (tv && S().refOf) ? S().refOf(tv) : "";
     return `
-      <div class="screen full has-cta">
-        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+      <div class="screen full has-cta affirm">
+        <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Your line</div>
+          <div class="tag">Word</div>
           <h1>Affirm.</h1>
-          <p>Write the word you speak every morning. It saves to your account. Then read it aloud.</p>
+          <p>Your line. Write it. Read it aloud. It saves to this account.</p>
         </div>
-        <div class="scripture">
-          <div class="field"><label>My affirmation</label>
-            <textarea class="note-box" id="affirm-text" placeholder="${escapeAttr(line)}">${escapeHtml(custom)}</textarea>
-          </div>
-          ${!custom ? `<div class="devotion-body" style="font-family:var(--serif);font-size:20px;line-height:1.45;margin-top:12px">${escapeHtml(line)}</div>` : ""}
-          ${tv && tv.text ? `<div class="devotion-verse" style="margin-top:18px">${ref ? escapeHtml(ref) + " · " : ""}${escapeHtml(tv.text)}</div>` : ""}
+        <div class="scroll-body affirm-wrap">
+          <label class="field-label" for="affirm-text">My affirmation</label>
+          <textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="affirm-done">I received it</button>
-          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save to account</button>
+          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save</button>
         </div>
       </div>
     `;
@@ -5296,10 +5286,11 @@
       state.view = "devotionlog";
       render();
     } else if (act === "save-affirm") {
-      const box = document.getElementById("affirm-text") || document.getElementById("pref-affirm");
-      const row = L().saveAffirmationPref(box ? box.value : "");
+      const box = document.getElementById("affirm-text");
+      if (!box) return;
+      const row = L().saveAffirmationPref(box.value);
       if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
-      toast(state.session ? "Affirmation saved to your account" : "Affirmation saved on this device");
+      toast(state.session ? "Saved to your account" : "Saved on this device");
       render();
     } else if (act === "affirm-done") {
       const box = document.getElementById("affirm-text");
