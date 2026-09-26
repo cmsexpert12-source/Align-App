@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
 
   const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY") || "";
   const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY") || "";
-  const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:align@localhost";
+  const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:realoneade8@gmail.com";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const cronSecret = Deno.env.get("CRON_SECRET") || "";

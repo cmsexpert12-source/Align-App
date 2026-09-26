@@ -10,7 +10,7 @@ const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const CRON = process.env.CRON_SECRET || "";
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:align@localhost";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:realoneade8@gmail.com";
 
 const WAKE_NOTES = [
   [
