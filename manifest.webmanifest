@@ -2,7 +2,7 @@
   "name": "ALIGN",
   "short_name": "ALIGN",
   "description": "The morning operating system. Wake, train, pray, Word, plan, go.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
@@ -18,18 +18,17 @@
       "purpose": "any"
     },
     {
-      "src": "assets/icon-512.png",
+      "src": "./assets/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "assets/icon-512.png",
+      "src": "./assets/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
   ],
-  "screenshots": [],
   "prefer_related_applications": false
 }

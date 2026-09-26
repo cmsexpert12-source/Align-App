@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v90";
+const CACHE = "align-v91";
 const ASSETS = [
   "./",
   "./index.html",
@@ -15,7 +15,12 @@ const ASSETS = [
   "./config.js",
   "./vendor/supabase.js",
   "./manifest.webmanifest",
+  "./fonts/dm-sans.woff2",
+  "./fonts/fraunces.woff2",
+  "./fonts/syne.woff2",
   "./assets/icon-192.png",
+  "./assets/icon-512.png",
+  "./assets/icon-maskable-512.png",
   "./assets/apple-touch-icon.png",
   "./assets/favicon-32.png"
 ];

@@ -27,6 +27,15 @@
     const d = new Date();
     return { date: d, iso: localIso(d), dow: d.getDay() };
   };
+  const isStandalone = () => {
+    try {
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    } catch { return false; }
+  };
+  const isIos = () => {
+    const ua = navigator.userAgent || "";
+    return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  };
 
   const saved = load();
   const state = {
@@ -49,6 +58,7 @@
     prefs: { enabled: false, hour: 5, minute: 0, timezone: "Africa/Lagos" },
     pushReady: false,
     installPrompt: null,
+    hideInstall: (() => { try { return localStorage.getItem("align-ios-hint") === "1"; } catch { return false; } })(),
     setupUrl: "",
     setupKey: "",
     setupMsg: "",
@@ -1273,14 +1283,22 @@
     return false;
   };
 
+  let pathHold = null;
   const goNext = () => {
     const cur = currentStep();
-    if (!cur) {
-      state.view = "home";
-      render();
-      return;
-    }
-    openPathStep(cur.id);
+    const run = () => {
+      pathHold = null;
+      if (!cur) { state.view = "home"; render(); return; }
+      openPathStep(cur.id);
+    };
+    if (pathHold) return;
+    try { navigator.vibrate && navigator.vibrate(18); } catch { /* no haptic */ }
+    let reduce = false;
+    try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* ok */ }
+    if (reduce) { run(); return; }
+    const screen = app.querySelector(".screen");
+    if (screen) screen.classList.add("held");
+    pathHold = setTimeout(run, 380);
   };
 
   const openPathStep = (step) => {
@@ -1939,11 +1957,18 @@
     const clk = L().clocksFor(t.date);
     const evening = L().isEvening(t.date);
     const allDone = !cur;
-    const install = state.installPrompt ? `
+    const hideInst = state.hideInstall || isStandalone();
+    const install = hideInst ? "" : (state.installPrompt ? `
       <div class="install-banner">
         <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
         <button data-act="install-pwa">Add</button>
-      </div>` : "";
+        <button type="button" class="quiet" data-act="hide-install">Not now</button>
+      </div>` : (isIos() ? `
+      <div class="install-banner">
+        <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
+        <button data-act="ios-install">How</button>
+        <button type="button" class="quiet" data-act="hide-install">Not now</button>
+      </div>` : ""));
 
     const plan = (L().peekPlan ? L().peekPlan(t.iso) : L().planOf(t.iso));
     const prioRows = (plan.priorities || []).map(prioOf);
@@ -2009,7 +2034,7 @@
       const iso = isoOf(d);
       const isToday = iso === t.iso;
       const done = morningDone(iso);
-      return `<button type="button" class="wd${isToday?" today":""}${done?" done":""}" aria-label="${DOW_FULL[i]}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></button>`;
+      return `<div class="wd${isToday?" today":""}${done?" done":""}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></div>`;
     }).join("");
 
     const nextCta = cur
@@ -2064,14 +2089,15 @@
         </div>
         ${(() => {
           const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", id: "" };
+          if (!(snd.playing || snd.id)) return "";
           const line = snd.playing
             ? ("Playing · " + (snd.title || "Sound"))
-            : (snd.id ? ((snd.title || "Sound") + " · paused") : "Stations, library, or your own audio — in ALIGN.");
+            : ((snd.title || "Sound") + " · paused");
           return `
         <div class="sound-now">
           <button class="now-play" data-act="sound-toggle" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
           <button class="sound-now-meta" data-go="sound">
-            <h4>${escapeHtml(snd.playing || snd.id ? (snd.title || "Sound") : "Sound")}</h4>
+            <h4>${escapeHtml(snd.title || "Sound")}</h4>
             <p>${escapeHtml(line)}</p>
           </button>
         </div>`;
@@ -2806,12 +2832,14 @@
           </div>
 
           <div class="set-label">App</div>
-          ${state.installPrompt ? `
+          ${isStandalone() ? "" : (state.installPrompt ? `
             <button class="setting" data-act="install-pwa">
               <div class="grow"><h4>Add to Home Screen</h4><p>Install ALIGN like an app</p></div>
             </button>` : `
-            <div class="setting"><div class="grow"><h4>Add to Home Screen</h4><p>iPhone: Share → Add to Home Screen</p></div></div>
-          `}
+            <button class="setting" data-act="ios-install">
+              <div class="grow"><h4>Add to Home Screen</h4><p>${isIos() ? "Share → Add to Home Screen" : "Open this on your phone, then add it like an app"}</p></div>
+            </button>
+          `)}
 
           ${signed
             ? `<button class="btn ghost" style="margin-top:18px" data-act="sign-out">Sign out</button>`
@@ -3002,19 +3030,27 @@
       </div>`;
     };
     const body = !signed
-      ? `<p class="hint">Sign in so a circle can see your path, today’s schedule, and the book you’re in — not your journal, notes, or affirmation.</p>
-         <button class="btn" data-go="auth">Create account</button>`
+      ? `<div class="room">
+           <div class="tag">Together</div>
+           <h3>Walk with someone.</h3>
+           <p>Sign in so a circle can see your path, today’s schedule, and the book you’re in — not your journal, notes, or affirmation.</p>
+           <button class="btn" data-go="auth">Create account</button>
+         </div>`
       : !c
-        ? `<p class="hint">A small invite group. They see today’s path, the schedule and whether it’s done, and the book you’re in — not your journal, notes, or affirmation.</p>
+        ? `<div class="room">
+           <div class="tag">Together</div>
+           <h3>Invite a few.</h3>
+           <p>They see today’s path, the schedule and whether it’s done, and the book you’re in — not your journal, notes, or affirmation.</p>
            ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
            </div>
            <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Join circle</button>
-           <button class="btn ghost" data-act="create-circle" style="margin-top:8px" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>`
+           <button class="btn ghost" data-act="create-circle" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>
+         </div>`
         : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · path, schedule, book. Not the diary.</p>
            <button class="btn ghost" data-act="copy-code" style="height:44px">Copy invite code</button>
-           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<p class=\"hint\">Just you so far.</p>"}</div>
+           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\"room\"><h3>Just you so far.</h3><p>Share the code. The circle fills when someone joins.</p></div>"}</div>
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
     return `
       <div class="screen full circle">
@@ -3460,10 +3496,10 @@
             </div>
             <span aria-hidden="true">›</span>
           </button>`).join("")}</div>` : `
-        <button type="button" class="journal-hero" data-act="journal-new">
+        <button type="button" class="room journal-hero" data-act="journal-new">
           <div class="tag">Notepad</div>
-          <h3>New note</h3>
-          <p>Tap and write. Add another with + whenever you want.</p>
+          <h3>The page is blank.</h3>
+          <p>Tap and write. Add another with + whenever you want. Not the devotion.</p>
           <span class="journal-cta">Start writing</span>
         </button>`}
       </div>
@@ -3873,7 +3909,7 @@
     const match = (b, s) => bookCat(b.category) === s;
     let body = "";
     if (!books.length) {
-      body = `<div class="empty">${state.session ? "Titles on this account show here even before the PDF is on this device. Open Word → Books after signing in, or upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</div>`;
+      body = `<div class="room"><div class="tag">Library</div><h3>Your shelf is empty.</h3><p>${state.session ? "Titles on this account show here even before the PDF is on this device. Upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</p></div>`;
     } else if (filter !== "all") {
       const rows = books.filter((b) => match(b, filter));
       body = rows.length ? rows.map((b) => bookCardHtml(b, iso)).join("") : `<div class="empty">Nothing on this shelf yet.</div>`;
@@ -4178,7 +4214,8 @@
     }
     let extra = "";
     try { extra = (tab ? nav(tab) : "") + overlays(); } catch { extra = tab ? nav(tab) : ""; }
-    const sameView = lastRenderedView === state.view;
+    const prevView = lastRenderedView;
+    const sameView = prevView === state.view;
     let keepY = 0;
     if (sameView) {
       app.querySelectorAll(".screen, .scroll-body, .scripture, .verse-body").forEach((n) => {
@@ -4187,6 +4224,10 @@
     }
     app.innerHTML = main + extra;
     lastRenderedView = state.view;
+    if (!sameView && prevView && prevView !== "splash") {
+      const screen = app.querySelector(".screen");
+      if (screen) screen.classList.add("enter");
+    }
     if (sameView && keepY) {
       let best = null, h = 0;
       app.querySelectorAll(".screen, .scroll-body, .scripture, .verse-body").forEach((n) => {
@@ -4810,7 +4851,13 @@
       };
       render();
     } else if (act === "sheet-no") {
-      state.sheet = null; render();
+      const kind = state.sheet && state.sheet.kind;
+      state.sheet = null;
+      if (kind === "ios-install") {
+        state.hideInstall = true;
+        try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
+      }
+      render();
     } else if (act === "sheet-yes") {
       const kind = state.sheet && state.sheet.kind;
       const stepId = state.sheet && state.sheet.stepId;
@@ -4850,6 +4897,10 @@
         patch.on[id] = false;
         pushRoutine(patch);
         toast("Removed from the path. You can put it back.");
+        render();
+      } else if (kind === "ios-install") {
+        state.hideInstall = true;
+        try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
         render();
       } else render();
     } else if (act === "save-workout") {
@@ -5027,7 +5078,23 @@
       state.installPrompt.prompt();
       await state.installPrompt.userChoice;
       state.installPrompt = null;
+      state.hideInstall = true;
+      try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
       render();
+    } else if (act === "ios-install") {
+      state.sheet = {
+        title: "Add to Home Screen",
+        body: "On iPhone: tap Share, then Add to Home Screen. ALIGN opens like an app, with reminders. Safari’s tab will not do.",
+        confirm: "Got it",
+        cancel: "Not now",
+        kind: "ios-install"
+      };
+      render();
+    } else if (act === "hide-install") {
+      state.hideInstall = true;
+      try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
+      const ban = app.querySelector(".install-banner");
+      if (ban) ban.remove();
     } else if (act === "sign-out") {
       state.sheet = {
         title: "Sign out?",
@@ -5600,8 +5667,7 @@
       ban.textContent = "You’re offline. The morning still works on this device.";
       screen.insertBefore(ban, screen.firstChild);
     });
-    try { render(); } catch (err) { console.warn(err); }
-    const splashWatch = setTimeout(leaveSplash, 1200);
+    const splashWatch = setTimeout(leaveSplash, 900);
     const t0 = Date.now();
     try {
       if (AlignDB.configured()) {
@@ -5634,7 +5700,7 @@
       tickAlarms();
       if (state.session) applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
-    const wait = Math.max(0, 900 - (Date.now() - t0));
+    const wait = Math.max(0, 480 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
     clearTimeout(splashWatch);
     leaveSplash();
