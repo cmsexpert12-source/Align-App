@@ -364,12 +364,14 @@
   };
 
   let applying = false;
+  let lastHydrateAt = 0;
   const applySession = async (session) => {
     state.session = session;
     if (!session) {
       state.circle = null;
       return;
     }
+    lastHydrateAt = Date.now();
     const waited = Date.now();
     while (applying && Date.now() - waited < 15000) {
       await new Promise((r) => setTimeout(r, 50));
@@ -444,6 +446,7 @@
           seen.add(k);
           log.push(x);
         });
+        if (log.length > 220) log.splice(0, log.length - 220);
         const useRemote = remoteLog.length >= localLog.length;
         Life.setBibleCursor({
           book: useRemote ? life.data.bible.book : c.book,
@@ -1614,7 +1617,16 @@
         try { S().ingestReading(today().iso, state.readPacks); } catch { /* local quiz */ }
         S().enrichReading(today().iso, state.readPacks).catch(() => {});
       }
-      try { if (L().prefetchChapter) L().prefetchChapter(book, chapter); } catch { /* next chapter optional */ }
+      try {
+        if (L().prefetchChapter) {
+          const b = book, ch = chapter;
+          setTimeout(() => {
+            if (state.view === "bible" && state.readBook === b && state.readCh === ch) {
+              L().prefetchChapter(b, ch);
+            }
+          }, 1800);
+        }
+      } catch { /* next chapter optional */ }
     } catch (e) {
       state.bibleErr = (e && e.message) || "Could not load this chapter. Check the connection.";
     }
@@ -5731,10 +5743,6 @@
 
   const boot = async () => {
     registerSW();
-    if (window.ALIGN_AI && ALIGN_AI.probe) ALIGN_AI.probe().then(() => {
-      if (state.ai.open) render();
-    }).catch(() => {});
-    if (window.ALIGN_SOUND && ALIGN_SOUND.loadTracks) ALIGN_SOUND.loadTracks().then(() => {}).catch(() => {});
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
       if (["splash", "onboard"].includes(state.view)) return;
       try { paintNow(); } catch { /* keep UI */ }
@@ -5755,7 +5763,7 @@
       ban.textContent = "You’re offline. The morning still works on this device.";
       screen.insertBefore(ban, screen.firstChild);
     });
-    const splashWatch = setTimeout(leaveSplash, 900);
+    const splashWatch = setTimeout(leaveSplash, 700);
     const t0 = Date.now();
     try {
       if (AlignDB.configured()) {
@@ -5786,9 +5794,11 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       tickAlarms();
-      if (state.session) applySession(state.session).then(() => paintCloud()).catch(() => {});
+      if (!state.session) return;
+      if (Date.now() - lastHydrateAt < 120000) { try { paintCloud(); } catch { /* keep UI */ } return; }
+      applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
-    const wait = Math.max(0, 480 - (Date.now() - t0));
+    const wait = Math.max(0, 180 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
     clearTimeout(splashWatch);
     leaveSplash();

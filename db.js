@@ -21,6 +21,15 @@ window.AlignDB = (() => {
     return !!(c.url && c.anonKey);
   };
 
+  const sinceIso = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() - Math.max(1, Number(days) || 30));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
+
   let _client = null;
   let _cfgStamp = "";
   let cachedToken = "";
@@ -160,6 +169,7 @@ window.AlignDB = (() => {
       .from("workouts")
       .select("date, day_id, minutes, completed, total, log, created_at")
       .eq("user_id", userId)
+      .gte("date", sinceIso(400))
       .order("date", { ascending: true });
     if (error) return fail(error);
     const mapped = (data || []).map((r) => ({
@@ -1123,15 +1133,17 @@ window.AlignDB = (() => {
     const sb = client();
     const userId = await uidOf();
     if (!sb || !userId) return ok(null);
-    const [m, p, j, b, a, n] = await Promise.all([
-      sb.from("mornings").select("date, steps, updated_at").eq("user_id", userId),
-      sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId),
-      sb.from("journals").select("date, payload, updated_at").eq("user_id", userId),
+    const from = sinceIso(120);
+    const [m, p, j, b, a0, n] = await Promise.all([
+      sb.from("mornings").select("date, steps, updated_at").eq("user_id", userId).gte("date", from),
+      sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId).gte("date", from),
+      sb.from("journals").select("date, payload, updated_at").eq("user_id", userId).gte("date", from),
       sb.from("bible_state").select("book, chapter, log, updated_at").eq("user_id", userId).maybeSingle(),
       sb.from("app_state").select("scripture, routine, updated_at").eq("user_id", userId).maybeSingle(),
-      sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId)
+      sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId).order("updated_at", { ascending: false }).limit(80)
     ]);
     if (m.error && missingTable(m.error)) return ok(null);
+    let a = a0;
     if (a && a.error && /routine|column|schema cache/i.test(a.error.message || "")) {
       a = await sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle();
     }

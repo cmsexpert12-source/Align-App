@@ -71,21 +71,64 @@ window.ALIGN_SOUND = (() => {
     r.onerror = () => rej(r.error);
   });
 
-  const loadTracks = async () => {
+  const LS_IDX = "align-sound-idx";
+  const writeIdx = () => {
+    try {
+      localStorage.setItem(LS_IDX, JSON.stringify(tracks.map((t) => ({
+        id: t.id, name: t.name, bytes: Number(t.bytes) || 0
+      }))));
+    } catch { /* ignore */ }
+  };
+  const blobOf = async (id) => {
+    if (!id) return null;
+    if (blobs.has(id)) return blobs.get(id);
     try {
       const db = await dbp();
-      const list = await new Promise((res, rej) => {
-        const q = db.transaction("tracks").objectStore("tracks").getAll();
+      const row = await new Promise((res, rej) => {
+        const q = db.transaction("tracks").objectStore("tracks").get(id);
+        q.onsuccess = () => res(q.result || null);
+        q.onerror = () => rej(q.error);
+      });
+      if (!row || !row.blob) return null;
+      blobs.clear();
+      blobs.set(id, row.blob);
+      return row.blob;
+    } catch { return null; }
+  };
+  const loadTracks = async () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(LS_IDX) || "null");
+      if (Array.isArray(cached) && cached.length) {
+        tracks = cached.filter((t) => t && t.id).map((t) => ({
+          id: t.id, name: t.name || "Track", bytes: Number(t.bytes) || 0
+        }));
+        emit();
+        return;
+      }
+    } catch { /* walk idb once */ }
+    try {
+      const db = await dbp();
+      const keys = await new Promise((res, rej) => {
+        const q = db.transaction("tracks").objectStore("tracks").getAllKeys();
         q.onsuccess = () => res(q.result || []);
         q.onerror = () => rej(q.error);
       });
       tracks = [];
       blobs.clear();
-      list.forEach((row) => {
-        if (!row || !row.id || !row.blob) return;
-        tracks.push({ id: row.id, name: row.name || "Track", bytes: (row.blob && row.blob.size) || row.bytes || 0 });
-        blobs.set(row.id, row.blob);
-      });
+      for (let i = 0; i < keys.length; i++) {
+        const row = await new Promise((res, rej) => {
+          const q = db.transaction("tracks").objectStore("tracks").get(keys[i]);
+          q.onsuccess = () => res(q.result || null);
+          q.onerror = () => rej(q.error);
+        });
+        if (!row) continue;
+        tracks.push({
+          id: row.id || keys[i],
+          name: row.name || "Track",
+          bytes: (row.blob && row.blob.size) || row.bytes || 0
+        });
+      }
+      writeIdx();
       emit();
     } catch { /* private mode */ }
   };
@@ -109,7 +152,9 @@ window.ALIGN_SOUND = (() => {
       q.onerror = () => rej(q.error);
     });
     tracks.push({ id, name: row.name, bytes: file.size });
+    blobs.clear();
     blobs.set(id, file);
+    writeIdx();
     emit();
     return id;
   };
@@ -126,6 +171,7 @@ window.ALIGN_SOUND = (() => {
     } catch {}
     tracks = tracks.filter((t) => t.id !== id);
     blobs.delete(id);
+    writeIdx();
     emit();
   };
 
@@ -323,16 +369,17 @@ window.ALIGN_SOUND = (() => {
   };
 
   const startTrack = async (id) => {
-    const blob = blobs.get(id);
+    const token = ++playToken;
+    await ensure(true);
+    if (token !== playToken) return;
+    clearBed();
+    if (token !== playToken) return;
+    const blob = await blobOf(id);
     if (!blob) {
       const t = tracks.find((x) => x.id === id);
       if (t && (t.storage_path || t.source_url)) return playUrl(t);
       return;
     }
-    const token = ++playToken;
-    await ensure(true);
-    if (token !== playToken) return;
-    clearBed();
     if (token !== playToken) return;
     const url = URL.createObjectURL(blob);
     objectUrls.add(url);
@@ -473,7 +520,7 @@ window.ALIGN_SOUND = (() => {
       emit();
       return;
     }
-    if (kind === "track" && currentId && blobs.has(currentId)) {
+    if (kind === "track" && currentId) {
       await startTrack(currentId);
       return;
     }
@@ -491,6 +538,7 @@ window.ALIGN_SOUND = (() => {
     currentId = "";
     title = "Sound";
     clearBed();
+    blobs.clear();
     emit();
   };
 

@@ -570,22 +570,39 @@ window.ALIGN_LIFE = (() => {
     try { localStorage.setItem(LS_TR, t); } catch { /* ignore */ }
     return t;
   };
+  const pruneMap = (map, cap) => {
+    const keys = Object.keys(map || {});
+    if (keys.length <= cap) return map;
+    keys.slice(0, keys.length - cap).forEach((k) => { delete map[k]; });
+    return map;
+  };
+  let diskCh = null;
   const readDiskCh = () => {
-    try { return JSON.parse(localStorage.getItem(LS_CH) || "{}") || {}; } catch { return {}; }
+    if (diskCh) return diskCh;
+    try { diskCh = JSON.parse(localStorage.getItem(LS_CH) || "{}") || {}; } catch { diskCh = {}; }
+    pruneMap(diskCh, 6);
+    return diskCh;
   };
   const writeDiskCh = (map) => {
-    const keys = Object.keys(map || {});
-    if (keys.length > 24) keys.slice(0, keys.length - 24).forEach((k) => { delete map[k]; });
-    try { localStorage.setItem(LS_CH, JSON.stringify(map)); } catch { /* quota */ }
+    diskCh = pruneMap(map || {}, 6);
+    try { localStorage.setItem(LS_CH, JSON.stringify(diskCh)); } catch { /* quota */ }
   };
   const chapterCache = {};
+  const slimVerses = (verses) => (verses || []).map((v) => ({
+    verse: v.verse,
+    text: String(v.text || "").trim()
+  }));
+  const rememberChapter = (key, slim) => {
+    chapterCache[key] = slim;
+    pruneMap(chapterCache, 4);
+  };
   const fetchChapter = async (book, chapter) => {
     const tr = bibleTr();
     const key = tr + "|" + book + " " + chapter;
     if (chapterCache[key]) return chapterCache[key];
     const disk = readDiskCh();
     if (disk[key] && disk[key].verses && disk[key].verses.length) {
-      chapterCache[key] = disk[key];
+      rememberChapter(key, disk[key]);
       return disk[key];
     }
     const url = "https://bible-api.com/" + encodeURIComponent(book + " " + chapter) + "?translation=" + encodeURIComponent(tr);
@@ -593,8 +610,8 @@ window.ALIGN_LIFE = (() => {
     if (!res.ok) throw new Error("Could not load " + book + " " + chapter);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    const slim = { reference: data.reference, verses: data.verses || [], translation_id: tr };
-    chapterCache[key] = slim;
+    const slim = { reference: data.reference, verses: slimVerses(data.verses), translation_id: tr };
+    rememberChapter(key, slim);
     disk[key] = slim;
     writeDiskCh(disk);
     return slim;
@@ -888,14 +905,10 @@ window.ALIGN_LIFE = (() => {
   };
 
   const LS_SP = "align-spurgeon-day";
-  const spurgeonMonth = {};
   const loadSpurgeonMonth = async (m) => {
-    if (spurgeonMonth[m]) return spurgeonMonth[m];
     const res = await fetch("./data/spurgeon/" + m + ".json");
     if (!res.ok) throw new Error("Could not load devotion");
-    const list = await res.json();
-    spurgeonMonth[m] = list;
-    return list;
+    return await res.json();
   };
 
   const todaySpurgeon = async (which, date = new Date()) => {
@@ -995,6 +1008,7 @@ window.ALIGN_LIFE = (() => {
     if (!text) throw new Error("empty");
     const out = { text, reference: (data && data.reference) || q, translation: "KJV" };
     kjvCache[q] = out;
+    pruneMap(kjvCache, 8);
     return out;
   };
 

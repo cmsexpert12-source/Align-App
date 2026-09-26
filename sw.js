@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v99";
+const CACHE = "align-v100";
 const ASSETS = [
   "./",
   "./index.html",
@@ -25,7 +25,10 @@ const ASSETS = [
   "./assets/favicon-32.png"
 ];
 
-const skipPut = (pathname) => /\/data\/spurgeon\.json$/.test(pathname);
+const skipPut = (pathname) =>
+  /\/data\/spurgeon\//.test(pathname) ||
+  /\/vendor\/pdfjs\//.test(pathname) ||
+  /\.pdf$/i.test(pathname);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
