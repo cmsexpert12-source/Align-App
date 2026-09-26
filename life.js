@@ -17,24 +17,128 @@ window.ALIGN_LIFE = (() => {
     ["3 John", 1], ["Jude", 1], ["Revelation", 22]
   ].map(([name, chapters]) => ({ name, chapters }));
 
-  /* Sunday: lights out 12:00 AM, rise 4:00 AM.
-     Mon–Sat: lights out 1:00 AM, rise 5:00 AM. */
+  const STEP_IDS = ["rise", "move", "pray", "devotion", "verse", "word", "drill", "affirm", "plan", "ready", "recite", "go"];
+  const LS_R = "align-routine";
+  const DEFAULT_MIN = { rise: 1, move: 28, pray: 7, devotion: 8, verse: 4, word: 12, drill: 2, affirm: 2, plan: 5, ready: 12, recite: 2, go: 1 };
+  const DEFAULT_MIN_SUN = { rise: 1, move: 12, pray: 6, devotion: 6, verse: 4, word: 6, drill: 2, affirm: 2, plan: 3, ready: 15, recite: 2, go: 1 };
+
+  const clampH = (n, d) => {
+    n = Number(n);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(0, Math.min(23, Math.round(n)));
+  };
+  const clampM = (n, d) => {
+    n = Number(n);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(0, Math.min(59, Math.round(n)));
+  };
+  const clampMin = (n, d) => {
+    n = Number(n);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(0, Math.min(180, Math.round(n)));
+  };
+  const fmtHM = (h, m) => {
+    const hh = ((Number(h) || 0) % 12) || 12;
+    const mm = String(Number(m) || 0).padStart(2, "0");
+    const ap = (Number(h) || 0) >= 12 ? "PM" : "AM";
+    return (Number(m) || 0) ? (hh + ":" + mm + " " + ap) : (hh + ":00 " + ap);
+  };
+
+  const defaultRoutine = () => ({
+    sunWakeH: 4, sunWakeM: 0,
+    sunLightsH: 0, sunLightsM: 0,
+    wkWakeH: 5, wkWakeM: 0,
+    wkLightsH: 1, wkLightsM: 0,
+    leaveH: 5, leaveM: 45,
+    leaveOn: true,
+    chaptersWk: 3,
+    chaptersSun: 1,
+    on: Object.fromEntries(STEP_IDS.map((id) => [id, true])),
+    min: Object.assign({}, DEFAULT_MIN),
+    minSun: Object.assign({}, DEFAULT_MIN_SUN),
+    updated_at: ""
+  });
+
+  const coerceRoutine = (raw) => {
+    const d = defaultRoutine();
+    if (!raw || typeof raw !== "object") return d;
+    d.sunWakeH = clampH(raw.sunWakeH, 4);
+    d.sunWakeM = clampM(raw.sunWakeM, 0);
+    d.sunLightsH = clampH(raw.sunLightsH, 0);
+    d.sunLightsM = clampM(raw.sunLightsM, 0);
+    d.wkWakeH = clampH(raw.wkWakeH, 5);
+    d.wkWakeM = clampM(raw.wkWakeM, 0);
+    d.wkLightsH = clampH(raw.wkLightsH, 1);
+    d.wkLightsM = clampM(raw.wkLightsM, 0);
+    d.leaveH = clampH(raw.leaveH, 5);
+    d.leaveM = clampM(raw.leaveM, 45);
+    d.leaveOn = raw.leaveOn !== false;
+    d.chaptersWk = Math.max(1, Math.min(12, Number(raw.chaptersWk) || 3));
+    d.chaptersSun = Math.max(1, Math.min(12, Number(raw.chaptersSun) || 1));
+    STEP_IDS.forEach((id) => {
+      const locked = id === "rise" || id === "go";
+      d.on[id] = locked ? true : !(raw.on && raw.on[id] === false);
+      d.min[id] = clampMin(raw.min && raw.min[id], d.min[id]);
+      d.minSun[id] = clampMin(raw.minSun && raw.minSun[id], d.minSun[id]);
+    });
+    d.updated_at = raw.updated_at || "";
+    return d;
+  };
+
+  const loadJSON = (k, fallback) => {
+    try { return JSON.parse(localStorage.getItem(k) || "null") || fallback; } catch { return fallback; }
+  };
+  const saveJSON = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+  const loadRoutine = () => coerceRoutine(loadJSON(LS_R, null));
+  const saveRoutine = (patch) => {
+    const next = coerceRoutine(Object.assign({}, loadRoutine(), patch || {}));
+    next.updated_at = new Date().toISOString();
+    saveJSON(LS_R, next);
+    return next;
+  };
+  const mergeRoutineRemote = (row) => {
+    if (!row || typeof row !== "object") return loadRoutine();
+    const local = loadRoutine();
+    const lAt = Date.parse(local.updated_at || "") || 0;
+    const rAt = Date.parse(row.updated_at || "") || 0;
+    if (!lAt || rAt >= lAt) {
+      const next = coerceRoutine(row);
+      saveJSON(LS_R, next);
+      return next;
+    }
+    return local;
+  };
+
+  /* Defaults: Sunday lights 12:00 AM / rise 4:00 AM. Mon–Sat lights 1:00 AM / rise 5:00 AM.
+     Anyone can change this; founder hours stay until they edit. */
   const clocksFor = (date) => {
     const d = date instanceof Date ? date : new Date(date);
     const sunday = d.getDay() === 0;
+    const r = loadRoutine();
+    const wakeH = sunday ? r.sunWakeH : r.wkWakeH;
+    const wakeM = sunday ? r.sunWakeM : r.wkWakeM;
+    const tonightH = sunday ? r.sunLightsH : r.wkLightsH;
+    const tonightM = sunday ? r.sunLightsM : r.wkLightsM;
     return {
       sunday,
-      wakeH: sunday ? 4 : 5,
-      wakeLabel: sunday ? "4:00 AM" : "5:00 AM",
-      tonightH: sunday ? 0 : 1,
-      tonightLabel: sunday ? "12:00 AM" : "1:00 AM",
-      leaveLabel: sunday ? "5:45 AM" : null
+      wakeH,
+      wakeM,
+      wakeLabel: fmtHM(wakeH, wakeM),
+      tonightH,
+      tonightM,
+      tonightLabel: fmtHM(tonightH, tonightM),
+      leaveH: r.leaveH,
+      leaveM: r.leaveM,
+      leaveOn: !!(r.leaveOn && sunday),
+      leaveLabel: (r.leaveOn && sunday) ? fmtHM(r.leaveH, r.leaveM) : null
     };
   };
 
   const chapterTarget = (iso) => {
+    const r = loadRoutine();
     const [y, m, d] = String(iso).split("-").map(Number);
-    return new Date(y, m - 1, d).getDay() === 0 ? 1 : 3;
+    return new Date(y, m - 1, d).getDay() === 0 ? r.chaptersSun : r.chaptersWk;
   };
 
   const isEvening = (date = new Date()) => date.getHours() >= 20 || date.getHours() < 2;
@@ -152,28 +256,38 @@ window.ALIGN_LIFE = (() => {
     return elapsed >= 0 && elapsed < winMin * 60;
   };
 
-  /* 5 min before rise (Sun 03:55 / else 04:55).
-     10 min before lights (Sat 23:50 for Sunday midnight / Mon–Sat 00:50 for 1:00). */
+  /* 5 min before this person's rise. 10 min before their lights out. */
   const dueAlarms = (now = new Date()) => {
     const d = now instanceof Date ? now : new Date(now);
-    const dow = d.getDay();
     const WIN = 8;
-    if ((dow === 0 && inWindow(d, 3, 55, WIN)) || (dow !== 0 && inWindow(d, 4, 55, WIN))) {
+    const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const hit = (at) => inWindow(d, at.getHours(), at.getMinutes(), WIN) && sameDay(d, at);
+    const clk = clocksFor(d);
+    const wakeAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.wakeH, clk.wakeM || 0, 0, 0);
+    const preWake = new Date(wakeAt.getTime() - 5 * 60 * 1000);
+    if (hit(preWake)) {
       const n = preWakeNote(d);
       return { kind: "wake", iso: isoOfDate(d), title: n.title, body: n.body };
     }
-    if (dow === 6 && inWindow(d, 23, 50, WIN)) {
-      const sun = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-      const n = lightsNote(sun);
-      return { kind: "lights", iso: isoOfDate(sun), title: n.title, body: n.body };
+    const tom = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    const clkT = clocksFor(tom);
+    const wakeT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.wakeH, clkT.wakeM || 0, 0, 0);
+    const preWT = new Date(wakeT.getTime() - 5 * 60 * 1000);
+    if (hit(preWT)) {
+      const n = preWakeNote(tom);
+      return { kind: "wake", iso: isoOfDate(tom), title: n.title, body: n.body };
     }
-    if (dow === 0 && inWindow(d, 0, 0, WIN)) {
+    const lightsAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.tonightH, clk.tonightM || 0, 0, 0);
+    const preL = new Date(lightsAt.getTime() - 10 * 60 * 1000);
+    if (hit(preL)) {
       const n = lightsNote(d);
       return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
     }
-    if (dow !== 0 && inWindow(d, 0, 50, WIN)) {
-      const n = lightsNote(d);
-      return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
+    const lightsT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.tonightH, clkT.tonightM || 0, 0, 0);
+    const preLT = new Date(lightsT.getTime() - 10 * 60 * 1000);
+    if (hit(preLT)) {
+      const n = lightsNote(tom);
+      return { kind: "lights", iso: isoOfDate(tom), title: n.title, body: n.body };
     }
     return null;
   };
@@ -204,25 +318,30 @@ window.ALIGN_LIFE = (() => {
   const LS_P = "align-plans";
   const LS_J = "align-journal";
 
-  const loadJSON = (k, fallback) => {
-    try { return JSON.parse(localStorage.getItem(k) || "null") || fallback; } catch { return fallback; }
-  };
-  const saveJSON = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-
   const stepsFor = (date) => {
-    const sunday = clocksFor(date).sunday;
-    if (!sunday) return STEPS;
-    return STEPS.map((s) => {
-      if (s.id === "move") return { ...s, sub: "Twelve minutes. Then Word." };
-      if (s.id === "devotion") return { ...s, sub: "Short. One line that stays." };
-      if (s.id === "verse") return { ...s, sub: "Two minutes. Then hide it. Then one chapter." };
-      if (s.id === "word") return { ...s, sub: "One chapter. That’s Sunday." };
-      if (s.id === "drill") return { ...s, sub: "Thirty questions on the one chapter." };
-      if (s.id === "affirm") return { ...s, sub: "Speak it. Then get ready." };
-      if (s.id === "plan") return { ...s, sub: "Church first. Keep the rest light." };
-      if (s.id === "ready") return { ...s, sub: "Dress for church. Leave by 5:45." };
-      if (s.id === "recite") return { ...s, sub: "The devotion verse once more. Then go." };
-      if (s.id === "go") return { ...s, sub: "Out the door by 5:45." };
+    const r = loadRoutine();
+    const clk = clocksFor(date);
+    const sunday = clk.sunday;
+    const leave = clk.leaveLabel;
+    const ch = sunday ? r.chaptersSun : r.chaptersWk;
+    const train = sunday ? r.minSun.move : r.min.move;
+    const base = STEPS.filter((s) => r.on[s.id] !== false).map((s) => {
+      if (s.id === "word") return Object.assign({}, s, { sub: ch === 1 ? "One chapter. Stay with it." : (ch + " chapters. Stay with it.") });
+      if (s.id === "move") return Object.assign({}, s, { sub: train + " minutes. Body first, while the mind is quiet." });
+      return s;
+    });
+    if (!sunday) return base;
+    return base.map((s) => {
+      if (s.id === "move") return Object.assign({}, s, { sub: train + " minutes. Then Word." });
+      if (s.id === "devotion") return Object.assign({}, s, { sub: "Short. One line that stays." });
+      if (s.id === "verse") return Object.assign({}, s, { sub: "Two minutes. Then hide it. Then Scripture." });
+      if (s.id === "word") return Object.assign({}, s, { sub: ch === 1 ? "One chapter. That’s Sunday." : (ch + " chapters. That’s Sunday.") });
+      if (s.id === "drill") return Object.assign({}, s, { sub: "Thirty questions on today’s reading." });
+      if (s.id === "affirm") return Object.assign({}, s, { sub: "Speak it. Then get ready." });
+      if (s.id === "plan") return Object.assign({}, s, { sub: leave ? "Church first. Keep the rest light." : "Three true priorities. Then the rest." });
+      if (s.id === "ready") return Object.assign({}, s, { sub: leave ? ("Dress for church. Leave by " + leave + ".") : "Bath, dress, leave the room in order." });
+      if (s.id === "recite") return Object.assign({}, s, { sub: "The devotion verse once more. Then go." });
+      if (s.id === "go") return Object.assign({}, s, { sub: leave ? ("Out the door by " + leave + ".") : "Step into the day. Nothing else to open." });
       return s;
     });
   };
@@ -359,24 +478,24 @@ window.ALIGN_LIFE = (() => {
 
   const HOLD_IDS = { pray: 1, devotion: 1, verse: 1, word: 1, recite: 1, affirm: 1, evening: 1 };
   const idealMinFor = (iso, id, opts) => {
-    const sunday = chapterTarget(iso) === 1;
-    const train = Math.max(1, Number((opts && opts.trainMin) || (sunday ? 12 : 28)));
-    const ch = Number((opts && opts.chapters) != null ? opts.chapters : (sunday ? 1 : 3));
-    const table = sunday ? {
-      rise: 1, move: train, pray: 6, devotion: 6, verse: 4,
-      word: Math.max(6, ch * 5), drill: 2, affirm: 2, plan: 3,
-      ready: 15, recite: 2, go: 1, read: 8, evening: 8, nightquiz: 2, lights: 1
-    } : {
-      rise: 1, move: train, pray: 7, devotion: 8, verse: 4,
-      word: Math.max(10, ch * 4), drill: 2, affirm: 2, plan: 5,
-      ready: 12, recite: 2, go: 1, read: 10, evening: 8, nightquiz: 2, lights: 1
-    };
+    const r = loadRoutine();
+    const [y, m, d] = String(iso).split("-").map(Number);
+    const sunday = new Date(y, m - 1, d).getDay() === 0;
+    const table = sunday ? r.minSun : r.min;
+    if (id === "move" && opts && opts.trainMin != null) return Math.max(1, Number(opts.trainMin) || table.move || 1);
+    if (id === "read") return 8;
+    if (id === "evening") return 8;
+    if (id === "nightquiz") return 2;
+    if (id === "lights") return 1;
     return table[id] || 0;
   };
   const idealMsFor = (iso, id, opts) => idealMinFor(iso, id, opts) * 60000;
-  const pathIdealMs = (iso, opts) =>
-    STEPS.reduce((n, s) => n + idealMsFor(iso, s.id, opts), 0);
-  const pathWindowMs = (iso) => (chapterTarget(iso) === 1 ? 105 : 90) * 60000;
+  const pathIdealMs = (iso, opts) => {
+    const [y, m, d] = String(iso).split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    return stepsFor(date).reduce((n, s) => n + idealMsFor(iso, s.id, opts), 0);
+  };
+  const pathWindowMs = (iso) => Math.max(pathIdealMs(iso), 60 * 60000);
   const paceKind = (id, actual, ideal) => {
     const a = Number(actual) || 0;
     const i = Number(ideal) || 0;
@@ -826,7 +945,8 @@ window.ALIGN_LIFE = (() => {
   };
 
   return {
-    BOOKS, STEPS, EVENING, ACTS,
+    BOOKS, STEPS, EVENING, ACTS, STEP_IDS,
+    loadRoutine, saveRoutine, mergeRoutineRemote, coerceRoutine, fmtHM,
     clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,

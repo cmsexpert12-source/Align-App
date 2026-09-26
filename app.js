@@ -447,6 +447,9 @@
           if (!lAt || rAt > lAt) localStorage.setItem("align-scripture", JSON.stringify(life.data.scripture));
         } catch { /* keep local SRS */ }
       }
+      if (life.data.routine && Life && Life.mergeRoutineRemote) {
+        try { Life.mergeRoutineRemote(life.data.routine); } catch { /* keep local hours */ }
+      }
     }
     try {
       if (AlignDB.markHydrated) AlignDB.markHydrated();
@@ -518,11 +521,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader", "circle"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader", "circle", "routine"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader", "circle"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader", "circle", "routine"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -579,6 +582,59 @@
   const L = () => window.ALIGN_LIFE;
   const B = () => window.ALIGN_BOOKS;
   const S = () => window.ALIGN_SCRIPTURE;
+
+  const timeVal = (h, m) => String(Math.max(0, Math.min(23, Number(h) || 0))).padStart(2, "0") + ":" + String(Math.max(0, Math.min(59, Number(m) || 0))).padStart(2, "0");
+  const parseTime = (id, dh, dm) => {
+    const v = String((document.getElementById(id) || {}).value || "");
+    const m = /^(\d{1,2}):(\d{2})/.exec(v);
+    if (!m) return { h: dh, m: dm };
+    return { h: Math.max(0, Math.min(23, Number(m[1]))), m: Math.max(0, Math.min(59, Number(m[2]))) };
+  };
+  const pushRoutine = (patch) => {
+    const row = L().saveRoutine(patch || {});
+    try {
+      const clk = L().clocksFor(new Date());
+      state.prefs.hour = clk.wakeH;
+      state.prefs.minute = clk.wakeM || 0;
+    } catch { /* prefs optional */ }
+    if (window.AlignDB && AlignDB.saveRoutineCloud) AlignDB.saveRoutineCloud(row).catch(() => {});
+    return row;
+  };
+  const readHoursForm = (pfx) => {
+    const r = L().loadRoutine();
+    const sw = parseTime(pfx + "sun-wake", r.sunWakeH, r.sunWakeM);
+    const sl = parseTime(pfx + "sun-lights", r.sunLightsH, r.sunLightsM);
+    const ww = parseTime(pfx + "wk-wake", r.wkWakeH, r.wkWakeM);
+    const wl = parseTime(pfx + "wk-lights", r.wkLightsH, r.wkLightsM);
+    const lv = parseTime(pfx + "leave", r.leaveH, r.leaveM);
+    const leaveOn = document.getElementById(pfx + "leave-on");
+    const out = {
+      sunWakeH: sw.h, sunWakeM: sw.m,
+      sunLightsH: sl.h, sunLightsM: sl.m,
+      wkWakeH: ww.h, wkWakeM: ww.m,
+      wkLightsH: wl.h, wkLightsM: wl.m,
+      leaveH: lv.h, leaveM: lv.m,
+      leaveOn: leaveOn ? !!leaveOn.checked : r.leaveOn
+    };
+    const chW = document.getElementById(pfx + "ch-wk");
+    const chS = document.getElementById(pfx + "ch-sun");
+    if (chW) out.chaptersWk = Math.max(1, Math.min(12, Number(chW.value) || r.chaptersWk));
+    if (chS) out.chaptersSun = Math.max(1, Math.min(12, Number(chS.value) || r.chaptersSun));
+    return out;
+  };
+  const readPathForm = () => {
+    const r = L().loadRoutine();
+    const min = Object.assign({}, r.min);
+    const minSun = Object.assign({}, r.minSun);
+    const ids = L().STEP_IDS || Object.keys(r.on);
+    ids.forEach((id) => {
+      const a = document.getElementById("rt-min-" + id);
+      const b = document.getElementById("rt-sun-" + id);
+      if (a) min[id] = Math.max(0, Math.min(180, Number(a.value) || 0));
+      if (b) minSun[id] = Math.max(0, Math.min(180, Number(b.value) || 0));
+    });
+    return Object.assign(readHoursForm("rt-"), { min, minSun, on: r.on });
+  };
   let pdfDoc = null;
   let pdfRenderTask = null;
   let pdfPaintGen = 0;
@@ -1635,7 +1691,7 @@
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
     if (view === "word" || view === "library") return "word";
     if (view === "journal") return "journal";
-    if (view === "profile" || view === "sound" || view === "circle") return "profile";
+    if (view === "profile" || view === "sound" || view === "circle" || view === "routine") return "profile";
     return null;
   };
 
@@ -1675,15 +1731,20 @@
         </div>
       `,
       `
-        <div class="kicker">Sunday · weekdays</div>
-        <h1>Church morning<br>is built in.</h1>
-        <p class="lead">Sunday rises at 4:00, trains for twelve minutes, reads one chapter, and leaves by 5:45. Weekdays rise at 5:00 with a fuller session and 3–4 chapters.</p>
-        <div class="stat-row">
-          <div class="stat"><b>4:00</b><span>Sunday rise</span></div>
-          <div class="stat"><b>5:45</b><span>leave for church</span></div>
-          <div class="stat"><b>5:00</b><span>Mon–Sat rise</span></div>
-          <div class="stat"><b>1:00</b><span>Mon–Sat lights out</span></div>
-        </div>
+        <div class="kicker">Your hours</div>
+        <h1>When do you<br>rise?</h1>
+        <p class="lead">The path is the same order for everyone. The clock is yours. Seeded from 4:00 Sunday / 5:00 weekdays — change it.</p>
+        ${(() => {
+          const r = L().loadRoutine();
+          return `<div class="hours-grid">
+            <div class="field"><label>Sunday rise</label><input id="ob-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
+            <div class="field"><label>Sunday lights out</label><input id="ob-sun-lights" type="time" value="${timeVal(r.sunLightsH, r.sunLightsM)}" /></div>
+            <div class="field"><label>Mon–Sat rise</label><input id="ob-wk-wake" type="time" value="${timeVal(r.wkWakeH, r.wkWakeM)}" /></div>
+            <div class="field"><label>Mon–Sat lights out</label><input id="ob-wk-lights" type="time" value="${timeVal(r.wkLightsH, r.wkLightsM)}" /></div>
+            <div class="field"><label>Sunday leave (church)</label><input id="ob-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
+            <label class="check-row"><input id="ob-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
+          </div>`;
+        })()}
       `,
       `
         <div class="kicker">Move</div>
@@ -1712,7 +1773,7 @@
         </div>
       `
     ];
-    const labels = ["See the path", "Sunday & hours", "The week", "Almost there", "Open ALIGN"];
+    const labels = ["See the path", "Your hours", "The week", "Almost there", "Open ALIGN"];
     return `
       <div class="onboard">
         <div class="onboard-top">
@@ -1760,7 +1821,8 @@
   const morningDone = (iso) => {
     const m = L().morningOf(iso);
     if (m.go) return true;
-    const steps = L().STEPS || [];
+    const [y, mo, d] = String(iso).split("-").map(Number);
+    const steps = (L().stepsFor && L().stepsFor(new Date(y, (mo || 1) - 1, d || 1))) || L().STEPS || [];
     return steps.length > 0 && steps.every((s) => !!m[s.id]);
   };
 
@@ -2070,7 +2132,7 @@
       const row = cur && times[cur.id] ? times[cur.id] : {};
       if (row && row.open && !row.ms) live = Math.max(0, Date.now() - row.open);
     } catch { live = 0; }
-    const rows = (L().STEPS || []).map((s) => {
+    const rows = (L().stepsFor(t.date) || L().STEPS || []).map((s) => {
       const ideal = (L().idealMsFor && L().idealMsFor(t.iso, s.id, opts)) || 0;
       const actual = (times[s.id] && times[s.id].ms) || 0;
       const shown = (cur && cur.id === s.id && live > actual) ? live : actual;
@@ -2615,19 +2677,26 @@
           </button>
 
           <div class="set-label">Morning hours</div>
-          <div class="sched-card">
-            <div class="sched-row"><span class="k">Sunday rise</span><span class="v">4:00 AM</span></div>
-            <div class="sched-row"><span class="k">Sunday · church</span><span class="v">Leave 5:45 AM</span></div>
-            <div class="sched-row"><span class="k">Sunday lights out</span><span class="v">12:00 AM</span></div>
-            <div class="sched-row"><span class="k">Mon–Sat rise</span><span class="v">5:00 AM</span></div>
-            <div class="sched-row"><span class="k">Mon–Sat lights out</span><span class="v">1:00 AM</span></div>
-          </div>
+          ${(() => {
+            const r = L().loadRoutine();
+            const onN = (L().STEP_IDS || []).filter((id) => r.on[id] !== false).length;
+            return `<button class="setting" data-go="routine">
+              <div class="grow"><h4>Your path</h4><p>Sunday ${escapeHtml(L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "")} · Mon–Sat ${escapeHtml(L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : "")} · ${onN} steps</p></div>
+            </button>`;
+          })()}
 
           <div class="set-label">Notifications</div>
           <div class="setting">
             <div class="grow">
               <h4>Reminders</h4>
-              <p>${state.prefs.enabled ? "On · 5 min before rise · 10 min before lights out" : "Off · 5 min before 4:00 / 5:00 · 10 min before midnight / 1:00"}</p>
+              <p>${(() => {
+                const r = L().loadRoutine();
+                const wk = L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : "";
+                const su = L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "";
+                return state.prefs.enabled
+                  ? ("On · 5 min before rise · 10 min before lights out")
+                  : ("Off · 5 min before " + su + " / " + wk);
+              })()}</p>
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
@@ -2693,6 +2762,53 @@
             : `<button class="btn" style="margin-top:18px" data-go="auth">Create account</button>`
           }
           <div class="ver">ALIGN</div>
+        </div>
+      </div>
+    `;
+  };
+
+  const viewRoutine = () => {
+    const r = L().loadRoutine();
+    const steps = L().STEPS || [];
+    const rows = steps.map((s) => {
+      const locked = s.id === "rise" || s.id === "go";
+      const on = r.on[s.id] !== false;
+      return `<div class="routine-step ${on ? "" : "off"}">
+        <div class="circle-who">
+          <div class="grow">
+            <h3>${escapeHtml(s.title)}</h3>
+            <p>${locked ? "Always on" : (on ? "On the path" : "Off · skipped")}</p>
+          </div>
+          ${locked ? "" : `<button type="button" class="toggle ${on ? "on" : ""}" data-act="toggle-path-step" data-id="${escapeAttr(s.id)}"><i></i></button>`}
+        </div>
+        <div class="hours-grid tight">
+          <div class="field"><label>Weekday min</label><input id="rt-min-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.min[s.id] || 0}" /></div>
+          <div class="field"><label>Sunday min</label><input id="rt-sun-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.minSun[s.id] || 0}" /></div>
+        </div>
+      </div>`;
+    }).join("");
+    return `
+      <div class="screen full routine">
+        <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
+        <div class="page-title"><div class="tag">You</div><h1>Your path.</h1></div>
+        <div style="padding:0 16px calc(var(--safe-b) + 24px)">
+          <p class="hint">Same order as ALIGN. Set the hours, how long each step should take, and which ones you walk. Rise and Begin stay on.</p>
+          <div class="set-label">Hours</div>
+          <div class="hours-grid">
+            <div class="field"><label>Sunday rise</label><input id="rt-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
+            <div class="field"><label>Sunday lights out</label><input id="rt-sun-lights" type="time" value="${timeVal(r.sunLightsH, r.sunLightsM)}" /></div>
+            <div class="field"><label>Mon–Sat rise</label><input id="rt-wk-wake" type="time" value="${timeVal(r.wkWakeH, r.wkWakeM)}" /></div>
+            <div class="field"><label>Mon–Sat lights out</label><input id="rt-wk-lights" type="time" value="${timeVal(r.wkLightsH, r.wkLightsM)}" /></div>
+            <div class="field"><label>Sunday leave</label><input id="rt-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
+          </div>
+          <label class="check-row"><input id="rt-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
+          <div class="hours-grid tight" style="margin-top:8px">
+            <div class="field"><label>Weekday chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
+            <div class="field"><label>Sunday chapters</label><input id="rt-ch-sun" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersSun}" /></div>
+          </div>
+          <div class="set-label">Steps</div>
+          <div class="circle-list">${rows}</div>
+          <button class="btn" data-act="save-routine" style="margin-top:16px">Save path</button>
         </div>
       </div>
     `;
@@ -3898,6 +4014,7 @@
       devotionlog: viewDevotionLog,
       sound: viewSound,
       circle: viewCircle,
+      routine: viewRoutine,
       journal: viewJournal,
       journalwrite: viewJournalWrite
     };
@@ -4424,6 +4541,9 @@
 
   const handle = async (act, el) => {
     if (act === "next-onboard") {
+      if (state.onboard === 2) {
+        try { pushRoutine(readHoursForm("ob-")); } catch { /* keep defaults */ }
+      }
       if (state.onboard < 4) { state.onboard++; render(); }
       else {
         state.onboardingDone = true;
@@ -4596,6 +4716,18 @@
       if (!code) return;
       try { await navigator.clipboard.writeText(code); toast("Code copied"); }
       catch { toast(code); }
+    } else if (act === "save-routine") {
+      try { pushRoutine(readPathForm()); toast("Path saved"); }
+      catch { toast("Could not save path"); }
+      render();
+    } else if (act === "toggle-path-step") {
+      const id = el && el.dataset ? el.dataset.id : "";
+      if (!id || id === "rise" || id === "go") return;
+      const patch = readPathForm();
+      patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
+      patch.on[id] = patch.on[id] === false;
+      pushRoutine(patch);
+      render();
     } else if (act === "sync-now") {
       if (!window.AlignDB) { toast("Cloud is not ready"); return; }
       const iso = today().iso;

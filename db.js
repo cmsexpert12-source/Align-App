@@ -641,6 +641,41 @@ window.AlignDB = (() => {
         delete row.timezone;
         err = await restUpsert("notification_prefs", row, "user_id");
       }
+    } else if (item.kind === "routine") {
+      const routine = p.routine || p;
+      err = await restUpsert("app_state", {
+        user_id: userId, routine, updated_at: now
+      }, "user_id");
+      if (err && /routine|schema cache|column/i.test(err.message || "")) {
+        let sc = {};
+        try {
+          const got = await restSelect("app_state", "select=scripture");
+          sc = (got && got[0] && got[0].scripture) || {};
+        } catch { sc = {}; }
+        if (!sc || typeof sc !== "object") sc = {};
+        sc._routine = routine;
+        err = await restUpsert("app_state", {
+          user_id: userId, scripture: sc, updated_at: now
+        }, "user_id");
+      }
+      const clocks = {
+        user_id: userId,
+        sun_wake_h: routine.sunWakeH,
+        sun_wake_m: routine.sunWakeM,
+        wk_wake_h: routine.wkWakeH,
+        wk_wake_m: routine.wkWakeM,
+        sun_lights_h: routine.sunLightsH,
+        sun_lights_m: routine.sunLightsM,
+        wk_lights_h: routine.wkLightsH,
+        wk_lights_m: routine.wkLightsM,
+        reminder_hour: routine.wkWakeH,
+        reminder_minute: routine.wkWakeM,
+        updated_at: now
+      };
+      const clockErr = await restUpsert("notification_prefs", clocks, "user_id");
+      if (clockErr && /column|schema cache/i.test(clockErr.message || "")) {
+        /* hours SQL not applied yet — local alarms still work */
+      }
     } else if (item.kind === "workout") {
       let minutes = Number(p.minutes) || 0;
       let completed = Number(p.completed) || 0;
@@ -895,6 +930,8 @@ window.AlignDB = (() => {
     } catch { /* ignore */ }
     const prefs = readJSON("align-notif-prefs", null);
     if (prefs) enqueue("prefs", "prefs", prefs);
+    const routine = readJSON("align-routine", null);
+    if (routine && routine.updated_at) enqueue("routine", "routine", { routine });
     try {
       const books = readJSON("align-books", []);
       (books || []).slice(0, 40).forEach((b) => {
@@ -928,6 +965,9 @@ window.AlignDB = (() => {
     requestBgSync();
     return flush();
   };
+
+  const saveRoutineCloud = async (row, opts) =>
+    queueAndFlush("routine", "routine", { routine: row || {} }, opts || { delay: 0 });
 
   const saveMorning = async (iso, steps, opts) => {
     const row = Object.assign({}, steps || {});
@@ -972,21 +1012,29 @@ window.AlignDB = (() => {
       sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId),
       sb.from("journals").select("date, payload, updated_at").eq("user_id", userId),
       sb.from("bible_state").select("book, chapter, log, updated_at").eq("user_id", userId).maybeSingle(),
-      sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle(),
+      sb.from("app_state").select("scripture, routine, updated_at").eq("user_id", userId).maybeSingle(),
       sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId)
     ]);
     if (m.error && missingTable(m.error)) return ok(null);
+    if (a && a.error && /routine|column|schema cache/i.test(a.error.message || "")) {
+      a = await sb.from("app_state").select("scripture, updated_at").eq("user_id", userId).maybeSingle();
+    }
     const notes = (!n || (n.error && missingTable(n.error))) ? [] : (n.data || []);
+    const scripture = (a.data && a.data.scripture) || null;
+    const routine = (a.data && a.data.routine && Object.keys(a.data.routine).length)
+      ? a.data.routine
+      : (scripture && scripture._routine) || null;
     return ok({
       mornings: (m.data || []).map((r) => ({ date: r.date, steps: r.steps, updated_at: r.updated_at })),
       plans: (p.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
       journals: (j.data || []).map((r) => ({ date: r.date, payload: r.payload, updated_at: r.updated_at })),
       notes,
       bible: b.data || null,
-      scripture: (a.data && a.data.scripture) || null,
+      scripture,
       scriptureAt: (a.data && a.data.updated_at) || null,
-      affirmation: (a.data && a.data.scripture && a.data.scripture._affirmation != null)
-        ? { text: a.data.scripture._affirmation, updated_at: a.data.scripture._affirmationAt || a.data.updated_at }
+      routine,
+      affirmation: (scripture && scripture._affirmation != null)
+        ? { text: scripture._affirmation, updated_at: scripture._affirmationAt || (a.data && a.data.updated_at) }
         : null
     });
   };
@@ -1262,6 +1310,7 @@ window.AlignDB = (() => {
     upsertProfile, fetchProfile, saveWorkout, fetchWorkouts,
     savePushSub, deletePushSub, savePrefs, fetchPrefs, testConnection,
     saveMorning, saveDayPlan, saveJournal, saveNote, deleteNoteRemote, saveBible, saveScripture,
+    saveRoutineCloud,
     saveAffirmation: (row, opts) => queueAndFlush("affirm", "affirm", row || {}, opts || { delay: 0 }),
     pullLife,
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,

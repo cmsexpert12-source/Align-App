@@ -2001,3 +2001,21 @@ img { max-width: 100%; display: block; }
 }
 .circle-dots i.mid { background: #5b8cff; border-color: #5b8cff; }
 .circle-dots i.on { background: var(--lime); border-color: var(--lime); }
+
+.hours-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 8px 0 4px;
+}
+.hours-grid .field { margin-bottom: 0; }
+.hours-grid.tight { margin-top: 8px; }
+.check-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--muted); margin: 8px 0 12px;
+}
+.check-row input { width: 18px; height: 18px; accent-color: var(--lime); }
+.routine-step {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  padding: 14px;
+}
+.routine-step.off { opacity: .55; }
+.routine-step .circle-who { margin-bottom: 8px; }
+.field input[type="time"], .field input[type="number"] { color-scheme: dark; }
