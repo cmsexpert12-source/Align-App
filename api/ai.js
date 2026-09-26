@@ -30,7 +30,7 @@ const SERVER_BASE = [
   "Be accurate. Short paragraphs or a numbered list. Bold labels only. No code fences, no markdown headings, no emojis, no medical claims."
 ].join(" ");
 
-const QUIZ_SYSTEM = "You write short Bible quizzes from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding: meaning, motive, promise, command, character of God, what the text requires of the reader. Do not ask verse numbers, chapter numbers, or which-verse identification. Distractors must be plausible. One-sentence stems.";
+const QUIZ_SYSTEM = "You write short Bible quizzes from the given reading (KJV or WEB). Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding only: meaning, motive, promise, command, character of God, what the text requires of the reader. Never fill-in-the-blank or missing-word. Never ask verse numbers, chapter numbers, or which-verse identification. Wrong answers must be plausible ideas from nearby Scripture, not jokes or obvious rejects. One-sentence stems.";
 
 const hits = new Map();
 

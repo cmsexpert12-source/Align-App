@@ -2200,6 +2200,15 @@ img { max-width: 100%; display: block; }
 }
 .affirm-box:focus { border-color: var(--lime); }
 .affirm-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); font-style: italic; }
+.affirm-said {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+}
 .order-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .icon-btn.sm { width: 32px; height: 32px; border-radius: 10px; font-size: 14px; font-weight: 800; }
 .icon-btn.sm:disabled { opacity: .35; }

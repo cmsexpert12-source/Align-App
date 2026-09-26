@@ -1,5 +1,5 @@
 /* ALIGN Scripture — memory verses + 2-minute sprint, spaced repetition.
-   Texts: World English Bible (public domain), matching in-app reading. */
+   Sprint questions come from today's reading (KJV or WEB), testing meaning. */
 window.ALIGN_SCRIPTURE = (() => {
   const LS = "align-scripture";
   const DAY_MS = 86400000;
@@ -699,9 +699,42 @@ window.ALIGN_SCRIPTURE = (() => {
     return out.slice(0, 2);
   };
 
+  const clip = (s, n) => {
+    const t = cleanText(s);
+    if (t.length <= n) return t;
+    return t.slice(0, n).replace(/\s+\S*$/, "").trim();
+  };
+  const restatement = (text) => {
+    let s = cleanText(text).replace(/^["“]+|[”"]+$/g, "");
+    s = s.replace(/^(And |But |For |Then |Therefore |Wherefore |Now |So )/i, "");
+    const m = s.match(/^(.+?[.?!;:])(?:\s|$)/);
+    const first = ((m && m[1]) || s).trim();
+    return clip(first, 110);
+  };
+  const shortQuote = (text) => clip(cleanText(text).replace(/^["“]+|[”"]+$/g, ""), 78);
+  const looksCommand = (text) =>
+    /^(go |come |love |trust |wait |seek |ask |pray |rejoice |fear not|do not|don't |be |walk |keep |remember |hear |believe |repent |follow |abide |cast |give |let |make |put |honou?r )/i.test(restatement(text))
+    || /\b(you shall|thou shalt|shall not|do not|don't)\b/i.test(text);
+  const looksPromise = (text) =>
+    /\b(will |shall |I am |I have |blessed|promise|never |no more|with you)\b/i.test(text);
+  const twoClaims = (answer, pool) => {
+    const a = String(answer || "").toLowerCase();
+    const uniq = [];
+    (pool || []).forEach((w) => {
+      const s = String(w || "").trim();
+      if (!s || s.length < 12 || s.toLowerCase() === a) return;
+      if (!uniq.some((x) => x.toLowerCase() === s.toLowerCase())) uniq.push(s);
+    });
+    const ranked = uniq.slice().sort((x, y) => Math.abs(x.length - String(answer || "").length) - Math.abs(y.length - String(answer || "").length));
+    const out = shuffle(ranked).slice(0, 2);
+    if (out.length < 2) {
+      ranked.forEach((n) => { if (out.length < 2 && out.indexOf(n) < 0) out.push(n); });
+    }
+    return out.slice(0, 2);
+  };
+
   const fromPacks = (packs, iso) => {
     const list = [];
-    const allWords = [];
     const verses = [];
     (packs || []).forEach((p) => {
       (p.verses || []).forEach((v) => {
@@ -715,26 +748,46 @@ window.ALIGN_SCRIPTURE = (() => {
         };
         if (!row.book || !row.chapter || !row.verse) return;
         verses.push(row);
-        contentWords(text).forEach((w) => allWords.push(w));
       });
     });
-    verses.forEach((v) => {
+    if (verses.length < 2) return [];
+    const sample = verses.length > 42 ? shuffle(verses).slice(0, 42) : verses;
+    const claims = sample.map((v) => restatement(v.text)).filter((s) => s.length >= 16);
+    const pushQ = (id, q, a, pool) => {
+      if (!q || !a || a.length < 10) return;
+      const d = twoClaims(a, pool);
+      if (d.length < 2) return;
+      const low = a.toLowerCase();
+      if (d[0].toLowerCase() === low || d[1].toLowerCase() === low) return;
+      list.push({ id: "rd:" + iso + ":" + id, q, a, d, tag: "read", ref: "" });
+    };
+    sample.forEach((v) => {
       const ref = v.book + " " + v.chapter + ":" + v.verse;
-      const blank = pickBlank(v.text);
-      if (blank) {
-        const re = new RegExp("\\b" + blank.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
-        const shown = v.text.replace(re, "____");
-        if (shown !== v.text) {
-          const d = twoOthers(blank, allWords);
-          list.push({
-            id: "rd:" + iso + ":" + v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":cloze",
-            q: ref + " — “" + shown + "”",
-            a: blank,
-            d,
-            tag: "read",
-            ref
-          });
-        }
+      const claim = restatement(v.text);
+      const others = claims.filter((c) => c.toLowerCase() !== claim.toLowerCase());
+      if (others.length < 2) return;
+      const quote = shortQuote(v.text);
+      const more = quote.length < cleanText(v.text).length ? "…" : "";
+      pushQ(
+        v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":sense",
+        "“" + quote + more + "” — what is this saying?",
+        claim,
+        others
+      );
+      if (looksCommand(v.text)) {
+        pushQ(
+          v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":do",
+          "In " + ref + ", what are you told to do or not do?",
+          claim,
+          others
+        );
+      } else if (looksPromise(v.text)) {
+        pushQ(
+          v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":promise",
+          "What does " + ref + " promise or declare?",
+          claim,
+          others
+        );
       }
     });
     const seen = new Set();
@@ -750,16 +803,22 @@ window.ALIGN_SCRIPTURE = (() => {
     const stem = String((q && q.q) || "");
     return /:ref$/.test(id) || /:kind$/.test(id) || /which verse/i.test(stem) || /who said/i.test(stem) || /what verse/i.test(stem) || /this line is mainly/i.test(stem);
   };
-  const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q));
+  const isCloze = (q) => {
+    const id = String((q && q.id) || "");
+    const stem = String((q && q.q) || "");
+    return /:cloze/.test(id) || /_{3,}/.test(stem) || /fill in/i.test(stem) || /missing word/i.test(stem);
+  };
+  const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q) && !isCloze(q));
 
   const ingestReading = (iso, packs) => {
     const built = fromPacks(packs, iso);
-    if (!built.length) return [];
     const data = load();
     const row = data.daily[iso] || {};
     const have = {};
-    (row.readingQs || []).forEach((q) => { have[q.id] = q; });
-    built.forEach((q) => { if (!have[q.id]) have[q.id] = q; });
+    (row.readingQs || []).forEach((q) => {
+      if (q && q.tag === "read-ai" && !isIdQuiz(q) && !isCloze(q)) have[q.id] = q;
+    });
+    built.forEach((q) => { if (q && q.id && !have[q.id]) have[q.id] = q; });
     row.readingQs = Object.values(have);
     row.readRefs = (packs || []).map((p) => p.book + " " + p.chapter);
     data.daily[iso] = row;
@@ -779,6 +838,7 @@ window.ALIGN_SCRIPTURE = (() => {
         const d1 = cleanText(row.d1 || (row.d && row.d[0]) || row.wrong1);
         const d2 = cleanText(row.d2 || (row.d && row.d[1]) || row.wrong2);
         if (!q || !a || !d1 || !d2) return null;
+        if (/_{3,}/.test(q) || /fill in/i.test(q) || /missing word/i.test(q)) return null;
         return { q, a, d: [d1, d2], i };
       }).filter(Boolean);
     } catch {
@@ -804,7 +864,7 @@ window.ALIGN_SCRIPTURE = (() => {
         headers,
         body: JSON.stringify({
           kind: "quiz",
-          prompt: "Write 10 multiple-choice questions of understanding about this reading only. Plausible wrong answers. No trivia about references.\n\n" + body
+          prompt: "Write 12 multiple-choice questions that test understanding of this reading only. Meaning, motive, command, promise — not fill-in-the-blank, not which-verse. Wrong answers must be plausible, not obvious rejects.\n\n" + body
         })
       });
       const js = await res.json().catch(() => ({}));
@@ -873,7 +933,7 @@ window.ALIGN_SCRIPTURE = (() => {
       const pb = (b.tag === "read-ai" ? 0 : 1);
       return pa - pb;
     });
-    const bank = todayQs.length ? allReadingBank().filter((q) => !isIdQuiz(q)) : QUIZ.slice();
+    if (!todayQs.length) return [];
     const missed = [];
     const due = [];
     const fresh = [];
@@ -885,15 +945,7 @@ window.ALIGN_SCRIPTURE = (() => {
       else if (c.due <= now) due.push(q);
       else later.push(q);
     };
-    if (todayQs.length) {
-      todayQs.forEach(bucket);
-      bank.forEach((q) => {
-        if (todayQs.some((t) => t.id === q.id)) return;
-        bucket(q);
-      });
-    } else {
-      bank.forEach(bucket);
-    }
+    todayQs.forEach(bucket);
     const byDue = (a, b) => {
       const ca = data.quiz[a.id], cb = data.quiz[b.id];
       return ((ca && ca.due) || 0) - ((cb && cb.due) || 0);

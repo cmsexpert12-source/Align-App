@@ -91,6 +91,7 @@
     verseSess: null,
     drill: null,
     drillMode: "morning",
+    affirmEdit: false,
     readPacks: [],
     planJustSaved: false,
     journalIso: "",
@@ -1495,6 +1496,7 @@
       return;
     }
     if (step === "affirm") {
+      state.affirmEdit = false;
       state.view = "affirm";
       render();
       return;
@@ -1707,6 +1709,7 @@
   };
 
   const goAffirm = () => {
+    state.affirmEdit = false;
     state.view = "affirm";
     render();
   };
@@ -1744,9 +1747,23 @@
     goNext();
   };
 
-  const startDrill = (mode) => {
+  const startDrill = async (mode) => {
     const iso = today().iso;
     const kind = mode || state.drillMode || "morning";
+    if (!(state.readPacks || []).length) {
+      const read = (L().todayAssignment(iso).read || []);
+      if (read.length && L().fetchChapter) {
+        const packs = [];
+        for (let i = 0; i < read.length; i++) {
+          const r = read[i];
+          try {
+            const data = await L().fetchChapter(r.book, r.chapter);
+            packs.push({ book: r.book, chapter: r.chapter, verses: (data && data.verses) || [] });
+          } catch { /* skip unread cache */ }
+        }
+        if (packs.length) state.readPacks = packs;
+      }
+    }
     if ((state.readPacks || []).length) {
       try { S().ingestReading(iso, state.readPacks); } catch { /* ok */ }
     }
@@ -3285,7 +3302,7 @@
             <p>${(() => {
               const line = (L().affirmationPref && L().affirmationPref()) || "";
               if (line) return clipText(line, 72);
-              return L().morningOf(iso).affirm ? "Spoken today" : "Write the line you speak. Save it here.";
+              return L().morningOf(iso).affirm ? "Spoken today" : (line ? "Speak it. Then receive it." : "Write the line you speak. Save it here.");
             })()}</p>
           </button>
           <button class="hub-card" data-act="open-step" data-step="evening">
@@ -3698,21 +3715,26 @@
   const viewAffirm = () => {
     let custom = "";
     try { custom = (L().affirmationPref && L().affirmationPref()) || ""; } catch { custom = ""; }
+    const editing = !custom || state.affirmEdit;
     return `
       <div class="screen full has-cta affirm">
         <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Word</div>
           <h1>Affirm.</h1>
-          <p>Your line. Write it. Read it aloud. It saves to this account.</p>
+          <p>${editing ? "Your line. Write it. Read it aloud. It saves to this account." : "Your line. Speak it. Edit whenever it needs to change."}</p>
         </div>
         <div class="scroll-body affirm-wrap">
-          <label class="field-label" for="affirm-text">My affirmation</label>
-          <textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>
+          ${editing
+            ? `<label class="field-label" for="affirm-text">My affirmation</label>
+               <textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>`
+            : `<p class="affirm-said">${escapeHtml(custom)}</p>`}
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="affirm-done">I received it</button>
-          <button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save</button>
+          ${editing
+            ? `<button class="btn ghost" style="margin-top:8px" data-act="save-affirm">Save</button>`
+            : `<button class="btn ghost" style="margin-top:8px" data-act="edit-affirm">Edit</button>`}
         </div>
       </div>
     `;
@@ -5687,11 +5709,15 @@
     } else if (act === "open-devotionlog") {
       state.view = "devotionlog";
       render();
+    } else if (act === "edit-affirm") {
+      state.affirmEdit = true;
+      render();
     } else if (act === "save-affirm") {
       const box = document.getElementById("affirm-text");
       if (!box) return;
       const row = L().saveAffirmationPref(box.value);
       if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
+      state.affirmEdit = false;
       toast(state.session ? "Saved to your account" : "Saved on this device");
       render();
     } else if (act === "affirm-done") {
@@ -5700,6 +5726,7 @@
         const row = L().saveAffirmationPref(box.value);
         if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
       }
+      state.affirmEdit = false;
       completeStep("affirm");
       sfx("done");
       toast("Amen.");
