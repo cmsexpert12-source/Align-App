@@ -1,6 +1,6 @@
 /* ALIGN public config. Anon key is safe in the client; never put the service-role key here. */
 window.ALIGN_CONFIG = {
-  vapidPublicKey: "BHQs0Wo3QmVAFpW5a7raJqABOk98BLfrBH_4eRUOAUgIHxIybOFlotKQlwLsST-JYfHtx7klDmNNJMchJpcUYBo",
+  vapidPublicKey: "BIeE38azW9nx6QMt2-Ifj2Ytu_4eWts2yVl29kciOT_nE_3cZg3psc2AEYOBqzwAeNIcmOCGfuQVZpnlQFWcp4Y",
   vapidSubject: "mailto:align@localhost",
   /* Project: https://supabase.com/dashboard/project/sqwwjrddpjkenkhpyntg */
   supabaseUrl: "https://sqwwjrddpjkenkhpyntg.supabase.co",
