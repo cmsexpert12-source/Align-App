@@ -2103,7 +2103,7 @@ img { max-width: 100%; display: block; }
 .routine-step.dragging { opacity: .7; border-color: var(--lime); }
 .path-lock { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
 .btn.ghost.sm { height: 36px; padding: 0 12px; font-size: 12px; width: auto; flex-shrink: 0; }
-.routine-step .grow h3 { font-size: 16px; font-weight: 800; margin: 0 0 4px; }
+.routine-step .grow h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
 .routine-step .grow p { font-size: 13px; line-height: 1.4; color: var(--muted); margin: 0; }
 .path-card-actions { padding-left: 72px; }
 .routine-step.pinned .path-card-actions { padding-left: 36px; }
