@@ -2779,39 +2779,57 @@
     `;
   };
 
+  const PATH_WHY = {
+    rise: { why: "The day is a gift. Standing up on purpose is how you receive it.", keep: "Rise is the door. Without it the morning has no start. Keep it." },
+    move: { why: "The body is quietest now. A little strength here carries the whole day.", keep: "Train is not the whole product — it is the first yes with your body. Remove it and the morning gets soft." },
+    pray: { why: "Before you read, before you plan. Speak to Him while the house is still.", keep: "Prayer first keeps the Word from becoming a chore. This is the conversation the morning is for." },
+    devotion: { why: "One reading. One line that stays. Capture it before the day talks over you.", keep: "Devotion is how truth gets into the day, not just onto the page. Losing it empties Memory and Recite." },
+    verse: { why: "Two minutes on the line. Hide it. It will meet you when you need it.", keep: "Memory is how the devotion verse becomes yours. Without it the Word stays on the screen." },
+    word: { why: "Stay in Scripture. Not a verse snack — a sitting. This is food.", keep: "Scripture is the spine of ALIGN. Cut it and the morning is only motion." },
+    drill: { why: "Thirty questions on what you just read. Meaning, not trivia. It proves you were there.", keep: "Sprint tests the sitting. Without it, reading can become skimming." },
+    affirm: { why: "Speak the line you wrote. The mouth trains the heart.", keep: "Affirm is your word over yourself. Silence here is how the day writes you instead." },
+    plan: { why: "Three true priorities. Decide once, then walk. The day does not get to invent itself.", keep: "Plan is how the morning becomes a day. Skip it and you will be pulled." },
+    ready: { why: "Bath, dress, leave the room in order. The body follows the soul out the door.", keep: "Get ready is the bridge into the world. Without it the path stops in the room." },
+    recite: { why: "The devotion verse once more before you go. Take it with you.", keep: "Verse again is the last look at the line. Removing it leaves the morning in the house." },
+    go: { why: "Step into the day. Nothing else to open. You already began.", keep: "Begin closes the path. Without it ALIGN never knows the morning is done." }
+  };
+
   const viewRoutine = () => {
     const r = L().loadRoutine();
     const byId = {};
     (L().STEPS || []).forEach((s) => { byId[s.id] = s; });
-    const steps = (r.order || []).map((id) => byId[id]).filter(Boolean);
+    const ordered = (r.order || []).map((id) => byId[id]).filter(Boolean);
+    const onSteps = ordered.filter((s) => r.on[s.id] !== false);
+    const offSteps = ordered.filter((s) => r.on[s.id] === false);
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
-    const rows = steps.map((s, i) => {
+    const rowOf = (s, i, on) => {
       const locked = s.id === "rise" || s.id === "go";
-      const on = r.on[s.id] !== false;
-      return `<div class="routine-step ${on ? "" : "off"}">
+      const why = (PATH_WHY[s.id] && PATH_WHY[s.id].why) || s.sub;
+      return `<div class="routine-step ${on ? "" : "off"}" data-id="${escapeAttr(s.id)}">
         <div class="circle-who">
+          ${on ? `<button type="button" class="path-handle" data-drag="1" aria-label="Drag to reorder">⋮⋮</button>` : ""}
           <div class="grow">
-            <h3>${i + 1}. ${escapeHtml(s.title)}</h3>
-            <p>${locked ? "Always on" : (on ? "On the path" : "Off · skipped")}</p>
+            <h3>${on ? (i + 1) + ". " : ""}${escapeHtml(s.title)}</h3>
+            <p>${escapeHtml(why)}</p>
           </div>
-          <div class="order-btns">
-            <button type="button" class="icon-btn sm" data-act="path-up" data-id="${escapeAttr(s.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button>
-            <button type="button" class="icon-btn sm" data-act="path-down" data-id="${escapeAttr(s.id)}" ${i === steps.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button>
-          </div>
-          ${locked ? "" : `<button type="button" class="toggle ${on ? "on" : ""}" data-act="toggle-path-step" data-id="${escapeAttr(s.id)}"><i></i></button>`}
+          ${locked ? `<span class="path-lock">Stays</span>` : (on
+            ? `<button type="button" class="btn ghost sm" data-act="drop-step" data-id="${escapeAttr(s.id)}">Remove</button>`
+            : `<button type="button" class="btn ghost sm" data-act="restore-step" data-id="${escapeAttr(s.id)}">Put back</button>`)}
         </div>
-        <div class="hours-grid tight">
+        ${on ? `<div class="hours-grid tight">
           <div class="field"><label>Weekday min</label><input id="rt-min-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.min[s.id] || 0}" /></div>
           <div class="field"><label>Sunday min</label><input id="rt-sun-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.minSun[s.id] || 0}" /></div>
-        </div>
+        </div>` : `<input type="hidden" id="rt-min-${escapeAttr(s.id)}" value="${r.min[s.id] || 0}" /><input type="hidden" id="rt-sun-${escapeAttr(s.id)}" value="${r.minSun[s.id] || 0}" />`}
       </div>`;
-    }).join("");
+    };
+    const rows = onSteps.map((s, i) => rowOf(s, i, true)).join("");
+    const offRows = offSteps.map((s, i) => rowOf(s, i, false)).join("");
     return `
       <div class="screen full routine">
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
         <div class="page-title"><div class="tag">You</div><h1>Your path.</h1></div>
         <div style="padding:0 16px calc(var(--safe-b) + 24px)">
-          <p class="hint">Set hours, pick a training week, turn steps on or off, and drag the order with the arrows. After you save, ALIGN still walks one step at a time — in your order.</p>
+          <p class="hint">Drag the ⋮⋮ handle to order the morning. Remove what you will not walk — ALIGN will ask, because each step has a reason. After you save, it still goes one at a time, in your order. Rise and Begin stay.</p>
           <div class="set-label">Hours</div>
           <div class="hours-grid">
             <div class="field"><label>Sunday rise</label><input id="rt-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
@@ -2829,8 +2847,9 @@
           <div class="plan-pick">
             ${packs.map((p) => `<button type="button" class="plan-card ${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}"><h4>${escapeHtml(p.name)}</h4><p>${escapeHtml(p.blurb)}</p></button>`).join("")}
           </div>
-          <div class="set-label">Steps</div>
-          <div class="circle-list">${rows}</div>
+          <div class="set-label">Your order</div>
+          <div class="circle-list path-edit-list">${rows}</div>
+          ${offRows ? `<div class="set-label">Not on your path</div><div class="circle-list">${offRows}</div>` : ""}
           <button class="btn" data-act="save-routine" style="margin-top:16px">Save path</button>
         </div>
       </div>
@@ -4081,6 +4100,58 @@
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
 
+  const bindPathDrag = () => {
+    if (state.view !== "routine") return;
+    const list = app.querySelector(".path-edit-list");
+    if (!list) return;
+    let dragEl = null;
+    const idsNow = () => Array.from(list.querySelectorAll(".routine-step[data-id]")).map((n) => n.getAttribute("data-id"));
+    const onMove = (e) => {
+      if (!dragEl) return;
+      const y = e.clientY;
+      const others = Array.from(list.querySelectorAll(".routine-step[data-id]")).filter((n) => n !== dragEl);
+      let placed = false;
+      for (let i = 0; i < others.length; i++) {
+        const box = others[i].getBoundingClientRect();
+        if (y < box.top + box.height / 2) {
+          list.insertBefore(dragEl, others[i]);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) list.appendChild(dragEl);
+    };
+    const finish = () => {
+      if (!dragEl) return;
+      dragEl.classList.remove("dragging");
+      dragEl = null;
+      const visible = idsNow();
+      const patch = readPathForm();
+      const rest = (patch.order || []).filter((id) => visible.indexOf(id) < 0);
+      patch.order = visible.concat(rest);
+      pushRoutine(patch);
+    };
+    list.addEventListener("pointerdown", (e) => {
+      const handle = e.target && e.target.closest && e.target.closest("[data-drag]");
+      if (!handle) return;
+      const row = handle.closest(".routine-step");
+      if (!row) return;
+      dragEl = row;
+      row.classList.add("dragging");
+      const move = (ev) => onMove(ev);
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        finish();
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+      e.preventDefault();
+    });
+  };
+
   const bind = () => {
     app.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
       if (state.view === "drill") stopDrillTick();
@@ -4288,6 +4359,7 @@
       });
     }
     bindReaderGestures();
+    bindPathDrag();
   };
 
   const bindReaderGestures = () => {
@@ -4642,6 +4714,7 @@
       state.sheet = null; render();
     } else if (act === "sheet-yes") {
       const kind = state.sheet && state.sheet.kind;
+      const stepId = state.sheet && state.sheet.stepId;
       state.sheet = null;
       if (kind === "quit") {
         clearTick(); state.workout = null; state.view = "home"; render();
@@ -4670,6 +4743,15 @@
         state.journalNoteId = "";
         state.view = "journal";
         toast("Note deleted");
+      } else if (kind === "drop-step") {
+        const id = stepId;
+        if (!id || id === "rise" || id === "go") { render(); return; }
+        const patch = readPathForm();
+        patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
+        patch.on[id] = false;
+        pushRoutine(patch);
+        toast("Removed from the path. You can put it back.");
+        render();
       } else render();
     } else if (act === "save-workout") {
       saveWorkout();
@@ -4763,25 +4845,33 @@
       try { pushRoutine(readPathForm()); toast("Path saved"); }
       catch { toast("Could not save path"); }
       render();
-    } else if (act === "toggle-path-step") {
+    } else if (act === "drop-step") {
       const id = el && el.dataset ? el.dataset.id : "";
-      if (!id || id === "rise" || id === "go") return;
-      const patch = readPathForm();
-      patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
-      patch.on[id] = patch.on[id] === false;
-      pushRoutine(patch);
+      if (!id) return;
+      if (id === "rise" || id === "go") {
+        toast("Rise and Begin hold the morning. They stay.");
+        return;
+      }
+      const why = PATH_WHY[id] || {};
+      const title = ((L().STEPS || []).find((s) => s.id === id) || {}).title || "this step";
+      state.sheet = {
+        title: "Remove " + title + "?",
+        body: why.keep || "This step is on the path for a reason. Remove it only if you will not walk it.",
+        confirm: "Remove it",
+        cancel: "Keep it",
+        danger: true,
+        kind: "drop-step",
+        stepId: id
+      };
       render();
-    } else if (act === "path-up" || act === "path-down") {
+    } else if (act === "restore-step") {
       const id = el && el.dataset ? el.dataset.id : "";
       if (!id) return;
       const patch = readPathForm();
-      const order = (patch.order || L().loadRoutine().order || []).slice();
-      const i = order.indexOf(id);
-      const j = act === "path-up" ? i - 1 : i + 1;
-      if (i < 0 || j < 0 || j >= order.length) return;
-      const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-      patch.order = order;
+      patch.on = Object.assign({}, patch.on || L().loadRoutine().on);
+      patch.on[id] = true;
       pushRoutine(patch);
+      toast("Back on the path.");
       render();
     } else if (act === "train-plan") {
       const id = el && el.dataset ? el.dataset.id : "";

@@ -2060,6 +2060,17 @@ img { max-width: 100%; display: block; }
 .order-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .icon-btn.sm { width: 32px; height: 32px; border-radius: 10px; font-size: 14px; font-weight: 800; }
 .icon-btn.sm:disabled { opacity: .35; }
+.path-handle {
+  width: 36px; height: 40px; flex-shrink: 0; border: 0; background: transparent;
+  color: var(--muted); font-size: 16px; letter-spacing: -2px; font-weight: 800;
+  touch-action: none; cursor: grab; line-height: 1;
+}
+.path-handle:active { cursor: grabbing; }
+.routine-step.dragging { opacity: .7; border-color: var(--lime); }
+.path-lock { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.btn.ghost.sm { height: 36px; padding: 0 12px; font-size: 12px; width: auto; flex-shrink: 0; }
+.routine-step .circle-who { align-items: flex-start; }
+.routine-step .grow p { font-size: 13px; line-height: 1.4; color: var(--muted); }
 .plan-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 16px; }
 .plan-card {
   text-align: left; color: inherit;
