@@ -5155,7 +5155,7 @@
       const r = await AlignDB.createCircle("ALIGN circle");
       state.circleBusy = false;
       if (r && r.ok) { state.circle = r.data || null; toast("Circle started. Share the code."); }
-      else state.circleErr = (r && r.error) || "Could not start a circle. Run sql/schema-circle.sql in Supabase.";
+      else state.circleErr = (r && r.error) || "Could not start a circle. Run sql/schema-circle-start.sql in Supabase.";
       render();
     } else if (act === "join-circle") {
       if (!state.session) { state.view = "auth"; render(); return; }

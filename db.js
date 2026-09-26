@@ -1489,22 +1489,14 @@ window.AlignDB = (() => {
     if (!auth.token || !auth.uid) return fail("Sign in to start a circle");
     const have = await fetchMyCircle();
     if (have && have.ok && have.data) return fail("Leave your circle first");
-    const id = (crypto.randomUUID && crypto.randomUUID()) || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-      const r = Math.random() * 16 | 0;
-      return (ch === "x" ? r : (r & 0x3 | 0x8)).toString(16);
-    }));
-    const code = circleCode();
-    let err = await restUpsert("circles", {
-      id,
-      name: String(name || "ALIGN circle").trim().slice(0, 40) || "ALIGN circle",
-      code,
-      created_by: auth.uid
-    }, "id");
-    if (err && missingTable(err)) return fail("Run sql/schema-circle.sql in Supabase once.");
-    if (err) return fail(err);
-    err = await restUpsert("circle_members", { circle_id: id, user_id: auth.uid }, "circle_id,user_id");
-    if (err && missingTable(err)) return fail("Run sql/schema-circle.sql in Supabase once.");
-    if (err) return fail(err);
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const label = String(name || "ALIGN circle").trim().slice(0, 40) || "ALIGN circle";
+    const { error } = await sb.rpc("create_circle", { p_name: label });
+    if (error && (missingTable(error) || /create_circle|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle-start.sql in Supabase once.");
+    }
+    if (error) return fail(error);
     return fetchMyCircle();
   };
 
