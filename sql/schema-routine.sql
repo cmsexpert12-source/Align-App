@@ -83,34 +83,34 @@ begin
       s.last_wake_sent,
       s.last_lights_sent,
       case
-        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 8
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 12
           then 'wake'
         when s.pre_wake_tom < 0
           and s.local_mins >= (1440 + s.pre_wake_tom)
-          and s.local_mins < (1440 + s.pre_wake_tom + 8)
+          and s.local_mins < (1440 + s.pre_wake_tom + 12)
           then 'wake'
         when s.pre_lights >= 0
-          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 8
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 12
           then 'lights'
         when s.pre_lights_tom < 0
           and s.local_mins >= (1440 + s.pre_lights_tom)
-          and s.local_mins < (1440 + s.pre_lights_tom + 8)
+          and s.local_mins < (1440 + s.pre_lights_tom + 12)
           then 'lights'
         else null
       end as knd,
       case
-        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 8
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 12
           then s.local_date
         when s.pre_wake_tom < 0
           and s.local_mins >= (1440 + s.pre_wake_tom)
-          and s.local_mins < (1440 + s.pre_wake_tom + 8)
+          and s.local_mins < (1440 + s.pre_wake_tom + 12)
           then s.next_date
         when s.pre_lights >= 0
-          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 8
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 12
           then s.local_date
         when s.pre_lights_tom < 0
           and s.local_mins >= (1440 + s.pre_lights_tom)
-          and s.local_mins < (1440 + s.pre_lights_tom + 8)
+          and s.local_mins < (1440 + s.pre_lights_tom + 12)
           then s.next_date
         else s.local_date
       end as morn

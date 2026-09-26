@@ -770,17 +770,31 @@ window.AlignDB = (() => {
         user_id: userId, scripture: sc, updated_at: now
       }, "user_id");
     } else if (item.kind === "prefs") {
+      let routine = {};
+      try { routine = (window.ALIGN_LIFE && ALIGN_LIFE.loadRoutine && ALIGN_LIFE.loadRoutine()) || {}; } catch { routine = {}; }
       const row = {
         user_id: userId,
         enabled: !!p.enabled,
-        reminder_hour: p.hour != null ? p.hour : 5,
-        reminder_minute: p.minute != null ? p.minute : 0,
+        reminder_hour: p.hour != null ? p.hour : (routine.wkWakeH != null ? routine.wkWakeH : 5),
+        reminder_minute: p.minute != null ? p.minute : (routine.wkWakeM != null ? routine.wkWakeM : 0),
         timezone: p.timezone || "Africa/Lagos",
+        sun_wake_h: routine.sunWakeH,
+        sun_wake_m: routine.sunWakeM,
+        wk_wake_h: routine.wkWakeH,
+        wk_wake_m: routine.wkWakeM,
+        sun_lights_h: routine.sunLightsH,
+        sun_lights_m: routine.sunLightsM,
+        wk_lights_h: routine.wkLightsH,
+        wk_lights_m: routine.wkLightsM,
         updated_at: now
       };
       err = await restUpsert("notification_prefs", row, "user_id");
       if (err && /timezone|schema cache|column/i.test(err.message || "")) {
         delete row.timezone;
+        delete row.sun_wake_h; delete row.sun_wake_m;
+        delete row.wk_wake_h; delete row.wk_wake_m;
+        delete row.sun_lights_h; delete row.sun_lights_m;
+        delete row.wk_lights_h; delete row.wk_lights_m;
         err = await restUpsert("notification_prefs", row, "user_id");
       }
     } else if (item.kind === "routine") {
@@ -800,8 +814,14 @@ window.AlignDB = (() => {
           user_id: userId, scripture: sc, updated_at: now
         }, "user_id");
       }
+      let tz = "Africa/Lagos";
+      try {
+        const pr = readJSON("align-notif-prefs", {}) || {};
+        if (pr.timezone) tz = pr.timezone;
+      } catch { /* ignore */ }
       const clocks = {
         user_id: userId,
+        timezone: tz,
         sun_wake_h: routine.sunWakeH,
         sun_wake_m: routine.sunWakeM,
         wk_wake_h: routine.wkWakeH,

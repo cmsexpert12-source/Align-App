@@ -307,9 +307,33 @@
     state.pushReady = true;
     state.prefs.enabled = true;
     state.prefs.timezone = phoneTz();
+    try {
+      const clk = L().clocksFor(new Date());
+      state.prefs.hour = clk.wakeH;
+      state.prefs.minute = clk.wakeM || 0;
+    } catch { /* hours optional */ }
     await AlignDB.savePrefs(state.prefs);
     armLocalAlarms();
     return { ok: true };
+  };
+
+  const refreshPushSub = async () => {
+    if (!state.prefs.enabled) return;
+    if (!window.Notification || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const key = (window.ALIGN_CONFIG && window.ALIGN_CONFIG.vapidPublicKey) || "";
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub && key) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(key)
+        });
+      }
+      if (sub && state.session && AlignDB.savePushSub) await AlignDB.savePushSub(sub);
+      state.pushReady = !!sub;
+    } catch { /* local alarms still tick */ }
   };
 
   const disablePush = async () => {
@@ -402,6 +426,7 @@
     const prefs = await AlignDB.fetchPrefs();
     if (prefs.ok && prefs.data) state.prefs = prefs.data;
     armLocalAlarms();
+    refreshPushSub().catch(() => {});
     const prof = await AlignDB.fetchProfile();
     if (prof.ok && prof.data && prof.data.display_name) {
       state.profile.name = prof.data.display_name;
@@ -5210,8 +5235,9 @@
         await disablePush();
         toast("Reminders off");
       } else {
-        state.prefs.hour = L().clocksFor(new Date()).wakeH;
-        state.prefs.minute = 0;
+        const clk = L().clocksFor(new Date());
+        state.prefs.hour = clk.wakeH;
+        state.prefs.minute = clk.wakeM || 0;
         const res = await enablePush();
         if (!res.ok) toast(res.error);
         else toast(state.session ? "Reminders on · 5 min before rise, 10 min before lights" : "On while ALIGN is open. Sign in so they still arrive when it is closed.");
@@ -5848,6 +5874,7 @@
       if (prefs) state.prefs = prefs;
     } catch { /* ignore */ }
     armLocalAlarms();
+    refreshPushSub().catch(() => {});
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       tickAlarms();

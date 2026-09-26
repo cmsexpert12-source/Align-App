@@ -184,13 +184,13 @@ export default async function handler(req, res) {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.end("ok");
   }
-  if (req.method !== "POST") return send(res, 405, { error: "POST only" });
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return send(res, 500, { error: "VAPID keys missing. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on Vercel." });
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const mode = body.mode === "test" ? "test" : "tick";
 
   if (mode === "test") {
+    if (req.method !== "POST") return send(res, 405, { error: "POST only" });
     const auth = String(req.headers.authorization || "");
     const jwt = auth.replace(/^Bearer\s+/i, "");
     if (!jwt) return send(res, 401, { error: "Sign in first" });
@@ -207,8 +207,10 @@ export default async function handler(req, res) {
     return send(res, 200, { ok: true, ...results, title: payload.title });
   }
 
+  if (req.method !== "POST" && req.method !== "GET") return send(res, 405, { error: "GET or POST" });
   const cronHeader = String(req.headers["x-cron-secret"] || "");
-  if (!CRON || cronHeader !== CRON) return send(res, 401, { error: "Unauthorized cron" });
+  const bearer = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!CRON || (cronHeader !== CRON && bearer !== CRON)) return send(res, 401, { error: "Unauthorized cron" });
   if (!SERVICE) return send(res, 500, { error: "Set SUPABASE_SERVICE_ROLE_KEY on Vercel." });
 
   const due = await rest("/rest/v1/rpc/align_due_push", {
