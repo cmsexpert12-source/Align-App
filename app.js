@@ -1614,6 +1614,7 @@
         try { S().ingestReading(today().iso, state.readPacks); } catch { /* local quiz */ }
         S().enrichReading(today().iso, state.readPacks).catch(() => {});
       }
+      try { if (L().prefetchChapter) L().prefetchChapter(book, chapter); } catch { /* next chapter optional */ }
     } catch (e) {
       state.bibleErr = (e && e.message) || "Could not load this chapter. Check the connection.";
     }
@@ -3805,6 +3806,8 @@
     const target = L().chapterTarget(iso);
     const verses = (data && data.verses) || [];
     const sunday = target === 1;
+    const tr = (L().bibleTr && L().bibleTr()) || "kjv";
+    const trName = tr === "web" ? "World English Bible" : "King James";
     return `
       <div class="screen full has-cta">
         <div class="back-row">
@@ -3813,7 +3816,11 @@
           <button class="linkish" data-act="bible-pick">Jump</button>
         </div>
         <div class="page-title" style="padding-bottom:0">
-          <div class="tag">${readN}/${target} today${sunday ? " · church morning" : ""} · World English Bible</div>
+          <div class="tag">${readN}/${target} today${sunday ? " · church morning" : ""} · ${trName}</div>
+          <div class="seg bible-tr" style="grid-template-columns:1fr 1fr;margin:10px 0 0">
+            <button type="button" class="${tr === "kjv" ? "on" : ""}" data-act="bible-tr" data-tr="kjv">KJV</button>
+            <button type="button" class="${tr === "web" ? "on" : ""}" data-act="bible-tr" data-tr="web">WEB</button>
+          </div>
         </div>
         <div class="scripture">
           ${state.bibleLoading ? `<p class="hint">Loading chapter…</p>` : ""}
@@ -5327,6 +5334,11 @@
       } else {
         openBible(cur.book, cur.chapter);
       }
+    } else if (act === "bible-tr") {
+      const tr = el.dataset.tr === "web" ? "web" : "kjv";
+      if (L().setBibleTr) L().setBibleTr(tr);
+      if (state.readBook && state.readCh) openBible(state.readBook, state.readCh);
+      else render();
     } else if (act === "bible-prev") {
       const p = L().prevRef(state.readBook || "Genesis", state.readCh || 1);
       openBible(p.book, p.chapter);

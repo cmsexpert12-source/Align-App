@@ -556,17 +556,54 @@ window.ALIGN_LIFE = (() => {
     return { book: p.name, chapter: p.chapters };
   };
 
+  const LS_TR = "align-bible-tr";
+  const LS_CH = "align-bible-ch";
+  const bibleTr = () => {
+    try {
+      const t = localStorage.getItem(LS_TR);
+      if (t === "web" || t === "kjv") return t;
+    } catch { /* ignore */ }
+    return "kjv";
+  };
+  const setBibleTr = (id) => {
+    const t = id === "web" ? "web" : "kjv";
+    try { localStorage.setItem(LS_TR, t); } catch { /* ignore */ }
+    return t;
+  };
+  const readDiskCh = () => {
+    try { return JSON.parse(localStorage.getItem(LS_CH) || "{}") || {}; } catch { return {}; }
+  };
+  const writeDiskCh = (map) => {
+    const keys = Object.keys(map || {});
+    if (keys.length > 24) keys.slice(0, keys.length - 24).forEach((k) => { delete map[k]; });
+    try { localStorage.setItem(LS_CH, JSON.stringify(map)); } catch { /* quota */ }
+  };
   const chapterCache = {};
   const fetchChapter = async (book, chapter) => {
-    const key = book + " " + chapter;
+    const tr = bibleTr();
+    const key = tr + "|" + book + " " + chapter;
     if (chapterCache[key]) return chapterCache[key];
-    const url = "https://bible-api.com/" + encodeURIComponent(key) + "?translation=web";
+    const disk = readDiskCh();
+    if (disk[key] && disk[key].verses && disk[key].verses.length) {
+      chapterCache[key] = disk[key];
+      return disk[key];
+    }
+    const url = "https://bible-api.com/" + encodeURIComponent(book + " " + chapter) + "?translation=" + encodeURIComponent(tr);
     const res = await fetch(url);
-    if (!res.ok) throw new Error("Could not load " + key);
+    if (!res.ok) throw new Error("Could not load " + book + " " + chapter);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    chapterCache[key] = data;
-    return data;
+    const slim = { reference: data.reference, verses: data.verses || [], translation_id: tr };
+    chapterCache[key] = slim;
+    disk[key] = slim;
+    writeDiskCh(disk);
+    return slim;
+  };
+  const prefetchChapter = (book, chapter) => {
+    try {
+      const n = nextRef(book, chapter);
+      fetchChapter(n.book, n.chapter).catch(() => {});
+    } catch { /* ignore */ }
   };
 
   const markChapterRead = (iso, book, chapter, verses) => {
@@ -1008,7 +1045,7 @@ window.ALIGN_LIFE = (() => {
     timesOf, markOpen, markClose, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
     idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
-    fetchChapter, markChapterRead, todayAssignment,
+    fetchChapter, prefetchChapter, bibleTr, setBibleTr, markChapterRead, todayAssignment,
     planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
     affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse, fetchKjv
