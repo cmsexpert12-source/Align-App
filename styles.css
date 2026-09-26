@@ -241,6 +241,10 @@ img { max-width: 100%; display: block; }
 .greet h2 {
   font-family: var(--display); font-size: 26px; letter-spacing: -.04em; color: var(--text); margin-top: 2px;
 }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sound-launch svg { width: 18px; height: 18px; }
+.sound-launch.on { color: var(--lime); border-color: rgba(214,255,63,.35); background: var(--lime-dim); }
+.sound-now .now-play svg { width: 20px; height: 20px; }
 .avatar {
   width: 40px; height: 40px; border-radius: 14px;
   background: var(--lime-dim); color: var(--lime);

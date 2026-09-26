@@ -1829,6 +1829,7 @@
       go: `<path d="M5 12h12M13 6l6 6-6 6" ${s}/>`,
       read: `<path d="M4 19V6a2 2 0 0 1 2-2h5v15H6a2 2 0 0 0-2 2z" ${s}/><path d="M13 4h5a2 2 0 0 1 2 2v13h-7V4z" ${s}/>`,
       spark: `<path d="M12 3l1.2 6.2L19 12l-5.8 2.8L12 21l-1.2-6.2L5 12l5.8-2.8L12 3z" ${s}/>`,
+      sound: `<path d="M5 10v4h3.2L14 18V6L8.2 10H5z" ${s}/><path d="M16.4 9.2a3 3 0 0 1 0 5.6M18.6 7.2a6 6 0 0 1 0 9.6" ${s}/>`,
       bell: `<path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" ${s}/><path d="M10 21h4" ${s}/>`,
       key: `<circle cx="8" cy="12" r="3" ${s}/><path d="M11 12h9l-2 2 2 2" ${s}/>`,
       verse: `<path d="M5 5h14v4H5zM5 12h14M5 16h10" ${s}/>`,
@@ -1854,6 +1855,12 @@
     if (view === "journal") return "journal";
     if (view === "profile" || view === "sound" || view === "circle" || view === "routine") return "profile";
     return null;
+  };
+
+  const soundLaunch = () => {
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
+    const on = !!(snd.playing || snd.id);
+    return `<button type="button" class="icon-btn sound-launch ${on ? "on" : ""}" data-go="sound" title="Sound">${stepIcon("sound")}</button>`;
   };
 
   /* ---------- VIEWS ---------- */
@@ -2162,7 +2169,10 @@
       <div class="screen home">
         <div class="topbar">
           <div class="greet">${greet()}<h2>${name ? escapeHtml(name) : DOW_FULL[t.dow]}</h2></div>
-          <button class="avatar" data-go="profile" title="You">${initials()}</button>
+          <div class="topbar-actions">
+            ${soundLaunch()}
+            <button class="avatar" data-go="profile" title="You">${initials()}</button>
+          </div>
         </div>
         ${state.offline ? `<div class="offline">You’re offline. The morning still works on this device.</div>` : ""}
         ${install}
@@ -2191,6 +2201,17 @@
             })()}
           </div>
         </div>
+        ${(() => {
+          const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
+          if (snd.playing || snd.id) return "";
+          return `<button type="button" class="sound-now" data-go="sound">
+            <span class="now-play">${stepIcon("sound")}</span>
+            <span class="sound-now-meta">
+              <h4>Sound</h4>
+              <p>Stations, library, or your audio — in ALIGN.</p>
+            </span>
+          </button>`;
+        })()}
         ${wordToday}
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
@@ -2422,7 +2443,7 @@
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Time<h2>Pace.</h2></div>
-          <button class="linkish" data-go="home">Today</button>
+          <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="home">Today</button></div>
         </div>
         <p class="plan-kicker">${headHint}. Ideal is the mark. Actual is what happened. The gap is where to focus.</p>
         ${liveLine}
@@ -2474,7 +2495,7 @@
     return `
       <div class="screen plan">
         <div class="topbar"><div class="greet">Move<h2>This week.</h2></div>
-          <button class="linkish" data-go="progress">Log</button>
+          <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="progress">Log</button></div>
         </div>
         <div class="shelf-chips" style="padding:0 16px 10px">
           ${packs.map((p) => `<button type="button" class="${p.id===planId?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
@@ -2678,7 +2699,7 @@
     return `
       <div class="screen progress">
         <div class="topbar"><div class="greet">Move<h2>History.</h2></div>
-          <button class="linkish" data-go="plan">Week</button>
+          <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="plan">Week</button></div>
         </div>
         <div class="pulse" style="margin-left:0;margin-right:0">
           <div class="pulse-top">
@@ -2719,7 +2740,7 @@
 
   const viewBalance = () => `
     <div class="screen balance">
-      <div class="topbar"><div class="greet">Move<h2>How it’s built.</h2></div></div>
+      <div class="topbar"><div class="greet">Move<h2>How it’s built.</h2></div>${soundLaunch()}</div>
       <p class="plan-kicker" style="padding-top:0">A typical press-heavy week versus ALIGN — push, pull, legs, core, and mobility each get a real seat.</p>
       <div class="compare">
         <div class="col"><h5>Unbalanced</h5>${barCol(insights.old)}</div>
@@ -2824,7 +2845,7 @@
     const nBooks = B().list().length;
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">You<h2>Account.</h2></div></div>
+        <div class="topbar"><div class="greet">You<h2>Account.</h2></div>${soundLaunch()}</div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <div class="account-card">
             <div class="avatar">${initials()}</div>
@@ -3206,7 +3227,7 @@
       : "2 minutes · " + S().SPRINT_N + " questions · meaning, not verse trivia";
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div></div>
+        <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div>${soundLaunch()}</div>
         <p class="plan-kicker">Pray. Devotion. Two minutes on the verse. Hide it. Scripture. Sprint. Affirm. Read it again before you go — and before bed.</p>
         <div class="hub-grid">
           <button class="hub-card" data-act="open-step" data-step="pray">
@@ -3545,7 +3566,10 @@
       <div class="screen home journal">
         <div class="topbar">
           <div class="greet">Journal<h2>Notepad.</h2></div>
-          <button type="button" class="icon-btn add" data-act="journal-new" title="New note">+</button>
+          <div class="topbar-actions">
+            ${soundLaunch()}
+            <button type="button" class="icon-btn add" data-act="journal-new" title="New note">+</button>
+          </div>
         </div>
         <p class="plan-kicker">Tap + for a new page. Write as many as you want. Not the devotion.</p>
         ${notes.length ? `<div class="journal-list">${notes.map((n) => `
