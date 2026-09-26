@@ -1438,7 +1438,22 @@ window.AlignDB = (() => {
     const userId = await uidOf();
     if (!userId) return ok(null);
     const mine = await restSelect("circle_members", "select=circle_id,joined_at&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
-    if (!mine.length) return ok(null);
+    if (!mine.length) {
+      const asked = await restSelect("circle_requests", "select=circle_id,created_at,display_name&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      if (!asked.length) return ok(null);
+      const cid = asked[0].circle_id;
+      const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
+      const circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+      return ok({
+        id: circle.id,
+        name: circle.name || "ALIGN circle",
+        code: "",
+        created_by: circle.created_by,
+        members: [],
+        requests: [],
+        pending: true
+      });
+    }
     const cid = mine[0].circle_id;
     const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
     const circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
@@ -1475,12 +1490,26 @@ window.AlignDB = (() => {
       name: names[id] || "ALIGN",
       days: byUser[id] || []
     }));
+    let requests = [];
+    if (circle.created_by === userId) {
+      const rows = await restSelect(
+        "circle_requests",
+        "select=user_id,display_name,created_at&circle_id=eq." + encodeURIComponent(cid) + "&order=created_at.asc"
+      );
+      requests = (rows || []).map((r) => ({
+        id: r.user_id,
+        name: r.display_name || "ALIGN",
+        at: r.created_at
+      }));
+    }
     return ok({
       id: circle.id,
       name: circle.name || "ALIGN circle",
       code: circle.code || "",
       created_by: circle.created_by,
-      members
+      members,
+      requests,
+      pending: false
     });
   };
 
@@ -1488,7 +1517,9 @@ window.AlignDB = (() => {
     const auth = await refreshAuth(false);
     if (!auth.token || !auth.uid) return fail("Sign in to start a circle");
     const have = await fetchMyCircle();
-    if (have && have.ok && have.data) return fail("Leave your circle first");
+    if (have && have.ok && have.data) {
+      return fail(have.data.pending ? "Cancel your request first" : "Leave your circle first");
+    }
     const sb = client();
     if (!sb) return fail("Cloud is not ready");
     const label = String(name || "ALIGN circle").trim().slice(0, 40) || "ALIGN circle";
@@ -1506,7 +1537,8 @@ window.AlignDB = (() => {
     const raw = String(code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8);
     if (raw.length < 6) return fail("Enter the circle code");
     const have = await fetchMyCircle();
-    if (have && have.ok && have.data) return fail("Leave your circle first");
+    if (have && have.ok && have.data && !have.data.pending) return fail("Leave your circle first");
+    if (have && have.ok && have.data && have.data.pending) return fail("Cancel your request first");
     const sb = client();
     if (!sb) return fail("Cloud is not ready");
     const { error } = await sb.rpc("join_circle", { p_code: raw });
@@ -1515,6 +1547,39 @@ window.AlignDB = (() => {
     }
     if (error) return fail(error);
     return fetchMyCircle();
+  };
+
+  const approveCircle = async (userId) => {
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const { error } = await sb.rpc("approve_circle", { p_user_id: userId });
+    if (error && (missingTable(error) || /approve_circle|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle-approve.sql in Supabase once.");
+    }
+    if (error) return fail(error);
+    return fetchMyCircle();
+  };
+
+  const denyCircle = async (userId) => {
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const { error } = await sb.rpc("deny_circle", { p_user_id: userId });
+    if (error && (missingTable(error) || /deny_circle|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle-approve.sql in Supabase once.");
+    }
+    if (error) return fail(error);
+    return fetchMyCircle();
+  };
+
+  const cancelCircleRequest = async () => {
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const { error } = await sb.rpc("cancel_circle_request");
+    if (error && (missingTable(error) || /cancel_circle_request|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle-approve.sql in Supabase once.");
+    }
+    if (error) return fail(error);
+    return ok(true);
   };
 
   const leaveCircle = async () => {
@@ -1556,6 +1621,7 @@ window.AlignDB = (() => {
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
     token: () => cachedToken || ((sessionFromStorage() || {}).access_token) || "",
     fetchMyCircle, createCircle, joinCircle, leaveCircle,
+    approveCircle, denyCircle, cancelCircleRequest,
     flush, pendingCount, status, syncNow, onStatus, seedLocal, markHydrated: () => { hydrated = true; scheduleFlush(0); }
   };
 })();

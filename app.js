@@ -2946,9 +2946,11 @@
 
           <div class="set-label">Circle</div>
           <button class="setting" data-go="circle">
-            <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.members && state.circle.members.length
+            <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.pending
+              ? "Asked to join · waiting for the founder"
+              : (state.circle && state.circle.members && state.circle.members.length
               ? (state.circle.members.length + " people · path, schedule, book, rise, sleep")
-              : "Invite people. They see path, schedule, the book, and when you rose and slept — not your journal."}</p></div>
+              : "Invite people. They see path, schedule, the book, and when you rose and slept — not your journal.")}</p></div>
           </button>
 
           <div class="set-label">Morning hours</div>
@@ -3157,7 +3159,10 @@
       const dots = week.map((iso) => {
         const row = byDate[iso];
         const cls = row && row.path_done ? "on" : (row && row.done ? "mid" : "");
-        return `<i class="${cls}" title="${escapeAttr(iso)}"></i>`;
+        const dt = new Date(iso + "T12:00:00");
+        const lab = DOW[dt.getDay()][0];
+        const isToday = iso === todayIso;
+        return `<span class="circle-dot ${cls}${isToday ? " today" : ""}" title="${escapeAttr(iso)}"><i></i><b>${lab}</b></span>`;
       }).join("");
       const label = (m.id === me) ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
       const mine = m.id === me;
@@ -3166,20 +3171,19 @@
         try { sched = JSON.parse(sched); } catch { sched = []; }
       }
       if (!Array.isArray(sched)) sched = [];
-      const schedLine = !mine && todayRow && todayRow.sched_total
-        ? (todayRow.sched_done + " / " + todayRow.sched_total + " on the schedule")
-        : "";
-      const schedList = (!mine && sched.length)
-        ? `<ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}">${it.done ? "✓" : "○"} ${escapeHtml(it.text || "")}</li>`).join("")}</ul>`
+      const schedDone = Number(todayRow && todayRow.sched_done) || sched.filter((x) => x && x.done).length;
+      const schedTotal = Number(todayRow && todayRow.sched_total) || sched.length;
+      const schedBlock = !mine
+        ? (sched.length
+          ? `<div class="circle-sec"><h4>Today <span>${schedDone} of ${schedTotal}</span></h4>
+              <ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}"><span class="circle-mark">${it.done ? "✓" : ""}</span><span>${escapeHtml(it.text || "")}</span></li>`).join("")}</ul></div>`
+          : `<div class="circle-sec"><h4>Today</h4><p class="circle-empty">No schedule yet.</p></div>`)
         : "";
       const mins = Math.round((Number(todayRow && todayRow.read_ms) || 0) / 60000);
       const timeLine = mins >= 60
         ? (Math.floor(mins / 60) + "h" + (mins % 60 ? " " + (mins % 60) + "m" : "") + " reading")
         : (mins > 0 ? mins + " min reading" : "");
       const bookTitle = (todayRow && todayRow.book_title) || "";
-      const bookLine = (!mine && bookTitle)
-        ? (bookTitle + " · p." + (todayRow.book_page || 1) + (todayRow.book_pages ? " of " + todayRow.book_pages : "") + (timeLine ? " · " + timeLine : ""))
-        : (!mine && timeLine ? timeLine : "");
       const clockLab = (iso) => {
         if (!iso) return "";
         const d = new Date(iso);
@@ -3188,21 +3192,43 @@
       };
       const upLab = !mine ? clockLab(todayRow && todayRow.wake_at) : "";
       const downLab = !mine ? clockLab(todayRow && todayRow.lights_at) : "";
-      const clockLine = [upLab ? ("Up " + upLab) : "", downLab ? ("Down " + downLab) : ""].filter(Boolean).join(" · ");
+      const clockMeta = !mine && (upLab || downLab)
+        ? `<div class="circle-meta">${upLab ? `<span class="circle-chip">Up ${escapeHtml(upLab)}</span>` : ""}${downLab ? `<span class="circle-chip">Down ${escapeHtml(downLab)}</span>` : ""}</div>`
+        : "";
+      const bookBlock = !mine && bookTitle
+        ? `<div class="circle-sec"><h4>Reading</h4><p class="circle-book">${escapeHtml(bookTitle)}${todayRow.book_page ? " · p." + todayRow.book_page : ""}${todayRow.book_pages ? " of " + todayRow.book_pages : ""}${timeLine ? " · " + timeLine : ""}</p></div>`
+        : (!mine && timeLine ? `<div class="circle-sec"><h4>Reading</h4><p class="circle-book">${escapeHtml(timeLine)}</p></div>` : "");
+      const flagOn = !!(todayRow && todayRow.path_done);
       return `<div class="circle-row">
         <div class="circle-who">
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
           <div class="grow">
             <h3>${escapeHtml(label)}</h3>
-            <p>${escapeHtml(status)}${streak ? " · " + streak + " day streak" : ""}${schedLine ? " · " + escapeHtml(schedLine) : ""}</p>
+            <p>${streak ? streak + " day streak" : (mine ? "Your path" : "Walking with you")}</p>
           </div>
+          <span class="circle-flag ${flagOn ? "" : "wait"}">${escapeHtml(status)}</span>
         </div>
-        <div class="circle-dots">${dots}</div>
-        ${schedList}
-        ${clockLine ? `<p class="circle-book">${escapeHtml(clockLine)}</p>` : ""}
-        ${bookLine ? `<p class="circle-book">${escapeHtml(bookLine)}</p>` : ""}
+        <div class="circle-week">${dots}</div>
+        ${clockMeta}
+        ${schedBlock}
+        ${bookBlock}
       </div>`;
     };
+    const founder = !!(c && c.created_by && c.created_by === me);
+    const asks = (c && c.requests) || [];
+    const askBlock = (r) => `<div class="circle-row circle-ask">
+        <div class="circle-who">
+          <div class="avatar sm">${escapeHtml(((r.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
+          <div class="grow">
+            <h3>${escapeHtml(r.name || "ALIGN")}</h3>
+            <p>Wants in. You decide.</p>
+          </div>
+        </div>
+        <div class="circle-ask-actions">
+          <button class="btn" data-act="approve-circle" data-uid="${escapeAttr(r.id || "")}" ${state.circleBusy ? "disabled" : ""}>Let them in</button>
+          <button class="btn ghost" data-act="deny-circle" data-uid="${escapeAttr(r.id || "")}" ${state.circleBusy ? "disabled" : ""}>Not now</button>
+        </div>
+      </div>`;
     const body = !signed
       ? `<div class="room">
            <div class="tag">Together</div>
@@ -3210,21 +3236,37 @@
            <p>Sign in so a circle can see your path, today’s schedule, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
            <button class="btn" data-go="auth">Create account</button>
          </div>`
+      : (c && c.pending)
+        ? `<div class="room">
+           <div class="tag">Waiting</div>
+           <h3>Asked to join.</h3>
+           <p>The founder of ${escapeHtml(c.name || "the circle")} has to say yes before you walk together. They will not see your journal, notes, or affirmation.</p>
+           ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
+           <button class="btn ghost" data-act="cancel-request" ${state.circleBusy ? "disabled" : ""}>Cancel request</button>
+         </div>`
       : !c
         ? `<div class="room">
            <div class="tag">Together</div>
            <h3>Invite a few.</h3>
-           <p>They see today’s path, the schedule and whether it’s done, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
+           <p>They see today’s path, the schedule and whether it’s done, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation. The founder lets each person in.</p>
            ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
            </div>
-           <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Join circle</button>
+           <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Ask to join</button>
            <button class="btn ghost" data-act="create-circle" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>
          </div>`
-        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · path, schedule, book, rise, sleep. Not the diary.</p>
-           <button class="btn ghost" data-act="copy-code" style="height:44px">Copy invite code</button>
-           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\"room\"><h3>Just you so far.</h3><p>Share the code. The circle fills when someone joins.</p></div>"}</div>
+        : `${c.code ? `<div class="circle-invite">
+             <div class="grow">
+               <span class="circle-invite-k">Invite code</span>
+               <b class="circle-code">${escapeHtml(c.code)}</b>
+               <p>${founder ? "They ask with this. You let them in." : "Share this. The founder lets people in."}</p>
+             </div>
+             <button class="btn ghost sm" data-act="copy-code">Copy</button>
+           </div>` : ""}
+           ${founder && asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
+           <div class="set-label">${(c.members || []).length ? "Walking" : ""}</div>
+           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\\\"room\\\"><h3>Just you so far.</h3><p>Share the code. They ask. You say yes.</p></div>"}</div>
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
     return `
       <div class="screen full circle">
@@ -5163,8 +5205,37 @@
       state.circleBusy = true; state.circleErr = ""; render();
       const r = await AlignDB.joinCircle(code);
       state.circleBusy = false;
-      if (r && r.ok) { state.circle = r.data || null; toast("You’re in."); }
-      else state.circleErr = (r && r.error) || "Could not join.";
+      if (r && r.ok) {
+        state.circle = r.data || null;
+        toast((r.data && r.data.pending) ? "Asked to join. Waiting for the founder." : "You’re in.");
+      }
+      else state.circleErr = (r && r.error) || "Could not join. Run sql/schema-circle-approve.sql in Supabase.";
+      render();
+    } else if (act === "approve-circle") {
+      const uid = el && el.dataset ? el.dataset.uid : "";
+      if (!uid) return;
+      state.circleBusy = true; state.circleErr = ""; render();
+      const r = await AlignDB.approveCircle(uid);
+      state.circleBusy = false;
+      if (r && r.ok) { state.circle = r.data || null; toast("They’re in."); }
+      else state.circleErr = (r && r.error) || "Could not let them in.";
+      if (state.circleErr) toast(state.circleErr);
+      render();
+    } else if (act === "deny-circle") {
+      const uid = el && el.dataset ? el.dataset.uid : "";
+      if (!uid) return;
+      state.circleBusy = true; state.circleErr = ""; render();
+      const r = await AlignDB.denyCircle(uid);
+      state.circleBusy = false;
+      if (r && r.ok) { state.circle = r.data || null; toast("Request closed."); }
+      else toast((r && r.error) || "Could not close it");
+      render();
+    } else if (act === "cancel-request") {
+      state.circleBusy = true; state.circleErr = ""; render();
+      const r = await AlignDB.cancelCircleRequest();
+      state.circleBusy = false;
+      if (r && r.ok) { state.circle = null; toast("Request cancelled."); }
+      else toast((r && r.error) || "Could not cancel");
       render();
     } else if (act === "leave-circle") {
       const r = await AlignDB.leaveCircle();
