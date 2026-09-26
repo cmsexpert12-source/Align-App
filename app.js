@@ -2687,8 +2687,8 @@
           <div class="set-label">Circle</div>
           <button class="setting" data-go="circle">
             <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.members && state.circle.members.length
-              ? (state.circle.members.length + " people · path done, not journals")
-              : "Invite people. They see today’s path, not your journal."}</p></div>
+              ? (state.circle.members.length + " people · path, schedule, book")
+              : "Invite people. They see path, schedule, and the book — not your journal."}</p></div>
           </button>
 
           <div class="set-label">Morning hours</div>
@@ -2872,29 +2872,46 @@
         return `<i class="${cls}" title="${escapeAttr(iso)}"></i>`;
       }).join("");
       const label = (m.id === me) ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
+      const sched = Array.isArray(todayRow && todayRow.sched) ? todayRow.sched : [];
+      const schedLine = todayRow && todayRow.sched_total
+        ? (todayRow.sched_done + " / " + todayRow.sched_total + " on the schedule")
+        : "";
+      const schedList = sched.length
+        ? `<ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}">${it.done ? "✓" : "○"} ${escapeHtml(it.text || "")}</li>`).join("")}</ul>`
+        : "";
+      const mins = Math.round((Number(todayRow && todayRow.read_ms) || 0) / 60000);
+      const timeLine = mins >= 60
+        ? (Math.floor(mins / 60) + "h" + (mins % 60 ? " " + (mins % 60) + "m" : "") + " reading")
+        : (mins > 0 ? mins + " min reading" : "");
+      const bookTitle = (todayRow && todayRow.book_title) || "";
+      const bookLine = bookTitle
+        ? (bookTitle + " · p." + (todayRow.book_page || 1) + (todayRow.book_pages ? " of " + todayRow.book_pages : "") + (timeLine ? " · " + timeLine : ""))
+        : (timeLine || "");
       return `<div class="circle-row">
         <div class="circle-who">
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
           <div class="grow">
             <h3>${escapeHtml(label)}</h3>
-            <p>${escapeHtml(status)}${streak ? " · " + streak + " day streak" : ""}</p>
+            <p>${escapeHtml(status)}${streak ? " · " + streak + " day streak" : ""}${schedLine ? " · " + escapeHtml(schedLine) : ""}</p>
           </div>
         </div>
         <div class="circle-dots">${dots}</div>
+        ${schedList}
+        ${bookLine ? `<p class="circle-book">${escapeHtml(bookLine)}</p>` : ""}
       </div>`;
     };
     const body = !signed
-      ? `<p class="hint">Sign in so a circle can see your path — not your journal, notes, books, or affirmation.</p>
+      ? `<p class="hint">Sign in so a circle can see your path, today’s schedule, and the book you’re in — not your journal, notes, or affirmation.</p>
          <button class="btn" data-go="auth">Create account</button>`
       : !c
-        ? `<p class="hint">A small invite group. They see whether the path is done today, seven dots, and a streak. Nothing else.</p>
+        ? `<p class="hint">A small invite group. They see today’s path, the schedule and whether it’s done, and the book you’re in — not your journal, notes, or affirmation.</p>
            ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
            </div>
            <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Join circle</button>
            <button class="btn ghost" data-act="create-circle" style="margin-top:8px" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>`
-        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · they see the path, not the diary.</p>
+        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · path, schedule, book. Not the diary.</p>
            <button class="btn ghost" data-act="copy-code" style="height:44px">Copy invite code</button>
            <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<p class=\"hint\">Just you so far.</p>"}</div>
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;

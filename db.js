@@ -483,6 +483,94 @@ window.AlignDB = (() => {
     }
   };
 
+  const localIsoToday = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
+
+  const summarizeSchedule = (plan) => {
+    const items = [];
+    ((plan && plan.priorities) || []).forEach((p, i) => {
+      const text = p && typeof p === "object" ? String(p.text || "").trim() : String(p || "").trim();
+      if (!text) return;
+      items.push({ text: text.slice(0, 80), done: !!(p && p.done) });
+    });
+    ((plan && plan.tasks) || []).forEach((t) => {
+      const text = String((t && t.text) || "").trim();
+      if (!text) return;
+      items.push({ text: text.slice(0, 80), done: !!(t && t.done) });
+    });
+    return items;
+  };
+
+  const bookSnap = () => {
+    try {
+      const books = readJSON("align-books", []) || [];
+      const on = books.filter((b) => b && b.enabled !== false);
+      if (!on.length) return { title: "", page: 0, pages: 0 };
+      on.sort((a, b) => (Date.parse(b.updated_at || 0) || 0) - (Date.parse(a.updated_at || 0) || 0));
+      const b = on[0];
+      return {
+        title: String(b.title || "Untitled").slice(0, 80),
+        page: Math.max(1, Number(b.current_page) || 1),
+        pages: Math.max(0, Number(b.pages) || 0)
+      };
+    } catch {
+      return { title: "", page: 0, pages: 0 };
+    }
+  };
+
+  const readMsOf = (iso) => {
+    try {
+      const t = (readJSON("align-timing", {}) || {})[iso] || {};
+      const read = t.read && typeof t.read === "object" ? t.read : {};
+      return Math.max(0, Number(read.ms) || 0);
+    } catch { return 0; }
+  };
+
+  const patchPathDay = async (userId, iso, extra) => {
+    if (!userId || !iso) return null;
+    const now = new Date().toISOString();
+    let prev = {};
+    try {
+      const got = await restSelect("path_days", "select=*&user_id=eq." + encodeURIComponent(userId) + "&date=eq." + encodeURIComponent(iso));
+      prev = (got && got[0]) || {};
+    } catch { prev = {}; }
+    const row = Object.assign({
+      user_id: userId,
+      date: iso,
+      done: Number(prev.done) || 0,
+      total: Number(prev.total) || 12,
+      go: !!prev.go,
+      path_done: !!prev.path_done,
+      sched: Array.isArray(prev.sched) ? prev.sched : [],
+      sched_done: Number(prev.sched_done) || 0,
+      sched_total: Number(prev.sched_total) || 0,
+      book_title: prev.book_title || "",
+      book_page: Number(prev.book_page) || 0,
+      book_pages: Number(prev.book_pages) || 0,
+      read_ms: Number(prev.read_ms) || 0,
+      updated_at: now
+    }, extra || {});
+    let err = await restUpsert("path_days", row, "user_id,date");
+    if (err && (missingTable(err) || /column|schema cache|PGRST204/i.test(err.message || ""))) {
+      err = await restUpsert("path_days", {
+        user_id: userId,
+        date: iso,
+        done: row.done,
+        total: row.total,
+        go: row.go,
+        path_done: row.path_done,
+        updated_at: now
+      }, "user_id,date");
+      if (err && missingTable(err)) return null;
+    }
+    return err;
+  };
+
   const pushRow = async (item) => {
     const userId = (await refreshAuth(false)).uid;
     if (!userId) return { keep: true, error: "Sign in to save to the cloud" };
@@ -525,21 +613,34 @@ window.AlignDB = (() => {
         let doneN = 0;
         ids.forEach((id) => { if (merged[id]) doneN += 1; });
         const go = !!merged.go;
-        const pres = await restUpsert("path_days", {
-          user_id: userId,
-          date: p.iso,
+        const snap = bookSnap();
+        const items = summarizeSchedule((readJSON("align-plans", {}) || {})[p.iso] || {});
+        await patchPathDay(userId, p.iso, {
           done: doneN,
           total: ids.length,
           go,
           path_done: go,
-          updated_at: now
-        }, "user_id,date");
-        if (pres && missingTable(pres)) { /* circle schema not applied yet */ }
+          sched: items,
+          sched_done: items.filter((x) => x.done).length,
+          sched_total: items.length,
+          book_title: snap.title,
+          book_page: snap.page,
+          book_pages: snap.pages,
+          read_ms: Math.max(readMsOf(p.iso), (merged._times && merged._times.read && merged._times.read.ms) || 0)
+        });
       }
     } else if (item.kind === "plan") {
       err = await restUpsert("day_plans", {
         user_id: userId, date: p.iso, payload: p.plan || {}, updated_at: now
       }, "user_id,date");
+      if (!err) {
+        const items = summarizeSchedule(p.plan || {});
+        await patchPathDay(userId, p.iso, {
+          sched: items,
+          sched_done: items.filter((x) => x.done).length,
+          sched_total: items.length
+        });
+      }
     } else if (item.kind === "journal") {
       err = await restUpsert("journals", {
         user_id: userId, date: p.iso, payload: p.payload || {}, updated_at: now
@@ -761,6 +862,14 @@ window.AlignDB = (() => {
           err = await restUpsert("books", bookRow, "id");
         }
         if (err && missingTable(err)) err = null;
+        const snap = bookSnap();
+        const iso = localIsoToday();
+        await patchPathDay(userId, iso, {
+          book_title: snap.title || bookRow.title,
+          book_page: snap.page || bookRow.current_page,
+          book_pages: snap.pages || bookRow.pages,
+          read_ms: readMsOf(iso)
+        });
       }
     } else if (item.kind === "reading") {
       if (!p.bookId || !p.iso) err = null;
@@ -774,6 +883,13 @@ window.AlignDB = (() => {
           updated_at: now
         }, "user_id,book_id,date");
         if (err && missingTable(err)) err = null;
+        const snap = bookSnap();
+        await patchPathDay(userId, p.iso, {
+          book_title: snap.title,
+          book_page: snap.page,
+          book_pages: snap.pages,
+          read_ms: readMsOf(p.iso)
+        });
       }
     } else if (item.kind === "sound") {
       if (!p.id) err = null;
@@ -1216,7 +1332,7 @@ window.AlignDB = (() => {
     if (ids.length) {
       days = await restSelect(
         "path_days",
-        "select=user_id,date,done,total,go,path_done&user_id=in.(" + ids.join(",") + ")&date=gte." + from + "&order=date.desc"
+        "select=*&user_id=in.(" + ids.join(",") + ")&date=gte." + from + "&order=date.desc"
       );
     }
     const byUser = {};
