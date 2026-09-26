@@ -356,7 +356,10 @@
   let applying = false;
   const applySession = async (session) => {
     state.session = session;
-    if (!session) return;
+    if (!session) {
+      state.circle = null;
+      return;
+    }
     const waited = Date.now();
     while (applying && Date.now() - waited < 15000) {
       await new Promise((r) => setTimeout(r, 50));
@@ -1915,7 +1918,7 @@
         <button data-act="install-pwa">Add</button>
       </div>` : "";
 
-    const plan = L().planOf(t.iso);
+    const plan = (L().peekPlan ? L().peekPlan(t.iso) : L().planOf(t.iso));
     const prioRows = (plan.priorities || []).map(prioOf);
     const prios = prioRows.map((x) => x.text).filter(Boolean);
     const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
@@ -1934,7 +1937,7 @@
           <div class="section-h"><h4>Memory verse</h4><button class="linkish" data-act="open-step" data-step="verse">Open</button></div>
           <p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}</span> ` : ""}${escapeHtml(verseBody)}</p>
         </div>` : "";
-    const planNow = (prios.length || planTasks.length || planNote || morn.plan || state.planJustSaved) ? `
+    const planNow = (prios.length || planTasks.length || planNote || state.planJustSaved) ? `
         <div class="plan-now">
           ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
@@ -2872,11 +2875,16 @@
         return `<i class="${cls}" title="${escapeAttr(iso)}"></i>`;
       }).join("");
       const label = (m.id === me) ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
-      const sched = Array.isArray(todayRow && todayRow.sched) ? todayRow.sched : [];
-      const schedLine = todayRow && todayRow.sched_total
+      const mine = m.id === me;
+      let sched = todayRow && todayRow.sched;
+      if (typeof sched === "string") {
+        try { sched = JSON.parse(sched); } catch { sched = []; }
+      }
+      if (!Array.isArray(sched)) sched = [];
+      const schedLine = !mine && todayRow && todayRow.sched_total
         ? (todayRow.sched_done + " / " + todayRow.sched_total + " on the schedule")
         : "";
-      const schedList = sched.length
+      const schedList = (!mine && sched.length)
         ? `<ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}">${it.done ? "✓" : "○"} ${escapeHtml(it.text || "")}</li>`).join("")}</ul>`
         : "";
       const mins = Math.round((Number(todayRow && todayRow.read_ms) || 0) / 60000);
@@ -2884,9 +2892,9 @@
         ? (Math.floor(mins / 60) + "h" + (mins % 60 ? " " + (mins % 60) + "m" : "") + " reading")
         : (mins > 0 ? mins + " min reading" : "");
       const bookTitle = (todayRow && todayRow.book_title) || "";
-      const bookLine = bookTitle
+      const bookLine = (!mine && bookTitle)
         ? (bookTitle + " · p." + (todayRow.book_page || 1) + (todayRow.book_pages ? " of " + todayRow.book_pages : "") + (timeLine ? " · " + timeLine : ""))
-        : (timeLine || "");
+        : (!mine && timeLine ? timeLine : "");
       return `<div class="circle-row">
         <div class="circle-who">
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
@@ -4640,6 +4648,7 @@
       } else if (kind === "signout") {
         await AlignDB.signOut();
         state.session = null;
+        state.circle = null;
         state.view = "home";
         toast("Signed out");
       } else if (kind === "delete-book") {

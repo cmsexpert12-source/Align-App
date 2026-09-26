@@ -648,6 +648,11 @@ window.ALIGN_LIFE = (() => {
     return today;
   };
 
+  const peekPlan = (iso) => {
+    const all = loadJSON(LS_P, {});
+    if (!all[iso]) return normalizePlan({ priorities: ["", "", ""], tasks: [], note: "" });
+    return normalizePlan(all[iso]);
+  };
   const planOf = (iso) => {
     const all = loadJSON(LS_P, {});
     let row = normalizePlan(all[iso] || { priorities: ["", "", ""], tasks: [], note: "" });
@@ -967,7 +972,7 @@ window.ALIGN_LIFE = (() => {
     idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     fetchChapter, markChapterRead, todayAssignment,
-    planOf, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
+    planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
     affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse
   };
