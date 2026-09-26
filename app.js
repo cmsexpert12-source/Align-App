@@ -520,13 +520,26 @@
     el.classList.toggle("err", !!st.error);
   };
 
+  const paintToast = () => {
+    let el = app.querySelector(".toast");
+    if (!state.toast) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "toast";
+      app.appendChild(el);
+    }
+    el.textContent = state.toast;
+  };
   let toastTimer = null;
   const toast = (msg) => {
     state.toast = msg;
-    render();
+    paintToast();
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
-      if (state.toast === msg) { state.toast = null; render(); }
+      if (state.toast === msg) { state.toast = null; paintToast(); }
     }, 2600);
   };
 
@@ -4093,6 +4106,7 @@
   };
 
   /* ---------- RENDER / EVENTS ---------- */
+  let lastRenderedView = "";
   const render = () => {
     try {
       const iso = today().iso;
@@ -4164,7 +4178,22 @@
     }
     let extra = "";
     try { extra = (tab ? nav(tab) : "") + overlays(); } catch { extra = tab ? nav(tab) : ""; }
+    const sameView = lastRenderedView === state.view;
+    let keepY = 0;
+    if (sameView) {
+      app.querySelectorAll(".screen, .scroll-body, .scripture, .verse-body").forEach((n) => {
+        if (n.scrollTop > keepY) keepY = n.scrollTop;
+      });
+    }
     app.innerHTML = main + extra;
+    lastRenderedView = state.view;
+    if (sameView && keepY) {
+      let best = null, h = 0;
+      app.querySelectorAll(".screen, .scroll-body, .scripture, .verse-body").forEach((n) => {
+        if (n.scrollHeight > h) { h = n.scrollHeight; best = n; }
+      });
+      if (best) best.scrollTop = keepY;
+    }
     try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
     bind();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
@@ -5557,21 +5586,33 @@
     });
     window.addEventListener("online", () => {
       state.offline = false;
-      if (state.session) {
-        applySession(state.session).then(() => { if (state.view !== "splash") render(); }).catch(() => {});
-      } else if (state.view !== "splash") render();
+      const ban = app.querySelector(".offline");
+      if (ban) ban.remove();
+      if (state.session) applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
-    window.addEventListener("offline", () => { state.offline = true; if (state.view !== "splash") render(); });
+    window.addEventListener("offline", () => {
+      state.offline = true;
+      if (app.querySelector(".offline")) return;
+      const screen = app.querySelector(".screen");
+      if (!screen) return;
+      const ban = document.createElement("div");
+      ban.className = "offline";
+      ban.textContent = "You’re offline. The morning still works on this device.";
+      screen.insertBefore(ban, screen.firstChild);
+    });
     try { render(); } catch (err) { console.warn(err); }
     const splashWatch = setTimeout(leaveSplash, 1200);
     const t0 = Date.now();
     try {
       if (AlignDB.configured()) {
         AlignDB.onAuth((sess) => {
+          const was = state.session && state.session.user && state.session.user.id;
           applySession(sess).then(() => {
             if (state.view === "splash") return;
-            if (state.view === "auth" && sess) { state.view = "home"; }
-            try { render(); } catch { /* keep UI */ }
+            const now = sess && sess.user && sess.user.id;
+            if (state.view === "auth" && sess) { state.view = "home"; try { render(); } catch { /* keep UI */ } return; }
+            if (was !== now) { try { render(); } catch { /* keep UI */ } }
+            else paintCloud();
           }).catch(() => {});
         });
         if (AlignDB.onStatus) AlignDB.onStatus(() => paintCloud());
@@ -5591,9 +5632,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       tickAlarms();
-      if (state.session) {
-        applySession(state.session).then(() => { if (state.view !== "splash") render(); }).catch(() => {});
-      }
+      if (state.session) applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
     const wait = Math.max(0, 900 - (Date.now() - t0));
     await new Promise((r) => setTimeout(r, wait));
