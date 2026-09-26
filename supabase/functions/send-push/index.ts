@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
   const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:align@localhost";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const cronSecret = Deno.env.get("CRON_SECRET") || "align-cron-v1-sqwwjrdd";
+  const cronSecret = Deno.env.get("CRON_SECRET") || "";
   const anon = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
   if (!vapidPublic || !vapidPrivate) return json({ error: "VAPID keys missing" }, 500);
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
   if (!allowed) return json({ error: "Unauthorized cron" }, 401);
 
   const admin = createClient(supabaseUrl, serviceKey || anon);
-  const { data: rows, error } = await admin.rpc("align_due_push", { _secret: cronSecret });
+  const { data: rows, error } = await admin.rpc("align_due_push");
   if (error) return json({ error: error.message }, 500);
   const list = rows || [];
   if (!list.length) return json({ ok: true, sent: 0, note: "none due" });

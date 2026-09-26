@@ -1300,8 +1300,11 @@ window.AlignDB = (() => {
 
   const circleCode = () => {
     const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const buf = new Uint8Array(8);
+    if (crypto && crypto.getRandomValues) crypto.getRandomValues(buf);
+    else for (let i = 0; i < 8; i++) buf[i] = Math.floor(Math.random() * 256);
     let s = "";
-    for (let i = 0; i < 6; i++) s += a.charAt(Math.floor(Math.random() * a.length));
+    for (let i = 0; i < 8; i++) s += a.charAt(buf[i] % a.length);
     return s;
   };
 
@@ -1383,7 +1386,7 @@ window.AlignDB = (() => {
     const auth = await refreshAuth(false);
     if (!auth.token || !auth.uid) return fail("Sign in to join a circle");
     const raw = String(code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8);
-    if (raw.length < 4) return fail("Enter the 6-letter code");
+    if (raw.length < 6) return fail("Enter the circle code");
     const have = await fetchMyCircle();
     if (have && have.ok && have.data) return fail("Leave your circle first");
     const sb = client();
@@ -1432,6 +1435,7 @@ window.AlignDB = (() => {
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
+    token: () => cachedToken || ((sessionFromStorage() || {}).access_token) || "",
     fetchMyCircle, createCircle, joinCircle, leaveCircle,
     flush, pendingCount, status, syncNow, onStatus, seedLocal, markHydrated: () => { hydrated = true; scheduleFlush(0); }
   };

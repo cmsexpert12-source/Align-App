@@ -89,10 +89,13 @@ window.ALIGN_AI = (() => {
   let lastOk = null;
 
   const callServer = async (system, user, prefer) => {
+    const tok = (window.AlignDB && AlignDB.token && AlignDB.token()) || "";
+    const headers = { "Content-Type": "application/json" };
+    if (tok) headers.Authorization = "Bearer " + tok;
     const res = await timeoutFetch("/api/ai", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: user, system, prefer })
+      headers,
+      body: JSON.stringify({ prompt: user, context: String(system || "").slice(0, 8000), prefer })
     }, 16000);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.text) {
@@ -235,7 +238,8 @@ window.ALIGN_AI = (() => {
     }
 
     try {
-      const res = await callServer(system, user, prefer);
+      const live = [extraSystem || "", context || ""].filter(Boolean).join("\n\n").slice(0, 8000);
+      const res = await callServer(live, user, prefer);
       lastOk = { provider: res.provider, model: res.model };
       server.ready = true;
       if (res.provider === "gemini") server.gemini = true;

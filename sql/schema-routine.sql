@@ -21,7 +21,8 @@ alter table public.notification_prefs
 alter table public.notification_prefs
   add column if not exists wk_lights_m int not null default 0;
 
-create or replace function public.align_due_push(_secret text)
+drop function if exists public.align_due_push(text);
+create or replace function public.align_due_push()
 returns table (
   user_id uuid,
   endpoint text,
@@ -36,10 +37,8 @@ security definer
 set search_path = public
 as $$
 #variable_conflict use_column
-declare
-  expected constant text := 'align-cron-v1-sqwwjrdd';
 begin
-  if _secret is distinct from expected then
+  if auth.role() is distinct from 'service_role' then
     raise exception 'unauthorized';
   end if;
 
@@ -163,5 +162,5 @@ begin
 end;
 $$;
 
-revoke all on function public.align_due_push(text) from public;
-grant execute on function public.align_due_push(text) to anon, authenticated, service_role;
+revoke all on function public.align_due_push() from public, anon, authenticated;
+grant execute on function public.align_due_push() to service_role;

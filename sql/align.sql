@@ -360,7 +360,8 @@ exception when others then
 end;
 $$;
 
-create or replace function public.align_due_push(_secret text)
+drop function if exists public.align_due_push(text);
+create or replace function public.align_due_push()
 returns table (
   user_id uuid,
   endpoint text,
@@ -375,10 +376,8 @@ security definer
 set search_path = public
 as $$
 #variable_conflict use_column
-declare
-  expected constant text := 'align-cron-v1-sqwwjrdd';
 begin
-  if _secret is distinct from expected then
+  if auth.role() is distinct from 'service_role' then
     raise exception 'unauthorized';
   end if;
 
@@ -462,8 +461,8 @@ begin
 end;
 $$;
 
-revoke all on function public.align_due_push(text) from public;
-grant execute on function public.align_due_push(text) to anon, authenticated, service_role;
+revoke all on function public.align_due_push() from public, anon, authenticated;
+grant execute on function public.align_due_push() to service_role;
 grant execute on function public.align_safe_local(text) to anon, authenticated, service_role;
 
 -- Every 5 minutes: hit the Vercel sender. Enable pg_cron + pg_net
@@ -471,6 +470,7 @@ grant execute on function public.align_safe_local(text) to anon, authenticated, 
 do $cron$
 declare
   j bigint;
+  secret text;
 begin
   begin
     for j in select jobid from cron.job where jobname = 'align-push' loop
@@ -483,16 +483,29 @@ begin
     null;
   end;
 
+  begin
+    secret := nullif(btrim(current_setting('app.cron_secret', true)), '');
+  exception when others then
+    secret := null;
+  end;
+  if secret is null or secret = 'align-cron-v1-sqwwjrdd' then
+    raise notice 'Push cron unscheduled. Set app.cron_secret to your Vercel CRON_SECRET, then re-run.';
+    return;
+  end if;
+
   perform cron.schedule(
     'align-push',
     '*/5 * * * *',
-    $job$
-      select net.http_post(
-        url := 'https://align-app-brown.vercel.app/api/cron-push',
-        headers := '{"Content-Type":"application/json","x-cron-secret":"align-cron-v1-sqwwjrdd"}'::jsonb,
-        body := '{"mode":"tick"}'::jsonb
-      );
-    $job$
+    format(
+      $job$
+        select net.http_post(
+          url := 'https://align-app-brown.vercel.app/api/cron-push',
+          headers := jsonb_build_object('Content-Type','application/json','x-cron-secret', %L),
+          body := '{"mode":"tick"}'::jsonb
+        );
+      $job$,
+      secret
+    )
   );
 exception when others then
   raise notice 'ALIGN push cron not scheduled: % — enable pg_cron and pg_net, then re-run this file.', sqlerrm;

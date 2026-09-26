@@ -795,12 +795,14 @@ window.ALIGN_SCRIPTURE = (() => {
     }).join("\n\n").slice(0, 3800);
     if (body.length < 80) return readingQs(iso);
     try {
+      const tok = (window.AlignDB && AlignDB.token && AlignDB.token()) || "";
+      const headers = { "Content-Type": "application/json" };
+      if (tok) headers.Authorization = "Bearer " + tok;
       const res = await fetch("/api/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
-          maxOutputTokens: 1200,
-          system: "You write short Bible quizzes from the given World English Bible text. Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding: meaning, motive, promise, command, character of God, what the text requires of the reader. Do not ask verse numbers, chapter numbers, or which-verse identification. Distractors must be plausible — same length and tone as the right answer, could fool someone who skimmed. Never make the correct option the only spiritual-sounding one. Never use obviously silly or off-topic wrong answers. One-sentence stems.",
+          kind: "quiz",
           prompt: "Write 10 multiple-choice questions of understanding about this reading only. Plausible wrong answers. No trivia about references.\n\n" + body
         })
       });

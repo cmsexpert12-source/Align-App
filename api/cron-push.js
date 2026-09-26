@@ -5,13 +5,11 @@
 import webpush from "web-push";
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "https://sqwwjrddpjkenkhpyntg.supabase.co").replace(/\/$/, "");
-const ANON = process.env.SUPABASE_ANON_KEY
-  || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxd3dqcmRkcGprZW5raHB5bnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwNTc1NDcsImV4cCI6MjEwNTYzMzU0N30.IwDv1jIlxKZB2sP4IFP1YsjhqfOlHHSfx0XvN-cCJ0U";
-const CRON = process.env.CRON_SECRET || "align-cron-v1-sqwwjrdd";
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY
-  || "BHQs0Wo3QmVAFpW5a7raJqABOk98BLfrBH_4eRUOAUgIHxIybOFlotKQlwLsST-JYfHtx7klDmNNJMchJpcUYBo";
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY
-  || "rbWSjDuf3YgHsdVyD0dzK8IrkspvCqFs2sZ6Pa1j_nc";
+const ANON = process.env.SUPABASE_ANON_KEY || "";
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const CRON = process.env.CRON_SECRET || "";
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:align@localhost";
 
 const WAKE_NOTES = [
@@ -142,9 +140,10 @@ function todayInTz(tz) {
 }
 
 async function rest(path, { method = "GET", token, body } = {}) {
+  const key = token || ANON;
   const headers = {
-    apikey: ANON,
-    Authorization: "Bearer " + (token || ANON),
+    apikey: key,
+    Authorization: "Bearer " + key,
     "Content-Type": "application/json",
     Accept: "application/json"
   };
@@ -186,7 +185,7 @@ export default async function handler(req, res) {
     return res.end("ok");
   }
   if (req.method !== "POST") return send(res, 405, { error: "POST only" });
-  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return send(res, 500, { error: "VAPID keys missing" });
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return send(res, 500, { error: "VAPID keys missing. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on Vercel." });
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const mode = body.mode === "test" ? "test" : "tick";
@@ -195,6 +194,7 @@ export default async function handler(req, res) {
     const auth = String(req.headers.authorization || "");
     const jwt = auth.replace(/^Bearer\s+/i, "");
     if (!jwt) return send(res, 401, { error: "Sign in first" });
+    if (!ANON) return send(res, 500, { error: "Set SUPABASE_ANON_KEY on Vercel." });
     const user = await rest("/auth/v1/user", { token: jwt });
     if (!user.ok || !user.json || !user.json.id) return send(res, 401, { error: "Invalid session" });
     const uid = user.json.id;
@@ -209,10 +209,12 @@ export default async function handler(req, res) {
 
   const cronHeader = String(req.headers["x-cron-secret"] || "");
   if (!CRON || cronHeader !== CRON) return send(res, 401, { error: "Unauthorized cron" });
+  if (!SERVICE) return send(res, 500, { error: "Set SUPABASE_SERVICE_ROLE_KEY on Vercel." });
 
   const due = await rest("/rest/v1/rpc/align_due_push", {
     method: "POST",
-    body: { _secret: CRON }
+    token: SERVICE,
+    body: {}
   });
   if (!due.ok) {
     const msg = (due.json && (due.json.message || due.json.hint || due.json.error)) || ("HTTP " + due.status);

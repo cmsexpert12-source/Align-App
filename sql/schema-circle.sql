@@ -76,8 +76,6 @@ create policy "members self read" on public.circle_members
   for select using (user_id = auth.uid() or public.shares_circle(user_id));
 
 drop policy if exists "members self join" on public.circle_members;
-create policy "members self join" on public.circle_members
-  for insert with check (user_id = auth.uid());
 
 drop policy if exists "members self leave" on public.circle_members;
 create policy "members self leave" on public.circle_members
@@ -113,8 +111,8 @@ begin
     raise exception 'Sign in to join a circle';
   end if;
   raw := upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'));
-  if length(raw) < 4 then
-    raise exception 'Enter the 6-letter code';
+  if length(raw) < 6 or length(raw) > 8 then
+    raise exception 'Enter the circle code';
   end if;
   select id into cid from public.circles where code = raw;
   if cid is null then
