@@ -1867,8 +1867,8 @@ img { max-width: 100%; display: block; }
   flex-shrink: 0;
   pointer-events: none;
 }
-.app.has-now .ai-fab.up { bottom: calc(var(--nav-h) + 92px + var(--safe-b)); }
-.app.has-now .toast { bottom: calc(var(--nav-h) + 92px + var(--safe-b)); }
+.app.has-now .ai-fab.up { bottom: calc(var(--nav-h) + 118px + var(--safe-b)); }
+.app.has-now .toast { bottom: calc(var(--nav-h) + 118px + var(--safe-b)); }
 .now-play {
   width: 44px; height: 44px; border-radius: 14px;
   background: var(--lime); color: #111;

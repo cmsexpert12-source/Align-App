@@ -2201,17 +2201,6 @@
             })()}
           </div>
         </div>
-        ${(() => {
-          const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
-          if (snd.playing || snd.id) return "";
-          return `<button type="button" class="sound-now" data-go="sound">
-            <span class="now-play">${stepIcon("sound")}</span>
-            <span class="sound-now-meta">
-              <h4>Sound</h4>
-              <p>Stations, library, or your audio — in ALIGN.</p>
-            </span>
-          </button>`;
-        })()}
         ${wordToday}
         ${planNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
