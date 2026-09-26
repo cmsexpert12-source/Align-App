@@ -3,12 +3,10 @@
 -- 2. Circle join is code-only; 8 tries / 15 min.
 -- 3. Unschedules the cron job that had the leaked secret.
 --
--- After this file:
---   Vercel env: CRON_SECRET, VAPID_PRIVATE_KEY, SUPABASE_SERVICE_ROLE_KEY
---   Then in SQL Editor (use the SAME CRON_SECRET as Vercel, do not commit it):
---     alter database postgres set app.cron_secret = 'paste-vercel-CRON_SECRET';
---     select pg_reload_conf();
---   Re-run this file so pg_cron can schedule with that setting.
+-- After this file, in SQL Editor (same CRON_SECRET as Vercel, do not commit it):
+--   insert into public.align_cron_secret (id, secret)
+--   values (1, 'paste-vercel-CRON_SECRET')
+--   on conflict (id) do update set secret = excluded.secret, updated_at = now();
 
 -- ---------- push: no public secret ----------
 drop function if exists public.align_due_push(text);
@@ -184,11 +182,42 @@ $$;
 revoke all on function public.join_circle(text) from public;
 grant execute on function public.join_circle(text) to authenticated;
 
--- ---------- kill leaked cron job ----------
+-- ---------- cron secret: a private row, not ALTER DATABASE ----------
+create table if not exists public.align_cron_secret (
+  id int primary key default 1 check (id = 1),
+  secret text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.align_cron_secret enable row level security;
+revoke all on table public.align_cron_secret from public, anon, authenticated;
+
+create or replace function public.align_fire_push()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s text;
+begin
+  select btrim(secret) into s from public.align_cron_secret where id = 1;
+  if s is null or s = '' or s = 'align-cron-v1-sqwwjrdd' then
+    return;
+  end if;
+  perform net.http_post(
+    url := 'https://align-app-brown.vercel.app/api/cron-push',
+    headers := jsonb_build_object('Content-Type','application/json','x-cron-secret', s),
+    body := '{"mode":"tick"}'::jsonb
+  );
+end;
+$$;
+
+revoke all on function public.align_fire_push() from public, anon, authenticated;
+
+-- ---------- kill leaked cron job; schedule a job with no secret in the command ----------
 do $cron$
 declare
   j bigint;
-  secret text;
 begin
   begin
     for j in select jobid from cron.job where jobname = 'align-push' loop
@@ -201,29 +230,10 @@ begin
     null;
   end;
 
-  begin
-    secret := nullif(btrim(current_setting('app.cron_secret', true)), '');
-  exception when others then
-    secret := null;
-  end;
-  if secret is null or secret = 'align-cron-v1-sqwwjrdd' then
-    raise notice 'Push cron unscheduled. Set app.cron_secret to your Vercel CRON_SECRET, then re-run this file.';
-    return;
-  end if;
-
   perform cron.schedule(
     'align-push',
     '*/5 * * * *',
-    format(
-      $job$
-        select net.http_post(
-          url := 'https://align-app-brown.vercel.app/api/cron-push',
-          headers := jsonb_build_object('Content-Type','application/json','x-cron-secret', %L),
-          body := '{"mode":"tick"}'::jsonb
-        );
-      $job$,
-      secret
-    )
+    $job$select public.align_fire_push();$job$
   );
 exception when others then
   raise notice 'ALIGN push cron not scheduled: %', sqlerrm;
