@@ -2802,56 +2802,68 @@
     const onSteps = ordered.filter((s) => r.on[s.id] !== false);
     const offSteps = ordered.filter((s) => r.on[s.id] === false);
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
+    const grip = `<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4.5" r="1.35"/><circle cx="12" cy="4.5" r="1.35"/><circle cx="6" cy="9" r="1.35"/><circle cx="12" cy="9" r="1.35"/><circle cx="6" cy="13.5" r="1.35"/><circle cx="12" cy="13.5" r="1.35"/></svg>`;
     const rowOf = (s, i, on) => {
       const locked = s.id === "rise" || s.id === "go";
       const why = (PATH_WHY[s.id] && PATH_WHY[s.id].why) || s.sub;
       return `<div class="routine-step ${on ? "" : "off"}" data-id="${escapeAttr(s.id)}">
-        <div class="circle-who">
-          ${on ? `<button type="button" class="path-handle" data-drag="1" aria-label="Drag to reorder">⋮⋮</button>` : ""}
+        <div class="path-card-top">
+          ${on ? `<button type="button" class="path-handle" data-drag="1" aria-label="Hold and drag to reorder">${grip}</button>` : `<span class="path-num ghost">+</span>`}
+          ${on ? `<span class="path-num">${i + 1}</span>` : ""}
           <div class="grow">
-            <h3>${on ? (i + 1) + ". " : ""}${escapeHtml(s.title)}</h3>
+            <h3>${escapeHtml(s.title)}</h3>
             <p>${escapeHtml(why)}</p>
           </div>
-          ${locked ? `<span class="path-lock">Stays</span>` : (on
-            ? `<button type="button" class="btn ghost sm" data-act="drop-step" data-id="${escapeAttr(s.id)}">Remove</button>`
-            : `<button type="button" class="btn ghost sm" data-act="restore-step" data-id="${escapeAttr(s.id)}">Put back</button>`)}
         </div>
-        ${on ? `<div class="hours-grid tight">
-          <div class="field"><label>Weekday min</label><input id="rt-min-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.min[s.id] || 0}" /></div>
-          <div class="field"><label>Sunday min</label><input id="rt-sun-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.minSun[s.id] || 0}" /></div>
-        </div>` : `<input type="hidden" id="rt-min-${escapeAttr(s.id)}" value="${r.min[s.id] || 0}" /><input type="hidden" id="rt-sun-${escapeAttr(s.id)}" value="${r.minSun[s.id] || 0}" />`}
+        <div class="path-card-actions">
+          ${on ? `<div class="path-aim">
+            <label>Weekdays <input id="rt-min-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.min[s.id] || 0}" /> min</label>
+            <label>Sunday <input id="rt-sun-${escapeAttr(s.id)}" type="number" min="0" max="180" inputmode="numeric" value="${r.minSun[s.id] || 0}" /> min</label>
+          </div>` : `<input type="hidden" id="rt-min-${escapeAttr(s.id)}" value="${r.min[s.id] || 0}" /><input type="hidden" id="rt-sun-${escapeAttr(s.id)}" value="${r.minSun[s.id] || 0}" />`}
+          ${locked ? `<span class="path-lock">Always on</span>` : (on
+            ? `<button type="button" class="path-remove" data-act="drop-step" data-id="${escapeAttr(s.id)}">Remove</button>`
+            : `<button type="button" class="btn ghost sm" data-act="restore-step" data-id="${escapeAttr(s.id)}">Add back</button>`)}
+        </div>
       </div>`;
     };
     const rows = onSteps.map((s, i) => rowOf(s, i, true)).join("");
     const offRows = offSteps.map((s, i) => rowOf(s, i, false)).join("");
     return `
-      <div class="screen full routine">
+      <div class="screen full has-cta routine">
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
-        <div class="page-title"><div class="tag">You</div><h1>Your path.</h1></div>
-        <div style="padding:0 16px calc(var(--safe-b) + 24px)">
-          <p class="hint">Drag the ⋮⋮ handle to order the morning. Remove what you will not walk — ALIGN will ask, because each step has a reason. After you save, it still goes one at a time, in your order. Rise and Begin stay.</p>
-          <div class="set-label">Hours</div>
-          <div class="hours-grid">
-            <div class="field"><label>Sunday rise</label><input id="rt-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
-            <div class="field"><label>Sunday lights out</label><input id="rt-sun-lights" type="time" value="${timeVal(r.sunLightsH, r.sunLightsM)}" /></div>
-            <div class="field"><label>Mon–Sat rise</label><input id="rt-wk-wake" type="time" value="${timeVal(r.wkWakeH, r.wkWakeM)}" /></div>
-            <div class="field"><label>Mon–Sat lights out</label><input id="rt-wk-lights" type="time" value="${timeVal(r.wkLightsH, r.wkLightsM)}" /></div>
-            <div class="field"><label>Sunday leave</label><input id="rt-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
-          </div>
-          <label class="check-row"><input id="rt-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
-          <div class="hours-grid tight" style="margin-top:8px">
-            <div class="field"><label>Weekday chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
-            <div class="field"><label>Sunday chapters</label><input id="rt-ch-sun" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersSun}" /></div>
-          </div>
-          <div class="set-label">Training week</div>
-          <div class="plan-pick">
-            ${packs.map((p) => `<button type="button" class="plan-card ${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}"><h4>${escapeHtml(p.name)}</h4><p>${escapeHtml(p.blurb)}</p></button>`).join("")}
-          </div>
-          <div class="set-label">Your order</div>
-          <div class="circle-list path-edit-list">${rows}</div>
-          ${offRows ? `<div class="set-label">Not on your path</div><div class="circle-list">${offRows}</div>` : ""}
-          <button class="btn" data-act="save-routine" style="margin-top:16px">Save path</button>
+        <div class="page-title">
+          <div class="tag">Edit</div>
+          <h1>Your path.</h1>
+          <p>Hold the dots to move a step. Remove only what you will not walk. Rise and Begin stay.</p>
         </div>
+        <div class="scroll-body routine-scroll">
+          <div class="set-label">Morning order · ${onSteps.length} steps</div>
+          <div class="circle-list path-edit-list">${rows}</div>
+          ${offRows ? `<div class="set-label">Off the path</div><p class="hint" style="margin-top:0">You can add these back anytime.</p><div class="circle-list">${offRows}</div>` : ""}
+          <div class="set-label">When you rise</div>
+          <div class="hours-block">
+            <p class="hours-kicker">Sunday</p>
+            <div class="hours-grid">
+              <div class="field"><label>Rise</label><input id="rt-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
+              <div class="field"><label>Lights out</label><input id="rt-sun-lights" type="time" value="${timeVal(r.sunLightsH, r.sunLightsM)}" /></div>
+              <div class="field"><label>Leave</label><input id="rt-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
+              <div class="field"><label>Chapters</label><input id="rt-ch-sun" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersSun}" /></div>
+            </div>
+            <label class="check-row"><input id="rt-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Leave for church is on my Sunday</label>
+            <p class="hours-kicker">Monday–Saturday</p>
+            <div class="hours-grid">
+              <div class="field"><label>Rise</label><input id="rt-wk-wake" type="time" value="${timeVal(r.wkWakeH, r.wkWakeM)}" /></div>
+              <div class="field"><label>Lights out</label><input id="rt-wk-lights" type="time" value="${timeVal(r.wkLightsH, r.wkLightsM)}" /></div>
+              <div class="field"><label>Chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
+            </div>
+          </div>
+          <div class="set-label">How you train</div>
+          <p class="hint" style="margin-top:0">Same floor. Pick the week that matches the goal.</p>
+          <div class="plan-pick">
+            ${packs.map((p) => `<button type="button" class="plan-card ${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}"><h4>${escapeHtml(p.name)}</h4><p>${escapeHtml(p.goal || p.blurb)}</p></button>`).join("")}
+          </div>
+        </div>
+        <div class="sticky-cta"><button class="btn" data-act="save-routine">Save path</button></div>
       </div>
     `;
   };
