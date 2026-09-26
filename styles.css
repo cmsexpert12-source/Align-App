@@ -2122,6 +2122,14 @@ img { max-width: 100%; display: block; }
 .circle-book {
   margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;
 }
+.together-now { padding: 0 16px 8px; }
+.together-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  padding: 14px; margin-top: 8px;
+}
+.together-who { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.together-who b { font-size: 15px; }
+.together-who span { font-size: 12px; color: var(--muted); }
 
 .hours-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 8px 0 4px;

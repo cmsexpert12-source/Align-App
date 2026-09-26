@@ -2189,6 +2189,52 @@
           ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${(prioRows.every((x) => !x.text || x.done) && planTasks.every((x) => x.done)) ? "Schedule complete" : "Mark all done"}</button>` : ""}
         </div>` : "";
 
+    const togetherNow = (() => {
+      const me = state.session && state.session.user ? state.session.user.id : "";
+      const others = ((state.circle && state.circle.members) || []).filter((m) => m && m.id && m.id !== me);
+      if (!others.length) return "";
+      const clockLab = (iso) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        if (!d.getTime()) return "";
+        return (L().fmtClockAt && L().fmtClockAt(d.getTime())) || "";
+      };
+      const cards = others.map((m) => {
+        const byDate = {};
+        (m.days || []).forEach((d) => { byDate[d.date] = d; });
+        const row = byDate[t.iso] || null;
+        let sched = row && row.sched;
+        if (typeof sched === "string") {
+          try { sched = JSON.parse(sched); } catch { sched = []; }
+        }
+        if (!Array.isArray(sched)) sched = [];
+        const status = row && row.path_done
+          ? "Path done"
+          : row && row.done
+            ? (row.done + " / " + (row.total || 12))
+            : "Not yet";
+        const list = sched.length
+          ? `<ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}">${it.done ? "✓" : "○"} ${escapeHtml(it.text || "")}</li>`).join("")}</ul>`
+          : `<p class="plan-note-preview">No schedule yet.</p>`;
+        const up = clockLab(row && row.wake_at);
+        const down = clockLab(row && row.lights_at);
+        const clocks = [up ? ("Up " + up) : "", down ? ("Down " + down) : ""].filter(Boolean).join(" · ");
+        const bookTitle = (row && row.book_title) || "";
+        const book = bookTitle ? (bookTitle + (row.book_page ? (" · p." + row.book_page) : "")) : "";
+        return `<div class="together-card">
+          <div class="together-who"><b>${escapeHtml(m.name || "ALIGN")}</b><span>${escapeHtml(status)}</span></div>
+          ${list}
+          ${clocks ? `<p class="circle-book">${escapeHtml(clocks)}</p>` : ""}
+          ${book ? `<p class="circle-book">${escapeHtml(book)}</p>` : ""}
+        </div>`;
+      }).join("");
+      return `
+        <div class="together-now">
+          <div class="section-h"><h4>Together</h4><button class="linkish" data-go="circle">Circle</button></div>
+          ${cards}
+        </div>`;
+    })();
+
     const subFor = (s) => {
       if (s.id === "rise") {
         const up = L().clockAt && L().clockAt(t.iso, "rise");
@@ -2290,6 +2336,7 @@
         </div>
         ${wordToday}
         ${planNow}
+        ${togetherNow}
         <div class="next-hero ${allDone ? "done-hero-card" : ""}">
           <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
           <h3>${allDone ? (clk.sunday ? "Go to church." : (evening ? "Rest." : "Day is open.")) : escapeHtml(cur ? cur.title : "Rise")}</h3>
@@ -4489,10 +4536,10 @@
       if (go === "library" || go === "word") {
         pullBooksCloud().then(() => { if (state.view === go) render(); }).catch(() => {});
       }
-      if (go === "circle" && window.AlignDB && AlignDB.fetchMyCircle) {
+      if ((go === "circle" || go === "home") && window.AlignDB && AlignDB.fetchMyCircle) {
         AlignDB.fetchMyCircle().then((r) => {
           if (r && r.ok) state.circle = r.data || null;
-          if (state.view === "circle") render();
+          if (state.view === go) render();
         }).catch(() => {});
       }
     }));
