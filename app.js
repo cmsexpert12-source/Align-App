@@ -2741,12 +2741,7 @@
             <div class="avatar">${initials()}</div>
             <div class="grow">
               <h3>${escapeHtml(state.profile.name || "ALIGN")}</h3>
-              <p>${signed ? escapeHtml(email) : "On this device · create an account to sync"}</p>
-              ${(() => {
-                const st = (window.AlignDB && AlignDB.status) ? AlignDB.status() : { pending: 0, error: "", lastOk: 0, syncing: false };
-                const line = cloudCopy(st, signed);
-                return line ? `<p class="cloud ${st.error ? "err" : "on"}">${escapeHtml(line)}</p>` : "";
-              })()}
+              <p>${signed ? escapeHtml(email) : "On this device · create an account to keep mornings everywhere"}</p>
             </div>
           </div>
 
@@ -2755,7 +2750,6 @@
             <input id="prof-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
           </div>
           <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
-          ${signed ? `<button class="btn ghost" style="height:44px;margin-top:8px" data-act="sync-now">Sync now</button>` : ""}
 
           <div class="set-label">Circle</div>
           <button class="setting" data-go="circle">
@@ -2803,33 +2797,10 @@
             <div class="grow"><h4>Devotion journal</h4><p>Past morning takeaways.</p></div>
           </button>
 
-          <div class="set-label">Intelligence</div>
-          ${(() => {
-            const srv = AI().server ? AI().server() : { ready: false, checked: false };
-            const line = !srv.checked
-              ? "Checking Vercel…"
-              : srv.ready
-                ? ("Vercel · " + [srv.gemini ? "Gemini" : "", srv.groq ? "Groq" : ""].filter(Boolean).join(" + ") + ". Keys stay on the server.")
-                : "Add GEMINI_API_KEY and GROQ_API_KEY in Vercel → Settings → Environment Variables, then redeploy.";
-            return `<p class="hint" style="margin-top:0">${escapeHtml(line)}</p>
-              <div class="cloud ${srv.ready?"on":""}" style="margin:0 0 12px">${srv.ready ? "Server ready" : "Waiting on Vercel keys"}</div>`;
-          })()}
-          <div class="field"><label>Prefer</label>
-            <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
-              <button class="${AI().load().prefer==="auto"?"on":""}" data-act="ai-prefer" data-p="auto">Auto</button>
-              <button class="${AI().load().prefer==="gemini"?"on":""}" data-act="ai-prefer" data-p="gemini">Gemini</button>
-              <button class="${AI().load().prefer==="groq"?"on":""}" data-act="ai-prefer" data-p="groq">Groq</button>
-            </div>
-          </div>
           <div class="set-label">Library</div>
-          <div class="set-stack">
-            <button class="setting" data-go="library">
-              <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload PDFs. Read them offline."}</p></div>
-            </button>
-            <button class="setting" data-go="balance">
-              <div class="grow"><h4>How training is built</h4><p>Push, pull, legs, core, recover</p></div>
-            </button>
-          </div>
+          <button class="setting" data-go="library">
+            <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload PDFs. Read them offline."}</p></div>
+          </button>
 
           <div class="set-label">App</div>
           ${isStandalone() ? "" : (state.installPrompt ? `
@@ -5630,7 +5601,7 @@
   const boot = async () => {
     registerSW();
     if (window.ALIGN_AI && ALIGN_AI.probe) ALIGN_AI.probe().then(() => {
-      if (state.view === "profile" || state.ai.open) render();
+      if (state.ai.open) render();
     }).catch(() => {});
     if (window.ALIGN_SOUND && ALIGN_SOUND.loadTracks) ALIGN_SOUND.loadTracks().then(() => {}).catch(() => {});
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
