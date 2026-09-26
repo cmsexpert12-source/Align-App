@@ -929,6 +929,38 @@ window.ALIGN_LIFE = (() => {
     return DEFAULT_AFFIRMS[((day % DEFAULT_AFFIRMS.length) + DEFAULT_AFFIRMS.length) % DEFAULT_AFFIRMS.length];
   };
 
+  const kjvCache = {};
+  const kjvBook = (book) => {
+    const b = String(book || "").trim();
+    const map = {
+      "Song of Songs": "Song of Solomon",
+      "Canticles": "Song of Solomon",
+      "Psalms": "Psalm",
+      "Ps": "Psalm",
+      "Psa": "Psalm"
+    };
+    return map[b] || b;
+  };
+  const fetchKjv = async (book, chapter, verse, thru) => {
+    const b = kjvBook(book);
+    const ch = Number(chapter) || 0;
+    const v = Number(verse) || 0;
+    const t = Number(thru) || v;
+    if (!b || !ch || !v) return null;
+    let q = b + " " + ch + ":" + v;
+    if (t > v) q += "-" + t;
+    if (kjvCache[q]) return kjvCache[q];
+    const url = "https://bible-api.com/" + encodeURIComponent(q) + "?translation=kjv";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Could not load KJV");
+    const data = await res.json();
+    const text = String((data && data.text) || "").replace(/\s+/g, " ").trim();
+    if (!text) throw new Error("empty");
+    const out = { text, reference: (data && data.reference) || q, translation: "KJV" };
+    kjvCache[q] = out;
+    return out;
+  };
+
   const parseDevotionVerse = (raw) => {
     const s = String(raw || "").replace(/\s+/g, " ").trim();
     if (!s) return null;
@@ -979,6 +1011,6 @@ window.ALIGN_LIFE = (() => {
     fetchChapter, markChapterRead, todayAssignment,
     planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
-    affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse
+    affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse, fetchKjv
   };
 })();

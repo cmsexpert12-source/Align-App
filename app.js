@@ -1628,11 +1628,31 @@
       || "";
     let parsed = null;
     try { parsed = L().parseDevotionVerse && L().parseDevotionVerse(raw); } catch { parsed = null; }
+    const cur = S().todayVerse ? S().todayVerse(iso) : null;
+    const same = !!(cur && parsed && cur.book === parsed.book && cur.chapter === parsed.chapter && cur.verse === parsed.verse);
+    if (same && cur.kjv && cur.text) return cur;
     if (parsed && parsed.text && S().setTodayVerse) {
-      S().setTodayVerse(iso, parsed);
-      return parsed;
+      if (!(same && cur && cur.text)) S().setTodayVerse(iso, parsed);
     }
-    return S().todayVerse(iso);
+    if (parsed && parsed.book && parsed.chapter && parsed.verse && L().fetchKjv && !(cur && cur.kjv && same)) {
+      const key = iso + "|" + parsed.book + "|" + parsed.chapter + "|" + parsed.verse + "|" + (parsed.thru || "");
+      if (!lockDevotionVerse._asked) lockDevotionVerse._asked = {};
+      if (!lockDevotionVerse._asked[key]) {
+        lockDevotionVerse._asked[key] = true;
+        L().fetchKjv(parsed.book, parsed.chapter, parsed.verse, parsed.thru).then((kjv) => {
+          if (!kjv || !kjv.text) return;
+          const next = Object.assign({}, parsed, { text: kjv.text, kjv: true, translation: "KJV" });
+          S().setTodayVerse(iso, next);
+          if (state.verseSess && state.verseSess.queue && state.verseSess.queue[0] && state.verseSess.phase === "sit") {
+            state.verseSess.queue[0].verse = next;
+          }
+          if (["home", "verse", "recite", "nightverse", "word"].includes(state.view)) {
+            try { render(); } catch { /* keep UI */ }
+          }
+        }).catch(() => { lockDevotionVerse._asked[key] = false; });
+      }
+    }
+    return (S().todayVerse && S().todayVerse(iso)) || parsed;
   };
 
   const finishMemory = () => {
@@ -2098,7 +2118,7 @@
     const wordToday = showWord ? `
         <div class="dash-card word-today">
           <div class="section-h"><h4>Memory verse</h4><button class="linkish" data-act="open-step" data-step="verse">Open</button></div>
-          <p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}</span> ` : ""}${escapeHtml(verseBody)}</p>
+          <p class="word-verse">${verseRef ? `<span class="word-ref">${escapeHtml(verseRef)}${tv.kjv ? " · KJV" : ""}</span> ` : ""}${escapeHtml(verseBody)}</p>
         </div>` : "";
     const planNow = (prios.length || planTasks.length || planNote || state.planJustSaved) ? `
         <div class="plan-now">
@@ -3343,7 +3363,7 @@
           </div>
           <div class="verse-body">
             <div class="verse-card">
-              <div class="verse-theme">Devotion</div>
+              <div class="verse-theme">${v.kjv ? "KJV" : "Devotion"}</div>
               <div class="ref">${escapeHtml(S().refOf(v))}</div>
               <q class="mv-text">${escapeHtml(v.text)}</q>
             </div>
@@ -3745,7 +3765,7 @@
         </div>
         <div class="verse-body">
           <div class="verse-card">
-            <div class="verse-theme">Devotion</div>
+            <div class="verse-theme">${v && v.kjv ? "KJV" : "Devotion"}</div>
             <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
             <q class="mv-text">${v ? escapeHtml(v.text) : "This morning’s devotion verse will show here."}</q>
           </div>
@@ -3905,7 +3925,7 @@
         </div>
         <div class="verse-body">
           <div class="verse-card">
-            <div class="verse-theme">Devotion</div>
+            <div class="verse-theme">${v && v.kjv ? "KJV" : "Devotion"}</div>
             <div class="ref">${v ? escapeHtml(S().refOf(v)) : ""}</div>
             <q class="mv-text">${v ? escapeHtml(v.text) : "Save the devotion first."}</q>
           </div>

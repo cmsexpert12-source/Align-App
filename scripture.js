@@ -583,7 +583,8 @@ window.ALIGN_SCRIPTURE = (() => {
     const snap = {
       id: verse.id, book: verse.book, chapter: verse.chapter, verse: verse.verse,
       thru: verse.thru || verse.verse, text: verse.text, theme: verse.theme || "Devotion",
-      why: verse.why || "", custom: true, source: verse.source || "devotion", ref: verse.ref || ""
+      why: verse.why || "", custom: true, source: verse.source || "devotion", ref: verse.ref || "",
+      kjv: !!verse.kjv, translation: verse.translation || (verse.kjv ? "KJV" : "")
     };
     data.daily[iso] = Object.assign({}, row, { verseId: snap.id, verseSnap: snap });
     if (!data.verses[snap.id]) {
