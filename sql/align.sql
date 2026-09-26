@@ -329,7 +329,10 @@ grant all on table
   public.app_state,
   public.books,
   public.reading_log,
-  public.sounds
+  public.sounds,
+  public.circles,
+  public.circle_members,
+  public.path_days
 to authenticated;
 grant all on all sequences in schema public to authenticated;
 

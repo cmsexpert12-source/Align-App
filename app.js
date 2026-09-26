@@ -87,7 +87,10 @@
     journalNoteId: "",
     showHow: false,
     verseSitOn: false,
-    verseSitSec: 0
+    verseSitSec: 0,
+    circle: null,
+    circleErr: "",
+    circleBusy: false
   };
 
   /* ---------- SVG poses ---------- */
@@ -466,6 +469,12 @@
         ALIGN_SOUND.mergeRemote(remoteSounds.data);
       }
     } catch { /* sounds schema may not be applied yet */ }
+    try {
+      if (AlignDB.fetchMyCircle) {
+        const circ = await AlignDB.fetchMyCircle();
+        if (circ && circ.ok) state.circle = circ.data || null;
+      }
+    } catch { /* circle schema may not be applied yet */ }
     } finally { applying = false; }
   };
 
@@ -509,11 +518,11 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || (snd.id && snd.kind)));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "reader", "circle"].includes(state.view);
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "reader", "circle"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound", volume: 0.42 };
@@ -1626,7 +1635,7 @@
     if (view === "plan" || view === "progress" || view === "balance") return "plan";
     if (view === "word" || view === "library") return "word";
     if (view === "journal") return "journal";
-    if (view === "profile" || view === "sound") return "profile";
+    if (view === "profile" || view === "sound" || view === "circle") return "profile";
     return null;
   };
 
@@ -2598,6 +2607,13 @@
           <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
           ${signed ? `<button class="btn ghost" style="height:44px;margin-top:8px" data-act="sync-now">Sync now</button>` : ""}
 
+          <div class="set-label">Circle</div>
+          <button class="setting" data-go="circle">
+            <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.members && state.circle.members.length
+              ? (state.circle.members.length + " people · path done, not journals")
+              : "Invite people. They see today’s path, not your journal."}</p></div>
+          </button>
+
           <div class="set-label">Morning hours</div>
           <div class="sched-card">
             <div class="sched-row"><span class="k">Sunday rise</span><span class="v">4:00 AM</span></div>
@@ -2678,6 +2694,79 @@
           }
           <div class="ver">ALIGN</div>
         </div>
+      </div>
+    `;
+  };
+
+  const viewCircle = () => {
+    const signed = !!state.session;
+    const me = state.session && state.session.user ? state.session.user.id : "";
+    const c = state.circle;
+    const week = (() => {
+      const out = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const x = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        out.push(localIso(x));
+      }
+      return out;
+    })();
+    const todayIso = today().iso;
+    const memberBlock = (m) => {
+      const byDate = {};
+      (m.days || []).forEach((d) => { byDate[d.date] = d; });
+      const todayRow = byDate[todayIso] || null;
+      let streak = 0;
+      const cursor = new Date();
+      for (let n = 0; n < 400; n++) {
+        const iso = localIso(cursor);
+        const row = byDate[iso];
+        if (!(row && row.path_done)) break;
+        streak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      const status = todayRow && todayRow.path_done
+        ? "Path done"
+        : todayRow && todayRow.done
+          ? (todayRow.done + " / " + (todayRow.total || 12))
+          : "Not yet";
+      const dots = week.map((iso) => {
+        const row = byDate[iso];
+        const cls = row && row.path_done ? "on" : (row && row.done ? "mid" : "");
+        return `<i class="${cls}" title="${escapeAttr(iso)}"></i>`;
+      }).join("");
+      const label = (m.id === me) ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
+      return `<div class="circle-row">
+        <div class="circle-who">
+          <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
+          <div class="grow">
+            <h3>${escapeHtml(label)}</h3>
+            <p>${escapeHtml(status)}${streak ? " · " + streak + " day streak" : ""}</p>
+          </div>
+        </div>
+        <div class="circle-dots">${dots}</div>
+      </div>`;
+    };
+    const body = !signed
+      ? `<p class="hint">Sign in so a circle can see your path — not your journal, notes, books, or affirmation.</p>
+         <button class="btn" data-go="auth">Create account</button>`
+      : !c
+        ? `<p class="hint">A small invite group. They see whether the path is done today, seven dots, and a streak. Nothing else.</p>
+           ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
+           <div class="field"><label>Join with a code</label>
+             <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
+           </div>
+           <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Join circle</button>
+           <button class="btn ghost" data-act="create-circle" style="margin-top:8px" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>`
+        : `<p class="hint">Code <b>${escapeHtml(c.code || "")}</b> · they see the path, not the diary.</p>
+           <button class="btn ghost" data-act="copy-code" style="height:44px">Copy invite code</button>
+           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<p class=\"hint\">Just you so far.</p>"}</div>
+           <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
+    return `
+      <div class="screen full circle">
+        <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
+        <div class="page-title"><div class="tag">Together</div><h1>Circle.</h1></div>
+        <div style="padding:0 16px calc(var(--safe-b) + 24px)">${body}</div>
       </div>
     `;
   };
@@ -3808,6 +3897,7 @@
       affirm: viewAffirm,
       devotionlog: viewDevotionLog,
       sound: viewSound,
+      circle: viewCircle,
       journal: viewJournal,
       journalwrite: viewJournalWrite
     };
@@ -3841,6 +3931,12 @@
       render();
       if (go === "library" || go === "word") {
         pullBooksCloud().then(() => { if (state.view === go) render(); }).catch(() => {});
+      }
+      if (go === "circle" && window.AlignDB && AlignDB.fetchMyCircle) {
+        AlignDB.fetchMyCircle().then((r) => {
+          if (r && r.ok) state.circle = r.data || null;
+          if (state.view === "circle") render();
+        }).catch(() => {});
       }
     }));
     app.querySelectorAll("[data-go-day]").forEach(b => b.addEventListener("click", () => {
@@ -4473,6 +4569,33 @@
       save();
       if (state.session) await AlignDB.upsertProfile(state.profile.name);
       render();
+    } else if (act === "create-circle") {
+      if (!state.session) { state.view = "auth"; render(); return; }
+      state.circleBusy = true; state.circleErr = ""; render();
+      const r = await AlignDB.createCircle("ALIGN circle");
+      state.circleBusy = false;
+      if (r && r.ok) { state.circle = r.data || null; toast("Circle started. Share the code."); }
+      else state.circleErr = (r && r.error) || "Could not start a circle. Run sql/schema-circle.sql in Supabase.";
+      render();
+    } else if (act === "join-circle") {
+      if (!state.session) { state.view = "auth"; render(); return; }
+      const code = ((document.getElementById("circle-code") || {}).value || "").trim();
+      state.circleBusy = true; state.circleErr = ""; render();
+      const r = await AlignDB.joinCircle(code);
+      state.circleBusy = false;
+      if (r && r.ok) { state.circle = r.data || null; toast("You’re in."); }
+      else state.circleErr = (r && r.error) || "Could not join.";
+      render();
+    } else if (act === "leave-circle") {
+      const r = await AlignDB.leaveCircle();
+      if (r && r.ok) { state.circle = null; toast("Left the circle."); }
+      else toast((r && r.error) || "Could not leave");
+      render();
+    } else if (act === "copy-code") {
+      const code = state.circle && state.circle.code;
+      if (!code) return;
+      try { await navigator.clipboard.writeText(code); toast("Code copied"); }
+      catch { toast(code); }
     } else if (act === "sync-now") {
       if (!window.AlignDB) { toast("Cloud is not ready"); return; }
       const iso = today().iso;

@@ -1984,3 +1984,20 @@ img { max-width: 100%; display: block; }
 .diary-box.pad:focus { border-color: transparent; }
 .diary-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
 .nav button { font-size: 9.5px; }
+
+.circle-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.circle-row {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  padding: 14px;
+}
+.circle-who { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.circle-who h3 { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
+.circle-who p { font-size: 12px; color: var(--muted); margin: 0; }
+.avatar.sm { width: 36px; height: 36px; font-size: 13px; border-radius: 12px; flex-shrink: 0; }
+.circle-dots { display: flex; gap: 6px; }
+.circle-dots i {
+  width: 10px; height: 10px; border-radius: 99px; background: #1c1f28;
+  display: block; border: 1px solid var(--line);
+}
+.circle-dots i.mid { background: #5b8cff; border-color: #5b8cff; }
+.circle-dots i.on { background: var(--lime); border-color: var(--lime); }

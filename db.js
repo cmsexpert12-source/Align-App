@@ -520,6 +520,22 @@ window.AlignDB = (() => {
       err = await restUpsert("mornings", {
         user_id: userId, date: p.iso, steps: merged, updated_at: now
       }, "user_id,date");
+      if (!err) {
+        const ids = ["rise", "move", "pray", "devotion", "verse", "word", "drill", "affirm", "plan", "ready", "recite", "go"];
+        let doneN = 0;
+        ids.forEach((id) => { if (merged[id]) doneN += 1; });
+        const go = !!merged.go;
+        const pres = await restUpsert("path_days", {
+          user_id: userId,
+          date: p.iso,
+          done: doneN,
+          total: ids.length,
+          go,
+          path_done: go,
+          updated_at: now
+        }, "user_id,date");
+        if (pres && missingTable(pres)) { /* circle schema not applied yet */ }
+      }
     } else if (item.kind === "plan") {
       err = await restUpsert("day_plans", {
         user_id: userId, date: p.iso, payload: p.plan || {}, updated_at: now
@@ -1118,6 +1134,114 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
+  const circleCode = () => {
+    const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for (let i = 0; i < 6; i++) s += a.charAt(Math.floor(Math.random() * a.length));
+    return s;
+  };
+
+  const fetchMyCircle = async () => {
+    const userId = await uidOf();
+    if (!userId) return ok(null);
+    const mine = await restSelect("circle_members", "select=circle_id,joined_at&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+    if (!mine.length) return ok(null);
+    const cid = mine[0].circle_id;
+    const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
+    const circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+    const mems = await restSelect("circle_members", "select=user_id,joined_at&circle_id=eq." + encodeURIComponent(cid));
+    const ids = (mems || []).map((m) => m.user_id).filter(Boolean);
+    let names = {};
+    if (ids.length) {
+      const profs = await restSelect("profiles", "select=id,display_name&id=in.(" + ids.join(",") + ")");
+      (profs || []).forEach((p) => { names[p.id] = p.display_name || ""; });
+    }
+    const from = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 13);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return y + "-" + m + "-" + day;
+    })();
+    let days = [];
+    if (ids.length) {
+      days = await restSelect(
+        "path_days",
+        "select=user_id,date,done,total,go,path_done&user_id=in.(" + ids.join(",") + ")&date=gte." + from + "&order=date.desc"
+      );
+    }
+    const byUser = {};
+    ids.forEach((id) => { byUser[id] = []; });
+    (days || []).forEach((r) => {
+      if (!byUser[r.user_id]) byUser[r.user_id] = [];
+      byUser[r.user_id].push(r);
+    });
+    const members = ids.map((id) => ({
+      id,
+      name: names[id] || "ALIGN",
+      days: byUser[id] || []
+    }));
+    return ok({
+      id: circle.id,
+      name: circle.name || "ALIGN circle",
+      code: circle.code || "",
+      created_by: circle.created_by,
+      members
+    });
+  };
+
+  const createCircle = async (name) => {
+    const auth = await refreshAuth(false);
+    if (!auth.token || !auth.uid) return fail("Sign in to start a circle");
+    const have = await fetchMyCircle();
+    if (have && have.ok && have.data) return fail("Leave your circle first");
+    const id = (crypto.randomUUID && crypto.randomUUID()) || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+      const r = Math.random() * 16 | 0;
+      return (ch === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    }));
+    const code = circleCode();
+    let err = await restUpsert("circles", {
+      id,
+      name: String(name || "ALIGN circle").trim().slice(0, 40) || "ALIGN circle",
+      code,
+      created_by: auth.uid
+    }, "id");
+    if (err && missingTable(err)) return fail("Run sql/schema-circle.sql in Supabase once.");
+    if (err) return fail(err);
+    err = await restUpsert("circle_members", { circle_id: id, user_id: auth.uid }, "circle_id,user_id");
+    if (err && missingTable(err)) return fail("Run sql/schema-circle.sql in Supabase once.");
+    if (err) return fail(err);
+    return fetchMyCircle();
+  };
+
+  const joinCircle = async (code) => {
+    const auth = await refreshAuth(false);
+    if (!auth.token || !auth.uid) return fail("Sign in to join a circle");
+    const raw = String(code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8);
+    if (raw.length < 4) return fail("Enter the 6-letter code");
+    const have = await fetchMyCircle();
+    if (have && have.ok && have.data) return fail("Leave your circle first");
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const { error } = await sb.rpc("join_circle", { p_code: raw });
+    if (error && (missingTable(error) || /join_circle|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle.sql in Supabase once.");
+    }
+    if (error) return fail(error);
+    return fetchMyCircle();
+  };
+
+  const leaveCircle = async () => {
+    const sb = client();
+    const userId = await uidOf();
+    if (!sb || !userId) return ok(true);
+    const { error } = await sb.from("circle_members").delete().eq("user_id", userId);
+    if (error && missingTable(error)) return ok(true);
+    if (error) return fail(error);
+    return ok(true);
+  };
+
   const testConnection = async (url, anonKey) => {
     if (!window.supabase) return fail("Supabase library failed to load.");
     try {
@@ -1143,6 +1267,7 @@ window.AlignDB = (() => {
     fetchBooks, fetchReadingLog, upsertBookMeta, uploadBookFile,
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
+    fetchMyCircle, createCircle, joinCircle, leaveCircle,
     flush, pendingCount, status, syncNow, onStatus, seedLocal, markHydrated: () => { hydrated = true; scheduleFlush(0); }
   };
 })();
