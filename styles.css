@@ -2297,6 +2297,8 @@ img { max-width: 100%; display: block; }
   font-weight: 800; display: block; line-height: 1.1;
 }
 .circle-invite p { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.circle-invite.hero { padding: 18px 16px; margin-bottom: 12px; }
+.circle-invite.hero .circle-code { font-size: 28px; letter-spacing: .16em; }
 .circle-ask-actions { display: flex; gap: 8px; margin-top: 4px; }
 .circle-ask-actions .btn { flex: 1; height: 42px; }
 .circle-ask-actions .btn.ghost { margin-top: 0; }

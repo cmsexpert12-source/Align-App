@@ -3320,6 +3320,16 @@
     };
     const founder = !!(c && String(c.created_by || "").toLowerCase() === String(me || "").toLowerCase());
     const asks = (c && c.requests) || [];
+    const members = (c && c.members) || [];
+    const others = members.filter((m) => m.id !== me);
+    const mine = members.find((m) => m.id === me);
+    const justYou = !!(c && !c.pending && others.length === 0);
+    const showErr = (() => {
+      const m = state.circleErr || "";
+      if (!m || /cancel your request|already asked/i.test(m)) return "";
+      if (/sql\/|schema-circle|supabase/i.test(m)) return "Could not do that.";
+      return m;
+    })();
     const askBlock = (r) => `<div class="circle-row circle-ask">
         <div class="circle-who">
           <div class="avatar sm">${escapeHtml(((r.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
@@ -3333,47 +3343,50 @@
           <button class="btn ghost" data-act="deny-circle" data-uid="${escapeAttr(r.id || "")}" ${state.circleBusy ? "disabled" : ""}>Not now</button>
         </div>
       </div>`;
+    const inviteCard = (hero) => {
+      if (!c) return "";
+      const code = c.code || "";
+      return `<div class="circle-invite${hero ? " hero" : ""}">
+        <div class="grow">
+          <span class="circle-invite-k">Invite code</span>
+          <b class="circle-code">${escapeHtml(code || "········")}</b>
+          <p>${code
+            ? (founder ? "They ask with this. You let them in." : "Share this. The founder lets people in.")
+            : (founder ? "Make a code, then share it." : "The founder shares the code.")}</p>
+        </div>
+        ${code
+          ? `<button class="btn ghost sm" data-act="copy-code">Copy</button>`
+          : (founder ? `<button class="btn ghost sm" data-act="ensure-code" ${state.circleBusy ? "disabled" : ""}>Get code</button>` : "")}
+      </div>`;
+    };
     const body = !signed
       ? `<div class="room">
-           <div class="tag">Together</div>
            <h3>Walk with someone.</h3>
-           <p>Sign in so a circle can see your path, today’s schedule, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
+           <p>Sign in first. They see the path — not your journal.</p>
            <button class="btn" data-go="auth">Create account</button>
          </div>`
       : ((c && c.pending) || /cancel your request/i.test(state.circleErr || ""))
         ? `<div class="room">
-           <div class="tag">Waiting</div>
            <h3>Asked to join.</h3>
-           <p>The founder of ${escapeHtml((c && c.name) || "the circle")} has to say yes before you walk together. They will not see your journal, notes, or affirmation.</p>
+           <p>The founder has to say yes before you walk together.</p>
            <button class="btn ghost" data-act="cancel-request" ${state.circleBusy ? "disabled" : ""}>Cancel request</button>
          </div>`
       : !c
         ? `<div class="room">
-           <div class="tag">Together</div>
            <h3>Invite a few.</h3>
-           <p>They see today’s path, the schedule and whether it’s done, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation. The founder lets each person in.</p>
-           ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
+           <p>They see today’s path, the schedule, the book, and when you rose. Not your journal.</p>
+           ${showErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(showErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
            </div>
            <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Ask to join</button>
            <button class="btn ghost" data-act="create-circle" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>
          </div>`
-        : `<div class="circle-invite">
-             <div class="grow">
-               <span class="circle-invite-k">Invite code</span>
-               <b class="circle-code">${escapeHtml(c.code || "········")}</b>
-               <p>${c.code
-                 ? (founder ? "They ask with this. You let them in." : "Share this. The founder lets people in.")
-                 : "No code yet. The founder can make one."}</p>
-             </div>
-             ${c.code
-               ? `<button class="btn ghost sm" data-act="copy-code">Copy</button>`
-               : (founder ? `<button class="btn ghost sm" data-act="ensure-code" ${state.circleBusy ? "disabled" : ""}>Get code</button>` : "")}
-           </div>
+        : `${justYou ? inviteCard(true) : ""}
            ${asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
-           <div class="set-label">${(c.members || []).length ? "Walking" : ""}</div>
-           <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\\\"room\\\"><h3>Just you so far.</h3><p>Share the code. They ask. You say yes.</p></div>"}</div>
+           ${others.length ? `<div class="set-label">Walking</div><div class="circle-list">${others.map(memberBlock).join("")}${mine ? memberBlock(mine) : ""}</div>` : ""}
+           ${justYou && !asks.length ? `<p class="hint" style="margin:8px 2px 0">Just you so far. Share the code. They ask. You say yes.</p>` : ""}
+           ${!justYou ? inviteCard(false) : ""}
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
     return `
       <div class="screen full circle">
@@ -5369,12 +5382,12 @@
         state.circleErr = "";
         toast((r.data && r.data.pending) ? "You already asked. Wait for the founder." : "Circle started. Share the code.");
       } else {
-        const msg = (r && r.error) || "Could not start a circle. Run sql/schema-circle-start.sql in Supabase.";
+        const msg = (r && r.error) || "Could not start a circle.";
         if (/cancel your request|already asked/i.test(msg)) {
           state.circle = { pending: true, name: "ALIGN circle", members: [], requests: [], code: "" };
           state.circleErr = "";
           toast("You already asked. Wait for the founder.");
-        } else state.circleErr = msg;
+        } else state.circleErr = /sql\/|schema-circle|supabase/i.test(msg) ? "Could not start a circle." : msg;
       }
       render();
     } else if (act === "join-circle") {
@@ -5391,12 +5404,12 @@
         state.circleErr = "";
         toast((state.circle.pending) ? "Asked to join. Waiting for the founder." : "You’re in.");
       } else {
-        const msg = (r && r.error) || "Could not join. Run sql/schema-circle-approve.sql in Supabase.";
+        const msg = (r && r.error) || "Could not join.";
         if (/cancel your request|already asked/i.test(msg)) {
           state.circle = { pending: true, name: "ALIGN circle", members: [], requests: [], code: "" };
           state.circleErr = "";
           toast("You already asked. Wait for the founder.");
-        } else state.circleErr = msg;
+        } else state.circleErr = /sql\/|schema-circle|supabase/i.test(msg) ? "Could not join." : msg;
       }
       render();
     } else if (act === "approve-circle") {
@@ -5406,7 +5419,7 @@
       const r = await AlignDB.approveCircle(uid);
       state.circleBusy = false;
       if (r && r.ok) { state.circle = r.data || null; toast("They’re in."); }
-      else state.circleErr = (r && r.error) || "Could not let them in.";
+      else state.circleErr = (r && r.error && !/sql\/|schema-circle|supabase/i.test(r.error)) ? r.error : "Could not let them in.";
       if (state.circleErr) toast(state.circleErr);
       render();
     } else if (act === "deny-circle") {
@@ -5416,19 +5429,19 @@
       const r = await AlignDB.denyCircle(uid);
       state.circleBusy = false;
       if (r && r.ok) { state.circle = r.data || null; toast("Request closed."); }
-      else toast((r && r.error) || "Could not close it");
+      else toast((r && r.error && !/sql\/|schema-circle|supabase/i.test(r.error)) ? r.error : "Could not close it");
       render();
     } else if (act === "cancel-request") {
       state.circleBusy = true; state.circleErr = ""; render();
       const r = await AlignDB.cancelCircleRequest();
       state.circleBusy = false;
       if (r && r.ok) { state.circle = null; toast("Request cancelled."); }
-      else toast((r && r.error) || "Could not cancel");
+      else toast((r && r.error && !/sql\/|schema-circle|supabase/i.test(r.error)) ? r.error : "Could not cancel");
       render();
     } else if (act === "leave-circle") {
       const r = await AlignDB.leaveCircle();
       if (r && r.ok) { state.circle = null; toast("Left the circle."); }
-      else toast((r && r.error) || "Could not leave");
+      else toast((r && r.error && !/sql\/|schema-circle|supabase/i.test(r.error)) ? r.error : "Could not leave");
       render();
     } else if (act === "copy-code") {
       const code = state.circle && state.circle.code;
@@ -5443,7 +5456,7 @@
       if (r && r.ok && r.data) {
         state.circle = Object.assign({}, state.circle || {}, { code: r.data });
         toast("Code ready. Share it.");
-      } else toast((r && r.error) || "Run sql/schema-circle-code.sql in Supabase once.");
+      } else toast((r && r.error && !/sql\/|schema-circle|supabase/i.test(r.error)) ? r.error : "Could not make a code.");
       render();
     } else if (act === "save-routine") {
       try { pushRoutine(readPathForm()); toast("Path saved"); }
