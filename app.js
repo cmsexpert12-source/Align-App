@@ -3335,12 +3335,11 @@
            <p>Sign in so a circle can see your path, today’s schedule, the book you’re in, and when you rose and slept — not your journal, notes, or affirmation.</p>
            <button class="btn" data-go="auth">Create account</button>
          </div>`
-      : (c && c.pending)
+      : ((c && c.pending) || /cancel your request/i.test(state.circleErr || ""))
         ? `<div class="room">
            <div class="tag">Waiting</div>
            <h3>Asked to join.</h3>
-           <p>The founder of ${escapeHtml(c.name || "the circle")} has to say yes before you walk together. They will not see your journal, notes, or affirmation.</p>
-           ${state.circleErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(state.circleErr)}</p>` : ""}
+           <p>The founder of ${escapeHtml((c && c.name) || "the circle")} has to say yes before you walk together. They will not see your journal, notes, or affirmation.</p>
            <button class="btn ghost" data-act="cancel-request" ${state.circleBusy ? "disabled" : ""}>Cancel request</button>
          </div>`
       : !c
@@ -5341,7 +5340,11 @@
       state.circleBusy = true; state.circleErr = ""; render();
       const r = await AlignDB.createCircle("ALIGN circle");
       state.circleBusy = false;
-      if (r && r.ok) { state.circle = r.data || null; toast("Circle started. Share the code."); }
+      if (r && r.ok) {
+        state.circle = r.data || null;
+        state.circleErr = "";
+        toast((r.data && r.data.pending) ? "You already asked. Wait for the founder." : "Circle started. Share the code.");
+      }
       else state.circleErr = (r && r.error) || "Could not start a circle. Run sql/schema-circle-start.sql in Supabase.";
       render();
     } else if (act === "join-circle") {

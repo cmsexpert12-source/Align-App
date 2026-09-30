@@ -1439,11 +1439,23 @@ window.AlignDB = (() => {
     if (!userId) return ok(null);
     const mine = await restSelect("circle_members", "select=circle_id,joined_at&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
     if (!mine.length) {
+      let circle = null;
       const asked = await restSelect("circle_requests", "select=circle_id,created_at,display_name&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
-      if (!asked.length) return ok(null);
-      const cid = asked[0].circle_id;
-      const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
-      const circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+      if (asked.length) {
+        const cid = asked[0].circle_id;
+        const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
+        circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+      }
+      if (!circle || !circle.id) {
+        const sbPend = client();
+        if (sbPend) {
+          try {
+            const { data: pend, error: pendErr } = await sbPend.rpc("my_pending");
+            if (!pendErr && pend) circle = typeof pend === "string" ? JSON.parse(pend) : pend;
+          } catch { /* my_pending may not be applied yet */ }
+        }
+      }
+      if (!circle || !circle.id) return ok(null);
       return ok({
         id: circle.id,
         name: circle.name || "ALIGN circle",
@@ -1535,15 +1547,19 @@ window.AlignDB = (() => {
     const auth = await refreshAuth(false);
     if (!auth.token || !auth.uid) return fail("Sign in to start a circle");
     const have = await fetchMyCircle();
-    if (have && have.ok && have.data) {
-      return fail(have.data.pending ? "Cancel your request first" : "Leave your circle first");
-    }
+    if (have && have.ok && have.data && !have.data.pending) return fail("Leave your circle first");
+    if (have && have.ok && have.data && have.data.pending) return ok(have.data);
     const sb = client();
     if (!sb) return fail("Cloud is not ready");
     const label = String(name || "ALIGN circle").trim().slice(0, 40) || "ALIGN circle";
     const { error } = await sb.rpc("create_circle", { p_name: label });
     if (error && (missingTable(error) || /create_circle|Could not find the function/i.test(error.message || ""))) {
       return fail("Run sql/schema-circle-start.sql in Supabase once.");
+    }
+    if (error && /cancel your request/i.test(error.message || "")) {
+      const again = await fetchMyCircle();
+      if (again && again.ok && again.data) return ok(Object.assign({}, again.data, { pending: true }));
+      return ok({ id: "", name: "ALIGN circle", code: "", members: [], requests: [], pending: true });
     }
     if (error) return fail(error);
     return fetchMyCircle();
@@ -1556,12 +1572,17 @@ window.AlignDB = (() => {
     if (raw.length < 6) return fail("Enter the circle code");
     const have = await fetchMyCircle();
     if (have && have.ok && have.data && !have.data.pending) return fail("Leave your circle first");
-    if (have && have.ok && have.data && have.data.pending) return fail("Cancel your request first");
+    if (have && have.ok && have.data && have.data.pending) return ok(have.data);
     const sb = client();
     if (!sb) return fail("Cloud is not ready");
     const { error } = await sb.rpc("join_circle", { p_code: raw });
     if (error && (missingTable(error) || /join_circle|Could not find the function/i.test(error.message || ""))) {
       return fail("Run sql/schema-circle.sql in Supabase once.");
+    }
+    if (error && /cancel your request/i.test(error.message || "")) {
+      const again = await fetchMyCircle();
+      if (again && again.ok && again.data) return ok(Object.assign({}, again.data, { pending: true }));
+      return ok({ id: "", name: "ALIGN circle", code: "", members: [], requests: [], pending: true });
     }
     if (error) return fail(error);
     return fetchMyCircle();

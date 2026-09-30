@@ -33,6 +33,37 @@ $$;
 revoke all on function public.my_circle() from public;
 grant execute on function public.my_circle() to authenticated;
 
+create or replace function public.my_pending()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  rec jsonb;
+begin
+  if auth.uid() is null then
+    return null;
+  end if;
+  select jsonb_build_object(
+    'id', c.id,
+    'name', c.name,
+    'created_by', c.created_by,
+    'pending', true
+  )
+  into rec
+  from public.circle_requests r
+  join public.circles c on c.id = r.circle_id
+  where r.user_id = auth.uid()
+  limit 1;
+  return rec;
+end;
+$$;
+
+revoke all on function public.my_pending() from public;
+grant execute on function public.my_pending() to authenticated;
+
 create or replace function public.ensure_circle_code()
 returns text
 language plpgsql
