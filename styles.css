@@ -479,6 +479,45 @@ img { max-width: 100%; display: block; }
 .day-card h3 { font-size: 16px; font-weight: 700; line-height: 1.2; }
 .day-card p { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
 .day-card .mins { font-size: 12px; color: var(--faint); font-weight: 600; line-height: 1; }
+.move-rest {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+.move-day {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 10px 12px;
+  text-align: left;
+  color: inherit;
+  box-shadow: var(--highlight);
+}
+.move-day b {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.move-day span {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--p);
+}
+.move-day em {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+}
 
 /* ---------- DAY DETAIL / READY ---------- */
 .back-row {
@@ -2435,6 +2474,7 @@ img { max-width: 100%; display: block; }
 .hub-card:active,
 .setting:active,
 .day-card:active,
+.move-day:active,
 .station:active,
 .plan-card:active,
 .ex-row:active {

@@ -2693,29 +2693,31 @@
     const planId = (L().loadRoutine && L().loadRoutine().trainPlan) || "energy";
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
     const week = weekDays();
+    const cur = currentStep();
+    const canMove = canOpenStep("move");
+    const rest = week.filter((d) => d.dow !== t.dow);
     return `
       <div class="screen plan">
-        <div class="topbar"><div class="greet">Move<h2>This week.</h2></div>
+        <div class="topbar"><div class="greet">Move<h2>Today’s session.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="progress">Log</button></div>
         </div>
         <div class="hero p-${todayD.pattern}">
           <div class="tag">${moveDone ? "Logged today" : "Today · " + DOW_FULL[todayD.dow]}</div>
           <h3>${todayD.name}</h3>
-          <p class="sub">${todayD.subtitle}</p>
+          <p class="sub">${moveDone
+            ? todayD.subtitle
+            : (canMove ? todayD.subtitle : (todayD.subtitle + (cur ? " · on the path after " + cur.title : "")))}</p>
           <div class="hero-meta"><span><b>${todayD.minutes}</b> min</span><span><b>${todayD.items.length}</b> moves</span></div>
-          <button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>
+          ${canMove ? `<button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>` : ""}
         </div>
-        <p class="plan-kicker">Bodyweight · no gear. Training is still one step on the path.</p>
-        ${week.map(d => `
-          <button class="day-card p-${d.pattern} ${d.dow===t.dow?"today":""}" data-go-day="${d.dow}">
-            <div class="when">${DOW[d.dow]}</div>
-            <div>
-              <h3>${d.name}</h3>
-              <p>${d.subtitle} · ${d.items.length} moves</p>
-            </div>
-            <div class="mins">${d.minutes}m</div>
-          </button>
-        `).join("")}
+        <p class="plan-kicker">Bodyweight · no gear. Training is one step on the path — not the product.</p>
+        ${rest.length ? `<div class="section-h" style="padding:0 16px"><h4>The rest of the week</h4></div>
+        <div class="move-rest">${rest.map((d) => `
+          <button type="button" class="move-day p-${d.pattern}" data-go-day="${d.dow}">
+            <b>${DOW[d.dow]}</b>
+            <span>${escapeHtml(d.short || d.name)}</span>
+            <em>${d.minutes}m</em>
+          </button>`).join("")}</div>` : ""}
         <div class="shelf-chips" style="padding:8px 16px 10px">
           ${packs.map((p) => `<button type="button" class="${p.id===planId?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
         </div>
