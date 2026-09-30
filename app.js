@@ -2553,32 +2553,6 @@
     const sunday = L().clocksFor(t.date).sunday;
     const maxBar = Math.max(idealMs, todayMs, 1);
     const kindLabel = { pace: "On pace", long: "Over", short: "Short", held: "Held", open: "—" };
-    const focus = rows
-      .filter((r) => r.actual >= 1000 || r.done)
-      .filter((r) => r.kind === "long" || r.kind === "short")
-      .map((r) => Object.assign({}, r, { mag: Math.abs(r.actual - r.ideal) }))
-      .sort((a, b) => b.mag - a.mag)
-      .slice(0, 2);
-    const notes = [];
-    if (todayMs < 1000 && !rows.some((r) => r.done)) {
-      notes.push("Finish a step. Ideal vs actual is how you see which part of the morning needs you.");
-    } else {
-      if (todayMs > windowMs + 3 * 60000) {
-        notes.push(sunday
-          ? "The path is over the 5:45 window. Cut from ready and plan — not the Word."
-          : "The path ran past the 90 min aim. Find the leak below.");
-      } else if (todayMs >= 1000 && todayMs <= idealMs + 2 * 60000 && rows.filter((r) => r.done || r.actual >= 1000).length >= 4) {
-        notes.push("The morning is inside the mark. Keep the Word full.");
-      }
-      focus.forEach((f) => {
-        const over = f.actual - f.ideal;
-        if (f.kind === "long") {
-          notes.push(f.title + " used " + fmt(f.actual) + " against " + fmt(f.ideal) + ". That’s " + fmt(over) + " over — this is where the morning leaks.");
-        } else {
-          notes.push(f.title + " was " + fmt(f.actual) + " against " + fmt(f.ideal) + ". Short by " + fmt(-over) + ". Don’t starve this.");
-        }
-      });
-    }
     const cmpRow = (r) => {
       const delta = r.actual && r.ideal ? (r.actual - r.ideal) : 0;
       const dLab = !r.actual
@@ -2615,14 +2589,6 @@
     });
     const timedDays = weekRows.filter((d) => d.act >= 1000);
     const inAim = timedDays.filter((d) => !d.over && !d.starved).length;
-    const weekFocus = [];
-    if (timedDays.length) {
-      const overN = timedDays.filter((d) => d.over).length;
-      const starN = timedDays.filter((d) => d.starved).length;
-      if (overN) weekFocus.push(overN + " morning" + (overN === 1 ? "" : "s") + " ran past the window.");
-      if (starN) weekFocus.push("The Word was short on " + starN + " day" + (starN === 1 ? "" : "s") + ". Guard the chapters.");
-      if (!overN && !starN) weekFocus.push("This week is inside the mark. Hold it.");
-    }
     const areaIds = [
       { title: "Pray & affirm", ids: ["pray", "affirm"] },
       { title: "The Word", ids: ["devotion", "verse", "word", "drill", "recite"] },
@@ -2654,7 +2620,6 @@
     const liveLine = (cur && live >= 1000)
       ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)} of ${fmt((L().idealMsFor && L().idealMsFor(t.iso, cur.id, opts)) || 0)} ideal</p>`
       : "";
-    const headHint = sunday ? "Sunday window 4:00–5:45 · 105 min" : "Weekday aim 90 min · don’t cut the Word to make it";
     const clk = L().clocksFor(t.date);
     const upAt = L().clockAt && L().clockAt(t.iso, "rise");
     const downAt = L().clockAt && L().clockAt(t.iso, "lights");
@@ -2663,7 +2628,6 @@
         <div class="topbar"><div class="greet">Time<h2>Pace.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="home">Today</button></div>
         </div>
-        <p class="plan-kicker">${headHint}. Ideal is the mark. Actual is what happened. The gap is where to focus.</p>
         <div class="pulse-stats" style="margin:0 16px 8px">
           <div><b>${upAt && upAt.label ? escapeHtml(upAt.label) : "—"}</b><span>I’m up${clk.wakeLabel ? " · set " + escapeHtml(clk.wakeLabel) : ""}</span></div>
           <div><b>${downAt && downAt.label ? escapeHtml(downAt.label) : "—"}</b><span>Goodnight${clk.tonightLabel ? " · set " + escapeHtml(clk.tonightLabel) : ""}</span></div>
@@ -2677,13 +2641,7 @@
             <div><b>${fmt(windowMs)}</b><span>${sunday ? "To 5:45" : "Aim"}</span></div>
           </div>
           <div class="time-track big"><i class="ideal" style="width:${Math.min(100, Math.round(idealMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i><i class="act ${todayMs > windowMs ? "long" : "pace"}" style="width:${Math.min(100, Math.round(todayMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i></div>
-          ${notes.map((n) => `<p class="hint" style="margin:10px 0 0">${escapeHtml(n)}</p>`).join("")}
         </div>
-        ${focus.length ? `
-        <div class="time-focus">
-          <div class="section-h" style="padding:0;margin:0 0 6px"><h4>Needs focus</h4></div>
-          ${focus.map((f) => `<p><strong>${escapeHtml(f.title)}</strong> · ${fmt(f.actual)} actual · ${fmt(f.ideal)} ideal</p>`).join("")}
-        </div>` : ""}
         <div class="time-area">
           <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4><span>Ideal · actual</span></div>
           <div class="time-cmp head"><div class="lab"></div><b class="ideal">Ideal</b><b>Used</b><b>Gap</b></div>
@@ -2696,7 +2654,6 @@
             <div><b>${timedDays.length ? fmt(Math.round(timedDays.reduce((n, d) => n + d.ideal, 0) / timedDays.length)) : "—"}</b><span>Avg ideal</span></div>
             <div><b>${timedDays.length ? inAim + "/" + timedDays.length : "—"}</b><span>On aim</span></div>
           </div>
-          ${weekFocus.map((n) => `<p class="hint" style="margin:10px 0 0">${escapeHtml(n)}</p>`).join("")}
           ${areaBlock}
         </div>
         <div class="time-area">
