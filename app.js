@@ -3717,33 +3717,25 @@
           <div class="page-title">
             <div class="tag">Championship</div>
             <h1>Sit with the chapters.</h1>
-            <p>${state.champBusy
-              ? "Writing questions from the chapters you’ve read. Meaning, not trivia."
-              : (nQ
-                ? ("Untimed. " + (S().CHAMP_N || 12) + " questions. After each answer, the reason. Built from " + (refs || "chapters you’ve read") + ".")
-                : "Read Scripture first. Championship is built from those chapters — not a generic bank.")}</p>
+            ${state.champBusy ? `<p>Writing questions from what you read.</p>` : (nQ && refs ? `<p>${escapeHtml(refs)}.</p>` : "")}
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" ${state.champBusy ? "disabled" : (nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`)}>${state.champBusy ? "Writing…" : (nQ ? "Begin" : "Read first")}</button>
-            <p class="next-up">The 2-minute sprint stays on the path. This is extra practice.</p>
           </div>
         </div>`;
       }
       return `
         <div class="screen full">
-          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
           <div class="page-title">
-            <div class="tag">${night ? "Night test" : "Morning test"}</div>
-            <h1>2 minutes.<br>${S().SPRINT_N} on the meaning.</h1>
+            <div class="tag">${night ? "Night" : "Sprint"}</div>
+            <h1>2 minutes.</h1>
             <p>${nQ
-              ? (night
-                ? "Same chapters as this morning. Misses first, then lines you already got — so they stick overnight."
-                : ("Built from " + (refs || "today’s reading") + ". Meaning, motive, promise — not which-verse trivia."))
-              : "Read today’s Scripture first. ALIGN writes the questions from those chapters — not a generic bank."}</p>
+              ? (night ? "Same chapters as this morning." : (refs ? escapeHtml(refs) + "." : "Today’s reading."))
+              : "Read today’s Scripture first."}</p>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
             <button class="btn" ${nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`}>${nQ ? "Start the clock" : "Read first"}</button>
-            <p class="next-up">${night ? "Then the memory verse. Then goodnight." : "Then affirm."}</p>
           </div>
         </div>`;
     }
@@ -3753,11 +3745,10 @@
       const cap = champ ? (S().CHAMP_N || 12) : S().SPRINT_N;
       return `
         <div class="screen full">
-          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="back-row"><button class="icon-btn" data-go="${champ ? "word" : "home"}">${chev()}</button></div>
           <div class="done-hero" style="padding:24px 22px">
             <div class="kicker">${champ ? "Championship" : "Sprint"}</div>
             <h1>${champ ? (d.answered >= cap ? "Held." : "Stopped.") : (d.answered >= S().SPRINT_N ? "Cleared." : "Time.")}</h1>
-            <p class="lead" style="color:var(--muted)">${d.answered} answered · ${d.correct} right · ${acc}%. Misses come back sooner.</p>
             <div class="done-stats">
               <div><b>${d.answered}</b><span>answered</span></div>
               <div><b>${d.correct}</b><span>right</span></div>
