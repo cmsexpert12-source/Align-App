@@ -4182,16 +4182,14 @@
   const viewGetReady = () => {
     const sunday = L().clocksFor(today().date).sunday;
     return `
-    <div class="screen full">
+    <div class="screen full has-cta">
       <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
       <div class="page-title">
-        <div class="tag">${sunday ? "Leave 5:45" : "Then"}</div>
+        <div class="tag">${sunday ? "Leave 5:45" : "Morning"}</div>
         <h1>Get ready.</h1>
-        <p>${sunday ? "Bath. Dress for church. Out the door by 5:45." : "Bath. Dress. Leave the room in order. No phone needed after this."}</p>
       </div>
       <div class="pray-stage">
         <div class="pray-time">${fmtClock(state.readySec)}</div>
-        <p class="hint">Optional timer. Use it or ignore it.</p>
       </div>
       <div class="sticky-cta">
         ${state.readyOn
