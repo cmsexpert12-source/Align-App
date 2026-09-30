@@ -749,7 +749,13 @@
   };
 
   const L = () => window.ALIGN_LIFE;
-  const B = () => window.ALIGN_BOOKS;
+  const B = () => window.ALIGN_BOOKS || {
+    dueToday: () => [],
+    loggedToday: () => false,
+    list: () => [],
+    byId: () => null,
+    remove: async () => {}
+  };
   const S = () => window.ALIGN_SCRIPTURE;
 
   const timeVal = (h, m) => String(Math.max(0, Math.min(23, Number(h) || 0))).padStart(2, "0") + ":" + String(Math.max(0, Math.min(59, Number(m) || 0))).padStart(2, "0");
@@ -870,7 +876,32 @@
         sub: first.title + " · " + (first.pages_per_day || 8) + " pages"
       });
     }
+    if (L().isShort && L().isShort(t.iso)) {
+      const keep = { rise: 1, pray: 1, devotion: 1, word: 1, go: 1 };
+      return steps.filter((s) => keep[s.id]);
+    }
     return steps;
+  };
+
+  const isLateStart = () => {
+    const t = today();
+    if (L().isEvening && L().isEvening(t.date)) return false;
+    if (L().morningOf(t.iso).rise) return false;
+    if (L().isShort && L().isShort(t.iso)) return false;
+    const clk = L().clocksFor(t.date);
+    const wake = new Date(t.date.getFullYear(), t.date.getMonth(), t.date.getDate(), clk.wakeH || 0, clk.wakeM || 0, 0, 0);
+    return Date.now() - wake.getTime() >= 75 * 60 * 1000;
+  };
+
+  const missedYesterday = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const iso = isoOf(d);
+    if (morningDone(iso)) return false;
+    try {
+      const m = L().morningOf(iso);
+      return !!(m && (m.rise || m.go || m.pray || m.word));
+    } catch { return false; }
   };
 
   const AI = () => window.ALIGN_AI;
@@ -1413,7 +1444,7 @@
   const gateStep = (id) => {
     if (canOpenStep(id)) return true;
     const cur = currentStep();
-    toast(cur ? ("Finish " + cur.title + " first.") : "The morning path is done.");
+    toast(cur ? (cur.title + " is next.") : "The morning path is done.");
     return false;
   };
 
@@ -1577,7 +1608,7 @@
     const iso = today().iso;
     if (!canComplete(id)) {
       const cur = currentStep();
-      if (cur && cur.id !== id) toast("Finish " + cur.title + " first.");
+      if (cur && cur.id !== id) toast(cur.title + " is next.");
       return L().morningOf(iso);
     }
     const steps = L().setStep(iso, id, true);
@@ -1660,7 +1691,9 @@
         }
       } catch { /* next chapter optional */ }
     } catch (e) {
-      state.bibleErr = (e && e.message) || "Could not load this chapter. Check the connection.";
+      state.bibleErr = state.offline
+        ? "This chapter isn’t on this phone yet. The rest of the morning still works."
+        : ((e && e.message) || "Could not load this chapter. Check the connection.");
     }
     state.bibleLoading = false;
     render();
@@ -2217,11 +2250,15 @@
   };
 
   const streakCopy = (n) => {
-    if (n <= 0) return "Start today. The first morning counts.";
+    if (n <= 0) {
+      return missedYesterday()
+        ? "Yesterday didn’t close. Today still counts."
+        : "Start today. The first morning counts.";
+    }
     if (n === 1) return "Day one is in. Come back tomorrow.";
-    if (n < 7) return n + " mornings in a row. Don’t break it.";
+    if (n < 7) return n + " mornings in a row. Keep going.";
     if (n < 21) return "A week-plus streak. This is the habit.";
-    return n + " days. Guard this.";
+    return n + " days. You’re in the work.";
   };
 
   const prioOf = (x) => {
@@ -2246,18 +2283,18 @@
     const clk = L().clocksFor(t.date);
     const evening = L().isEvening(t.date);
     const allDone = !cur;
+    const shortOn = !!(L().isShort && L().isShort(t.iso));
+    const late = isLateStart();
     const hideInst = state.hideInstall || isStandalone();
-    const install = hideInst ? "" : (state.installPrompt ? `
-      <div class="install-banner">
-        <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
-        <button data-act="install-pwa">Add</button>
-        <button type="button" class="quiet" data-act="hide-install">Not now</button>
+    const install = (allDone && !hideInst) ? (state.installPrompt ? `
+      <div class="home-install">
+        <p>Add ALIGN to the Home Screen so 5am is one tap.</p>
+        <button type="button" class="linkish" data-act="install-pwa">Add</button>
       </div>` : (isIos() ? `
-      <div class="install-banner">
-        <p><strong style="color:var(--text)">Add ALIGN to your Home Screen</strong> so it opens like an app.</p>
-        <button data-act="ios-install">How</button>
-        <button type="button" class="quiet" data-act="hide-install">Not now</button>
-      </div>` : ""));
+      <div class="home-install">
+        <p>Add ALIGN to the Home Screen so 5am is one tap.</p>
+        <button type="button" class="linkish" data-act="ios-install">How</button>
+      </div>` : "")) : "";
 
     const plan = (L().peekPlan ? L().peekPlan(t.iso) : L().planOf(t.iso));
     const prioRows = (plan.priorities || []).map(prioOf);
@@ -2361,7 +2398,71 @@
           </div>
         </div>
         ${state.offline ? `<div class="offline">You’re offline. The morning still works on this device.</div>` : ""}
-        ${install}
+        <div class="next-hero ${allDone ? "done-hero-card" : ""}">
+          <div class="tag">${shortOn ? "Short morning" : (clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next"))}</div>
+          <h3>${allDone ? (clk.sunday ? "Go to church." : (evening ? "Rest." : "Day is open.")) : escapeHtml(cur ? cur.title : "Rise")}</h3>
+          <p>${allDone
+            ? (clk.sunday ? "The light path is done. Church is the first appointment." : (evening ? "Night devotion, the verse, goodnight — done. Phone down." : "You walked the whole path. Go well."))
+            : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Mark rise and the morning begins.")}</p>
+          ${allDone
+            ? ""
+            : `<button class="btn" data-act="open-step" data-step="${cur ? cur.id : "rise"}">${nextCta}</button>`}
+          ${late ? `<button type="button" class="btn ghost short-offer" data-act="short-today">Short morning today</button>` : ""}
+          ${shortOn && !allDone ? `<button type="button" class="linkish short-full" data-act="full-today">Full path</button>` : ""}
+          ${install}
+        </div>
+        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
+        <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
+        ${(() => {
+          const rows = steps.map((s) => {
+            const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
+            const now = !!(cur && cur.id === s.id && !done);
+            return { s, done, now };
+          });
+          const finished = rows.filter((r) => r.done);
+          const open = rows.filter((r) => !r.done);
+          return `
+        ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
+        ${open.length ? `<div class="path">${open.map((r) => stepRow(
+            { ...r.s, sub: r.now ? subFor(r.s) : ("After " + (cur ? cur.title : "the last step")) },
+            false,
+            r.now,
+            r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
+          )).join("")}</div>` : ""}`;
+        })()}
+        ${evening && dueE.length ? `
+          <div class="section-h" style="padding:16px 16px 0"><h4>Tonight’s book</h4></div>
+          <div class="path">
+            ${dueE.map((b) => {
+              const done = B().loggedToday(t.iso, b.id);
+              return stepRow(
+                { id: "read", icon: "read", title: escapeHtml(b.title), sub: done ? "Sitting done" : "Page " + (b.current_page || 1) + (b.pages ? " of " + b.pages : "") + " · " + (b.pages_per_day || 8) + " pages" },
+                done,
+                !done,
+                `data-act="open-book" data-id="${b.id}"`
+              );
+            }).join("")}
+          </div>
+        ` : ""}
+        ${(() => {
+          const eve = eveningSteps();
+          if (!eve.length) return "";
+          const rows = eve.map((s) => {
+            const done = stepIsDone(s);
+            const now = !!(cur && cur.id === s.id && !done);
+            return { s, done, now };
+          });
+          return `
+        <div class="section-h" style="padding:16px 16px 0"><h4>Tonight</h4><span>${rows.filter((r) => r.done).length}/${rows.length}</span></div>
+        <div class="path">${rows.map((r) => stepRow(
+            Object.assign({}, r.s),
+            r.done,
+            r.now,
+            `data-act="open-step" data-step="${r.s.id}"`
+          )).join("")}</div>`;
+        })()}
+        ${planNow}
+        ${wordToday}
         <div class="home-week">
           <div class="week-strip">${weekDots}</div>
           <div class="pulse">
@@ -2387,68 +2488,6 @@
             })()}
           </div>
         </div>
-        ${wordToday}
-        ${planNow}
-        <div class="next-hero ${allDone ? "done-hero-card" : ""}">
-          <div class="tag">${clk.sunday ? "Sunday · church morning" : (evening ? "Evening" : "Up next")}</div>
-          <h3>${allDone ? (clk.sunday ? "Go to church." : (evening ? "Rest." : "Day is open.")) : escapeHtml(cur ? cur.title : "Rise")}</h3>
-          <p>${allDone
-            ? (clk.sunday ? "The light path is done. Church is the first appointment." : (evening ? "Night devotion, the verse, goodnight — done. Phone down." : "You walked the whole path. Go well."))
-            : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Mark rise and the morning begins.")}</p>
-          ${allDone
-            ? ""
-            : `<button class="btn" data-act="open-step" data-step="${cur ? cur.id : "rise"}">${nextCta}</button>`}
-        </div>
-        ${evening && dueE.length ? `
-          <div class="section-h" style="padding:0 16px"><h4>Tonight’s book</h4></div>
-          <div class="path">
-            ${dueE.map((b) => {
-              const done = B().loggedToday(t.iso, b.id);
-              return stepRow(
-                { id: "read", icon: "read", title: escapeHtml(b.title), sub: done ? "Sitting done" : "Page " + (b.current_page || 1) + (b.pages ? " of " + b.pages : "") + " · " + (b.pages_per_day || 8) + " pages" },
-                done,
-                !done,
-                `data-act="open-book" data-id="${b.id}"`
-              );
-            }).join("")}
-          </div>
-        ` : ""}
-        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
-        <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        ${(() => {
-          const rows = steps.map((s) => {
-            const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
-            const now = !!(cur && cur.id === s.id && !done);
-            return { s, done, now };
-          });
-          const finished = rows.filter((r) => r.done);
-          const open = rows.filter((r) => !r.done);
-          return `
-        ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
-        ${open.length ? `<div class="path">${open.map((r) => stepRow(
-            { ...r.s, sub: r.now ? subFor(r.s) : ("After " + (cur ? cur.title : "the last step")) },
-            false,
-            r.now,
-            r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
-          )).join("")}</div>` : ""}`;
-        })()}
-        ${(() => {
-          const eve = eveningSteps();
-          if (!eve.length) return "";
-          const rows = eve.map((s) => {
-            const done = stepIsDone(s);
-            const now = !!(cur && cur.id === s.id && !done);
-            return { s, done, now };
-          });
-          return `
-        <div class="section-h" style="padding:16px 16px 0"><h4>Tonight</h4><span>${rows.filter((r) => r.done).length}/${rows.length}</span></div>
-        <div class="path">${rows.map((r) => stepRow(
-            Object.assign({}, r.s),
-            r.done,
-            r.now,
-            ("data-act=\"open-step\" data-step=\"" + r.s.id + "\"")
-          )).join("")}</div>`;
-        })()}
       </div>
     `;
   };
@@ -2679,9 +2718,6 @@
         <div class="topbar"><div class="greet">Move<h2>This week.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="progress">Log</button></div>
         </div>
-        <div class="shelf-chips" style="padding:0 16px 10px">
-          ${packs.map((p) => `<button type="button" class="${p.id===planId?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
-        </div>
         <div class="hero p-${todayD.pattern}">
           <div class="tag">${moveDone ? "Logged today" : "Today · " + DOW_FULL[todayD.dow]}</div>
           <h3>${todayD.name}</h3>
@@ -2689,7 +2725,7 @@
           <div class="hero-meta"><span><b>${todayD.minutes}</b> min</span><span><b>${todayD.items.length}</b> moves</span></div>
           <button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>
         </div>
-        <p class="plan-kicker">Bodyweight · no gear. Pick the week that matches the goal. Training is still one step on the path.</p>
+        <p class="plan-kicker">Bodyweight · no gear. Training is still one step on the path.</p>
         ${week.map(d => `
           <button class="day-card p-${d.pattern} ${d.dow===t.dow?"today":""}" data-go-day="${d.dow}">
             <div class="when">${DOW[d.dow]}</div>
@@ -2700,6 +2736,9 @@
             <div class="mins">${d.minutes}m</div>
           </button>
         `).join("")}
+        <div class="shelf-chips" style="padding:8px 16px 10px">
+          ${packs.map((p) => `<button type="button" class="${p.id===planId?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
+        </div>
       </div>
     `;
   };
@@ -3250,11 +3289,19 @@
         streak += 1;
         cursor.setDate(cursor.getDate() - 1);
       }
+      const mine = m.id === me;
+      let upEarly = "";
+      if (!mine && todayRow && todayRow.wake_at) {
+        const wd = new Date(todayRow.wake_at);
+        if (wd.getTime()) upEarly = (L().fmtClockAt && L().fmtClockAt(wd.getTime())) || "";
+      }
       const status = todayRow && todayRow.path_done
         ? "Path done"
-        : todayRow && todayRow.done
-          ? (todayRow.done + " / " + (todayRow.total || 12))
-          : "Not yet";
+        : (!mine && upEarly)
+          ? ("Up " + upEarly)
+          : todayRow && todayRow.done
+            ? (todayRow.done + " / " + (todayRow.total || 12))
+            : "Not yet";
       const dots = week.map((iso) => {
         const row = byDate[iso];
         const cls = row && row.path_done ? "on" : (row && row.done ? "mid" : "");
@@ -3263,8 +3310,7 @@
         const isToday = iso === todayIso;
         return `<span class="circle-dot ${cls}${isToday ? " today" : ""}" title="${escapeAttr(iso)}"><i></i><b>${lab}</b></span>`;
       }).join("");
-      const label = (m.id === me) ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
-      const mine = m.id === me;
+      const label = mine ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
       let sched = todayRow && todayRow.sched;
       if (typeof sched === "string") {
         try { sched = JSON.parse(sched); } catch { sched = []; }
@@ -3303,7 +3349,7 @@
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
           <div class="grow">
             <h3>${escapeHtml(label)}</h3>
-            <p>${streak ? streak + " day streak" : (mine ? "Your path" : "Walking with you")}</p>
+            <p>${streak ? streak + " day streak" : (mine ? "Your path" : (upEarly && !(todayRow && todayRow.path_done) ? "They’re in the morning." : "Walking with you"))}</p>
           </div>
           <span class="circle-flag ${flagOn ? "" : "wait"}">${escapeHtml(status)}</span>
         </div>
@@ -3462,10 +3508,17 @@
     const sprintSub = sprint && sprint.answered
       ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
       : "2 minutes · " + S().SPRINT_N + " questions · meaning, not verse trivia";
+    const wordCta = n >= target ? "Scripture done" : (n ? "Continue Scripture" : "Open Scripture");
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div>${soundLaunch()}</div>
-        <p class="plan-kicker">Pray. Devotion. Two minutes on the verse. Hide it. Scripture. Sprint. Affirm. Read it again before you go — and before bed.</p>
+        <div class="next-hero word-hero">
+          <div class="tag">Today’s Word</div>
+          <h3>${escapeHtml(a.next.book + " " + a.next.chapter)}</h3>
+          <p>${escapeHtml(scriptureSub)}</p>
+          <button class="btn" data-act="open-step" data-step="word">${wordCta}</button>
+        </div>
+        <p class="plan-kicker">Pray. Devotion. Memory. Sprint. Affirm. Championship is extra.</p>
         <div class="hub-grid">
           <button class="hub-card" data-act="open-step" data-step="pray">
             <div class="tile">${stepIcon("pray")}</div>
@@ -3476,13 +3529,6 @@
             <div class="tile">${stepIcon("book")}</div>
             <h3>Devotion</h3>
             <p>${j.devotion ? "Takeaway saved" : "Spurgeon in the app. Write what remains."}</p>
-          </button>
-          <button class="hub-card wide" data-act="open-step" data-step="word">
-            <div class="tile">${stepIcon("word")}</div>
-            <div>
-              <h3>Scripture</h3>
-              <p>${scriptureSub}</p>
-            </div>
           </button>
           <button class="hub-card ${tv && !(S().load().daily[iso] && S().load().daily[iso].verseDone) ? "ready" : ""}" data-act="open-verse">
             <div class="tile">${stepIcon("verse")}</div>
@@ -4110,8 +4156,8 @@
             <button class="btn" data-act="bible-done">${sunday ? "Chapter read · done" : "Chapter read"}</button>
           </div>
           ${readN >= target
-            ? `<button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="word">Scripture done · sprint next</button>`
-            : `<p class="next-up" style="margin-top:8px">${sunday ? "One chapter. Then the sprint." : (target - readN) + " more to the usual three"}</p>`}
+            ? `<button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="word">${(L().isShort && L().isShort(iso)) ? "Scripture done · continue" : "Scripture done · sprint next"}</button>`
+            : `<p class="next-up" style="margin-top:8px">${(sunday || (L().isShort && L().isShort(iso))) ? "One chapter. Then keep walking." : (target - readN) + " more to the usual three"}</p>`}
         </div>
       </div>
     `;
@@ -5233,7 +5279,11 @@
       const kind = state.sheet && state.sheet.kind;
       const stepId = state.sheet && state.sheet.stepId;
       state.sheet = null;
-      if (kind === "quit") {
+      if (kind === "ios-install") {
+        state.hideInstall = true;
+        try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
+        render();
+      } else if (kind === "quit") {
         clearTick(); state.workout = null; state.view = "home"; render();
       } else if (kind === "signout") {
         await AlignDB.signOut();
@@ -5524,8 +5574,17 @@
     } else if (act === "hide-install") {
       state.hideInstall = true;
       try { localStorage.setItem("align-ios-hint", "1"); } catch { /* ok */ }
-      const ban = app.querySelector(".install-banner");
+      const ban = app.querySelector(".install-banner, .home-install");
       if (ban) ban.remove();
+    } else if (act === "short-today") {
+      if (L().morningOf(today().iso).rise) { toast("The morning already started."); return; }
+      if (L().setShort) L().setShort(today().iso, true);
+      toast("Short path today. Full path tomorrow.");
+      render();
+    } else if (act === "full-today") {
+      if (L().setShort) L().setShort(today().iso, false);
+      toast("Full path.");
+      render();
     } else if (act === "sign-out") {
       state.sheet = {
         title: "Sign out?",
@@ -5538,7 +5597,7 @@
       render();
     } else if (act === "locked-step") {
       const cur = currentStep();
-      toast(cur ? ("Finish " + cur.title + " first.") : "The morning path is done.");
+      toast(cur ? (cur.title + " is next.") : "The morning path is done.");
     } else if (act === "open-step") {
       const step = el.dataset.step;
       if (!gateStep(step)) return;
@@ -6075,7 +6134,24 @@
 
   const leaveSplash = () => {
     if (state.view !== "splash") return;
-    state.view = state.onboardingDone ? "home" : "onboard";
+    if (!state.onboardingDone) {
+      state.view = "onboard";
+      try { render(); } catch (err) { console.warn(err); }
+      return;
+    }
+    try {
+      const iso = today().iso;
+      const cur = currentStep();
+      if (cur && cur.id !== "rise") {
+        const row = (L().timesOf && L().timesOf(iso)) || {};
+        const t = row[cur.id];
+        if (t && t.open && !t.ms) {
+          openPathStep(cur.id);
+          return;
+        }
+      }
+    } catch { /* home */ }
+    state.view = "home";
     try { render(); } catch (err) { console.warn(err); }
   };
 
@@ -6101,8 +6177,7 @@
       ban.textContent = "You’re offline. The morning still works on this device.";
       screen.insertBefore(ban, screen.firstChild);
     });
-    const splashWatch = setTimeout(leaveSplash, 700);
-    const t0 = Date.now();
+    const splashWatch = setTimeout(leaveSplash, 240);
     try {
       if (AlignDB.configured()) {
         AlignDB.onAuth((sess) => {
@@ -6116,12 +6191,14 @@
           }).catch(() => {});
         });
         if (AlignDB.onStatus) AlignDB.onStatus(() => paintCloud());
-        const s = await timed(AlignDB.session(), 2500);
-        if (s && s.ok && s.data) {
-          applySession(s.data).then(() => {
-            if (state.view !== "splash") try { render(); } catch { /* keep UI */ }
-          }).catch(() => {});
-        }
+        timed(AlignDB.session(), 2500).then((s) => {
+          if (s && s.ok && s.data) {
+            applySession(s.data).then(() => {
+              if (state.view === "splash") return;
+              try { render(); } catch { /* keep UI */ }
+            }).catch(() => {});
+          }
+        });
       }
     } catch (err) { console.warn(err); }
     try {
@@ -6137,8 +6214,6 @@
       if (Date.now() - lastHydrateAt < 120000) { try { paintCloud(); } catch { /* keep UI */ } return; }
       applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
-    const wait = Math.max(0, 180 - (Date.now() - t0));
-    await new Promise((r) => setTimeout(r, wait));
     clearTimeout(splashWatch);
     leaveSplash();
   };

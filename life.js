@@ -149,7 +149,20 @@ window.ALIGN_LIFE = (() => {
     };
   };
 
+  const LS_SHORT = "align-short";
+  const shortDay = () => {
+    try { return localStorage.getItem(LS_SHORT) || ""; } catch { return ""; }
+  };
+  const isShort = (iso) => !!iso && shortDay() === iso;
+  const setShort = (iso, on) => {
+    try {
+      if (on && iso) localStorage.setItem(LS_SHORT, iso);
+      else if (shortDay() === iso || !iso) localStorage.removeItem(LS_SHORT);
+    } catch { /* ignore */ }
+  };
+
   const chapterTarget = (iso) => {
+    if (isShort(iso)) return 1;
     const r = loadRoutine();
     const [y, m, d] = String(iso).split("-").map(Number);
     return new Date(y, m - 1, d).getDay() === 0 ? r.chaptersSun : r.chaptersWk;
@@ -1080,7 +1093,7 @@ window.ALIGN_LIFE = (() => {
   return {
     BOOKS, STEPS, EVENING, ACTS, STEP_IDS,
     loadRoutine, saveRoutine, mergeRoutineRemote, coerceRoutine, fmtHM,
-    clocksFor, isEvening, chapterTarget, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
+    clocksFor, isEvening, chapterTarget, isShort, setShort, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
     todaySpurgeon, fetchODB,
     morningOf, setStep, emptyMorning,
     timesOf, markOpen, markClose, stampClock, clockAt, fmtClockAt, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
