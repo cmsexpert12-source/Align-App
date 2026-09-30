@@ -102,7 +102,8 @@
     circle: null,
     circleErr: "",
     circleBusy: false,
-    champBusy: false
+    champBusy: false,
+    obHoursEdit: false
   };
 
   /* ---------- SVG poses ---------- */
@@ -2084,38 +2085,10 @@
   `;
 
   const viewOnboard = () => {
-    const step = state.onboard;
-    const bodies = [
-      `
-        <img class="hero-art" src="./assets/hero-onboard.jpg" alt="" />
-        <div class="kicker">Morning OS</div>
-        <h1>The morning,<br>in one place.</h1>
-        <p class="lead">Wake, train, pray, Word, plan, go. Training is a step — not the whole product. Stay in ALIGN until you’re out the door.</p>
-        <div class="stat-row">
-          <div class="stat"><b>8</b><span>steps each morning</span></div>
-          <div class="stat"><b>7</b><span>days, one to recover</span></div>
-          <div class="stat"><b>1</b><span>app until you’re out</span></div>
-          <div class="stat"><b>0</b><span>tabs to hunt</span></div>
-        </div>
-      `,
-      `
-        <div class="kicker">The path</div>
-        <h1>Set it once.<br>Walk it daily.</h1>
-        <p class="lead">A morning sequence so the day doesn’t have to be decided twice. You can change the order later in You.</p>
-        <div class="keep-list">
-          <div class="keep"><div class="ic" style="background:#d6ff3f22;color:#d6ff3f">${stepIcon("rise")}</div><div><h4>Rise</h4><p>You’re up. The day is a gift.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#ff6b4a22;color:#ff6b4a">${stepIcon("move")}</div><div><h4>Train</h4><p>Body first, while the mind is quiet. Bodyweight, at home.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#8b7cff22;color:#8b7cff">${stepIcon("pray")}</div><div><h4>Pray & Word</h4><p>Prayer, devotion, Scripture — in the app, not another tab.</p></div></div>
-          <div class="keep"><div class="ic" style="background:#3ee0b322;color:#3ee0b3">${stepIcon("go")}</div><div><h4>Plan, ready, go</h4><p>Three priorities. Then bath, dress, and step out.</p></div></div>
-        </div>
-      `,
-      `
-        <div class="kicker">Your hours</div>
-        <h1>When do you<br>rise?</h1>
-        <p class="lead">The path is the same order for everyone. The clock is yours. Seeded from 4:00 Sunday / 5:00 weekdays — change it.</p>
-        ${(() => {
-          const r = L().loadRoutine();
-          return `<div class="hours-grid">
+    const step = Math.max(0, Math.min(2, Number(state.onboard) || 0));
+    const r = L().loadRoutine();
+    const hm = (h, m) => (L().fmtHM ? L().fmtHM(h, m) : timeVal(h, m));
+    const hoursForm = () => `<div class="hours-grid">
             <div class="field"><label>Sunday rise</label><input id="ob-sun-wake" type="time" value="${timeVal(r.sunWakeH, r.sunWakeM)}" /></div>
             <div class="field"><label>Sunday lights out</label><input id="ob-sun-lights" type="time" value="${timeVal(r.sunLightsH, r.sunLightsM)}" /></div>
             <div class="field"><label>Mon–Sat rise</label><input id="ob-wk-wake" type="time" value="${timeVal(r.wkWakeH, r.wkWakeM)}" /></div>
@@ -2123,43 +2096,53 @@
             <div class="field"><label>Sunday leave (church)</label><input id="ob-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
             <label class="check-row"><input id="ob-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
           </div>`;
-        })()}
+    const bodies = [
+      `
+        <div class="kicker">Morning OS</div>
+        <h1>The morning,<br>in one place.</h1>
+        <p class="lead">Wake, train, pray, Word, plan, go — in order, on this phone. Training is a step, not the product.</p>
+        <p class="onboard-path">Rise → Train → Pray → Word → Plan → Begin</p>
       `,
       `
-        <div class="kicker">Move</div>
-        <h1>Six work days.<br>One to recover.</h1>
-        <p class="lead">Push, pull, legs, core, mobility — balanced so no pattern owns the week.</p>
-        <div class="week-preview">
-          ${days.map(d => `
-            <div class="wp p-${d.pattern}">
-              <div class="d">${DOW[d.dow]}</div>
-              <div>
-                <div style="font-weight:700;font-size:14px">${d.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${d.minutes} min · ${d.items.length} moves</div>
-              </div>
-              <span class="chip" style="background:color-mix(in srgb, var(--p) 18%, transparent);color:var(--p)">${d.short}</span>
+        <div class="kicker">Your hours</div>
+        <h1>When do you<br>rise?</h1>
+        <p class="lead">The morning starts when you tap I’m up. These clocks are the cue — 5 min before rise, 10 min before lights.</p>
+        ${state.obHoursEdit ? hoursForm() : `
+          <div class="hours-confirm">
+            <div class="hours-row">
+              <span>Mon–Sat</span>
+              <b>${escapeHtml(hm(r.wkWakeH, r.wkWakeM))}</b>
+              <em>Lights ${escapeHtml(hm(r.wkLightsH, r.wkLightsM))}</em>
             </div>
-          `).join("")}
-        </div>
+            <div class="hours-row">
+              <span>Sunday</span>
+              <b>${escapeHtml(hm(r.sunWakeH, r.sunWakeM))}</b>
+              <em>Lights ${escapeHtml(hm(r.sunLightsH, r.sunLightsM))}${r.leaveOn ? " · church " + escapeHtml(hm(r.leaveH, r.leaveM)) : ""}</em>
+            </div>
+          </div>
+          <button type="button" class="linkish hours-change" data-act="ob-hours-edit">Change hours</button>
+        `}
       `,
       `
         <div class="kicker">You</div>
         <h1>What should we<br>call you?</h1>
-        <p class="lead">It shows on Today. You can skip this and change it later.</p>
+        <p class="lead">It shows on Today. Skip it if you want. You can change it later.</p>
         <div class="name-field">
           <label>Name</label>
           <input id="name-input" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
         </div>
       `
     ];
-    const labels = ["See the path", "Your hours", "The week", "Almost there", "Open ALIGN"];
+    const labels = ["Your hours", "These hours", "Start this morning"];
     return `
       <div class="onboard">
         <div class="onboard-top">
-          <div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>
+          ${step > 0
+            ? `<button type="button" class="skip" data-act="back-onboard">Back</button>`
+            : `<div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>`}
           <button class="skip" data-act="skip-onboard">Skip</button>
         </div>
-        <div class="dots">${[0,1,2,3,4].map(i => `<i class="${i===step?"on":""}"></i>`).join("")}</div>
+        <div class="dots">${[0, 1, 2].map((i) => `<i class="${i === step ? "on" : ""}"></i>`).join("")}</div>
         <div class="onboard-body">${bodies[step]}</div>
         <button class="btn" data-act="next-onboard">${labels[step]}</button>
       </div>
@@ -5212,16 +5195,27 @@
 
   const handle = async (act, el) => {
     if (act === "next-onboard") {
-      if (state.onboard === 2) {
-        try { pushRoutine(readHoursForm("ob-")); } catch { /* keep defaults */ }
+      if (state.onboard === 1) {
+        try {
+          if (state.obHoursEdit) pushRoutine(readHoursForm("ob-"));
+        } catch { /* keep defaults */ }
       }
-      if (state.onboard < 4) { state.onboard++; render(); }
+      if (state.onboard === 2) {
+        const n = document.getElementById("name-input");
+        if (n) state.profile.name = String(n.value || "").trim();
+      }
+      if (state.onboard < 2) { state.onboard++; render(); }
       else {
         state.onboardingDone = true;
         save();
         state.view = "home";
         render();
       }
+    } else if (act === "back-onboard") {
+      if (state.onboard > 0) { state.onboard--; render(); }
+    } else if (act === "ob-hours-edit") {
+      state.obHoursEdit = true;
+      render();
     } else if (act === "skip-onboard") {
       state.onboardingDone = true; save();
       state.view = "home";
