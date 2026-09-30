@@ -1404,6 +1404,8 @@ img { max-width: 100%; display: block; }
 .path-ico svg { width: 18px; height: 18px; }
 .path-copy { min-width: 0; text-align: left; }
 
+.word-extras { padding: 4px 16px 8px; }
+.word-extras .setting { margin-bottom: 8px; }
 .hub-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   padding: 8px 16px 12px;

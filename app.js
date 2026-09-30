@@ -3489,66 +3489,61 @@
       ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
       : "2 minutes · " + S().SPRINT_N + " questions · meaning, not verse trivia";
     const wordCta = n >= target ? "Scripture done" : (n ? "Continue Scripture" : "Open Scripture");
+    const morn = L().morningOf(iso);
+    const cur = currentStep();
+    const evening = !!(L().isEvening && L().isEvening());
+    const wordIds = { pray: 1, devotion: 1, verse: 1, word: 1, drill: 1, affirm: 1 };
+    const wordNow = !!(cur && wordIds[cur.id]);
+    const wordCtas = {
+      pray: "Begin prayer",
+      devotion: "Open devotion",
+      verse: "Open memory",
+      word: wordCta,
+      drill: "Begin sprint",
+      affirm: "Speak it"
+    };
+    const heroTag = wordNow ? cur.title : "Today’s Word";
+    const heroH = (!wordNow || cur.id === "word") ? (a.next.book + " " + a.next.chapter) : cur.title;
+    const heroP = wordNow && cur.id !== "word"
+      ? (scriptureSub + " · next on the path")
+      : (!wordNow && cur && !(n >= target || morn.word)
+        ? (scriptureSub + " · on the path after " + cur.title)
+        : scriptureSub);
+    const heroBtn = wordNow
+      ? `<button class="btn" data-act="open-step" data-step="${cur.id}">${wordCtas[cur.id] || "Continue"}</button>`
+      : ((n >= target || morn.word)
+        ? `<button class="btn" data-act="open-step" data-step="word">${wordCta}</button>`
+        : "");
+    const wordRows = pathSteps().filter((s) => wordIds[s.id]);
+    const wordDoneN = wordRows.filter((s) => stepIsDone(s)).length;
+    const laterWord = wordRows.filter((s) => !stepIsDone(s) && !(cur && cur.id === s.id));
+    const finishedWord = wordRows.filter((s) => stepIsDone(s));
+    const line = (L().affirmationPref && L().affirmationPref()) || "";
+    const ch = S().champOf && S().champOf(iso);
+    const champSub = (ch && ch.answered)
+      ? (ch.correct + " / " + ch.answered + " last sit")
+      : "Untimed. Chapters you’ve read. Extra — not a path step.";
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div>${soundLaunch()}</div>
-        <div class="next-hero word-hero">
-          <div class="tag">Today’s Word</div>
-          <h3>${escapeHtml(a.next.book + " " + a.next.chapter)}</h3>
-          <p>${escapeHtml(scriptureSub)}</p>
-          <button class="btn" data-act="open-step" data-step="word">${wordCta}</button>
+        <div class="next-hero word-hero ${n >= target ? "done-hero-card" : ""}">
+          <div class="tag">${escapeHtml(heroTag)}</div>
+          <h3>${escapeHtml(heroH)}</h3>
+          <p>${escapeHtml(heroP)}</p>
+          ${heroBtn}
         </div>
-        <p class="plan-kicker">Pray. Devotion. Memory. Sprint. Affirm. Championship is extra.</p>
-        <div class="hub-grid">
-          <button class="hub-card" data-act="open-step" data-step="pray">
-            <div class="tile">${stepIcon("pray")}</div>
-            <h3>Pray</h3>
-            <p>${j.praySeconds ? fmtClock(j.praySeconds) + " today" : "Before you read. Before you plan."}</p>
-          </button>
-          <button class="hub-card" data-act="open-step" data-step="devotion">
-            <div class="tile">${stepIcon("book")}</div>
-            <h3>Devotion</h3>
-            <p>${j.devotion ? "Takeaway saved" : "Spurgeon in the app. Write what remains."}</p>
-          </button>
-          <button class="hub-card ${tv && !(S().load().daily[iso] && S().load().daily[iso].verseDone) ? "ready" : ""}" data-act="open-verse">
-            <div class="tile">${stepIcon("verse")}</div>
-            <h3>Memory</h3>
-            <p>${verseSub}</p>
-          </button>
-          <button class="hub-card" data-act="open-drill">
-            <div class="tile">${stepIcon("drill")}</div>
-            <h3>Sprint</h3>
-            <p>${sprintSub}</p>
-          </button>
-          <button class="hub-card" data-act="open-champ">
-            <div class="tile">${stepIcon("key")}</div>
-            <h3>Championship</h3>
-            <p>${(() => {
-              const ch = S().champOf && S().champOf(iso);
-              if (ch && ch.answered) return ch.correct + " / " + ch.answered + " last sit";
-              return "Untimed. Chapters you’ve read. Prepare as if you’ll be tested.";
-            })()}</p>
-          </button>
-          <button class="hub-card" data-act="open-step" data-step="affirm">
-            <div class="tile">${stepIcon("spark")}</div>
-            <h3>Affirm</h3>
-            <p>${(() => {
-              const line = (L().affirmationPref && L().affirmationPref()) || "";
-              if (line) return clipText(line, 72);
-              return L().morningOf(iso).affirm ? "Spoken today" : (line ? "Speak it. Then receive it." : "Write the line you speak. Save it here.");
-            })()}</p>
-          </button>
-          <button class="hub-card" data-act="open-step" data-step="evening">
-            <div class="tile">${stepIcon("book")}</div>
-            <h3>Night devotion</h3>
-            <p>${L().morningOf(iso).lights ? "Goodnight is in." : (L().morningOf(iso).nightverse ? "Verse read. Goodnight next." : (L().morningOf(iso).evening ? "Verse, then goodnight." : "Night devotion, the verse, then goodnight."))}</p>
-          </button>
-          <button class="hub-card" type="button" data-act="open-library">
-            <div class="tile">${stepIcon("read")}</div>
-            <h3>Books</h3>
-            <p>${B().list().length ? B().list().length + " in your library" : "Titles sync to this account. Upload a PDF or open after signing in."}</p>
-          </button>
+        ${wordRows.length ? `
+        <div class="section-h" style="padding:0 16px"><h4>In the Word</h4><span>${wordDoneN}/${wordRows.length}</span></div>
+        ${finishedWord.length ? `<div class="path-done">${finishedWord.map((s) => `<span>✓ ${escapeHtml(s.title)}</span>`).join("")}</div>` : ""}
+        ${laterWord.length ? `<p class="path-rest">Then ${laterWord.map((s) => escapeHtml(s.title)).join(" · ")}</p>` : ""}
+        ` : ""}
+        <div class="word-extras">
+          ${n ? `<button class="setting" data-act="open-champ"><div class="grow"><h4>Championship</h4><p>${escapeHtml(champSub)}</p></div></button>` : ""}
+          ${morn.affirm ? `<button class="setting" data-act="open-step" data-step="affirm"><div class="grow"><h4>Affirm</h4><p>${escapeHtml(line ? clipText(line, 72) : "Spoken today")}</p></div></button>` : ""}
+          ${evening ? `<button class="setting" data-act="open-step" data-step="evening"><div class="grow"><h4>Night devotion</h4><p>${morn.lights ? "Goodnight is in." : (morn.nightverse ? "Verse read. Goodnight next." : (morn.evening ? "Verse, then goodnight." : "Night devotion, the verse, then goodnight."))}</p></div></button>` : ""}
+          <button class="setting" type="button" data-act="open-library"><div class="grow"><h4>Books</h4><p>${B().list().length ? B().list().length + " in your library" : "Titles sync. Upload a PDF you already own."}</p></div></button>
         </div>
+        ${(st.verseStreak || st.learned || st.due) ? `
         <div class="pulse" style="margin-top:4px">
           <div class="pulse-top">
             <div class="pulse-num">${st.verseStreak}</div>
@@ -3557,7 +3552,7 @@
               <p>${st.learned} hidden · ${st.due} due · sprint ${st.acc ? st.acc + "%" : "—"}.</p>
             </div>
           </div>
-        </div>
+        </div>` : ""}
       </div>
     `;
   };
