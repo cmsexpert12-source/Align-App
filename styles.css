@@ -49,6 +49,8 @@
   --font: "DM Sans", system-ui, sans-serif;
   --display: "Syne", "DM Sans", system-ui, sans-serif;
   --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --highlight: inset 0 1px 0 rgba(255,255,255,.055);
+  --shadow-card: 0 10px 28px rgba(0,0,0,.22);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -220,11 +222,13 @@ img { max-width: 100%; display: block; }
   width: 100%; height: 56px; border-radius: 16px;
   background: var(--lime); color: #111; font-weight: 800; font-size: 16px;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  transition: transform .12s ease, filter .12s;
+  transition: transform .14s ease, filter .14s ease, box-shadow .14s ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 10px 24px rgba(214,255,63,.14);
 }
-.btn:active { transform: scale(.98); }
+.btn:active { transform: scale(.985); filter: brightness(.97); }
 .btn.ghost {
   background: transparent; color: var(--text); border: 1px solid var(--line-2);
+  box-shadow: var(--highlight);
 }
 .btn.p { background: var(--p); color: #111; }
 .onboard .btn {
@@ -627,20 +631,31 @@ img { max-width: 100%; display: block; }
   left: 12px; right: 12px;
   bottom: max(10px, var(--safe-b));
   height: 64px; border-radius: 22px;
-  background: rgba(18, 20, 28, .92);
+  background: rgba(14, 16, 22, .88);
   border: 1px solid var(--line-2);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--highlight), 0 18px 40px rgba(0,0,0,.35);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
   display: grid; grid-template-columns: repeat(5, 1fr);
   z-index: 20;
   pointer-events: auto;
 }
 .nav button {
+  position: relative;
+  isolation: isolate;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   font-size: 10px; font-weight: 700; color: var(--faint);
   white-space: nowrap;
 }
 .nav button.on { color: var(--lime); }
+.nav button.on::after {
+  content: "";
+  position: absolute;
+  inset: 7px 9px;
+  border-radius: 14px;
+  background: var(--lime-dim);
+  z-index: -1;
+}
 .nav svg { width: 20px; height: 20px; }
 
 /* overlay screens that hide nav */
@@ -1318,8 +1333,9 @@ img { max-width: 100%; display: block; }
 }
 .next-hero {
   margin: 0 16px 16px; border-radius: 26px; padding: 20px 20px 18px;
-  background: linear-gradient(165deg, rgba(214,255,63,.16) 0%, #12141c 62%);
-  border: 1px solid rgba(214,255,63,.28);
+  background: linear-gradient(165deg, rgba(214,255,63,.18) 0%, #10131a 58%);
+  border: 1px solid rgba(214,255,63,.3);
+  box-shadow: var(--highlight), 0 16px 40px rgba(0,0,0,.2);
   position: relative; overflow: hidden;
 }
 .next-hero.done-hero-card {
@@ -2327,4 +2343,104 @@ img { max-width: 100%; display: block; }
 .room .btn.ghost { margin-top: 8px; }
 .wd {
   pointer-events: none;
+}
+
+/* ---------- PREMIUM SHELL (color, type, fonts unchanged) ---------- */
+.pulse,
+.hub-card,
+.setting,
+.path-step,
+.day-card,
+.circle-row,
+.circle-invite,
+.plan-now,
+.dash-card,
+.word-today,
+.room,
+.account-card,
+.balance-card,
+.station,
+.keep,
+.stat,
+.insight,
+.week-goal,
+.install-banner,
+.together-card,
+.ex-row,
+.plan-card {
+  box-shadow: var(--highlight);
+}
+.next-hero::after {
+  content: "";
+  position: absolute;
+  right: -40px;
+  top: -50px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(214,255,63,.22), transparent 68%);
+  pointer-events: none;
+}
+.path-step,
+.hub-card,
+.setting,
+.day-card,
+.station,
+.plan-card,
+.ex-row {
+  transition: transform .14s ease, border-color .16s ease, background-color .16s ease;
+}
+.path-step:active,
+.hub-card:active,
+.setting:active,
+.day-card:active,
+.station:active,
+.plan-card:active,
+.ex-row:active {
+  transform: scale(.985);
+}
+.icon-btn {
+  box-shadow: var(--highlight);
+  transition: transform .14s ease, border-color .16s ease, background-color .16s ease;
+}
+.icon-btn:active { transform: scale(.96); background: var(--surface-2); }
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.prio > input:focus,
+.name-field input:focus,
+.ai-row textarea:focus {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px var(--lime-dim);
+}
+.seg button.on {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
+}
+.ai-fab {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 12px 28px rgba(214,255,63,.18);
+}
+.sheet, .ai-sheet {
+  box-shadow: var(--highlight), 0 -20px 60px rgba(0,0,0,.4);
+}
+.toast {
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+}
+.hub-card.ready {
+  box-shadow: var(--highlight), 0 0 0 1px rgba(214,255,63,.12);
+}
+.path-step.now {
+  box-shadow: var(--highlight), 0 0 0 1px rgba(214,255,63,.08);
+}
+.circle-code { text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+
+@media (hover: hover) and (pointer: fine) {
+  .hub-card:hover,
+  .path-step:hover,
+  .day-card:hover,
+  .setting:hover,
+  .station:hover,
+  .plan-card:hover {
+    border-color: var(--line-2);
+  }
+  .btn:hover { filter: brightness(1.03); }
+  .btn.ghost:hover { background: rgba(255,255,255,.03); }
 }
