@@ -1009,7 +1009,7 @@
       profile: "You — account, reminders, AI",
       sound: "Sounds in ALIGN",
       progress: "Training log",
-      balance: "How training is built"
+      balance: "Move — the week and today's session"
     };
     const lines = [
       "Name: " + ((state.profile && state.profile.name) || "(not set)"),
@@ -2878,7 +2878,7 @@
             <div class="pulse-num">${trainStreak}</div>
             <div>
               <h4>Session streak</h4>
-              <p>${trainStreak ? trainStreak + " training day" + (trainStreak===1?"":"s") + " in a row." : "Finish today’s session to start a chain."} Morning streak ${mStreak}.</p>
+              <p>${[trainStreak ? trainStreak + " in a row" : "", mStreak ? "Morning " + mStreak : ""].filter(Boolean).join(" · ") || "—"}</p>
             </div>
           </div>
           <div class="pulse-days" aria-hidden="true">
@@ -2891,7 +2891,7 @@
           </div>
         </div>
         <div class="section-h"><h4>Recent</h4></div>
-        ${total === 0 ? `<div class="empty">No sessions yet. Finish today’s training and it lands here.</div>` : `
+        ${total === 0 ? `<div class="empty">No sessions yet.</div>` : `
           <div class="hist">
             ${[...state.history].reverse().slice(0, 20).map(h => {
               const d = dayById(h.dayId);
@@ -2910,17 +2910,7 @@
     `;
   };
 
-  const viewBalance = () => `
-    <div class="screen balance">
-      <div class="topbar"><div class="greet">Move<h2>How it’s built.</h2></div>${soundLaunch()}</div>
-      <p class="plan-kicker" style="padding-top:0">A typical press-heavy week versus ALIGN — push, pull, legs, core, and mobility each get a real seat.</p>
-      <div class="compare">
-        <div class="col"><h5>Unbalanced</h5>${barCol(insights.old)}</div>
-        <div class="col"><h5>ALIGN</h5>${barCol(insights.neu)}</div>
-      </div>
-      ${insights.findings.map(f => `<div class="find"><h4>${f.title}</h4><p>${f.body}</p></div>`).join("")}
-    </div>
-  `;
+  const viewBalance = () => viewPlan();
 
   const viewAuth = () => {
     const connected = AlignDB.configured();
