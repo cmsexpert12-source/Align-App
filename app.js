@@ -4144,34 +4144,23 @@
 
   const viewDayPlan = () => {
     const p = L().planOf(today().iso);
-    const sunday = L().clocksFor(today().date).sunday;
-    const saved = !!state.planJustSaved;
     const prioRows = (p.priorities || []).map(prioOf);
-    const pri = prioRows.map((x) => x.text);
-    const has = pri.some(Boolean) || (p.tasks || []).some((t) => t && String(t.text || "").trim()) || String(p.note || "").trim();
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">${sunday ? "Church morning" : "After the Word"}</div>
-          <h1>${saved && has ? "Today’s plan." : "Plan the day."}</h1>
-          <p>${saved && has
-            ? (state.session ? "Saved on this device and your account." : "Saved on this device.")
-            : (sunday ? "Church is first. Keep the rest of the day light." : "Three things that would make today true. Then anything else.")}</p>
+          <div class="tag">Morning</div>
+          <h1>Plan the day.</h1>
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
-          ${saved && has ? `<div class="saved-banner"><b>Saved.</b> This is the plan you’ll see on Today.</div>` : ""}
-          <p class="hint" style="margin:0 0 10px">Add one thing at a time. Unchecked lines move to tomorrow in the same slot.</p>
           ${[0,1,2].map((i) => `
             <div class="prio">
-              <label>Priority ${i+1}</label>
               <div class="task-row ${prioRows[i].done?"done":""}">
                 <button class="check ${prioRows[i].done?"done":""}" data-act="toggle-prio" data-i="${i}" style="${prioRows[i].done?"background:var(--lime);border-color:var(--lime)":""}">${prioRows[i].done?"✓":""}</button>
                 <input id="prio-${i}" type="text" autocomplete="off" autocorrect="off" value="${escapeAttr(prioRows[i].text)}" placeholder="${["The one that matters","If there’s time","Only if the first two hold"][i]}" />
               </div>
             </div>
           `).join("")}
-          <div class="section-h"><h4>Also</h4></div>
           ${(p.tasks || []).map((tk, i) => `
             <div class="task-row ${tk.done?"done":""}">
               <button class="check ${tk.done?"done":""}" data-act="toggle-task" data-i="${i}" style="${tk.done?"background:var(--lime);border-color:var(--lime)":""}">${tk.done?"✓":""}</button>
@@ -4184,10 +4173,7 @@
           </div>
         </div>
         <div class="sticky-cta">
-          ${saved
-            ? `<button class="btn" data-go="home">See it on Today</button>
-               <button class="btn ghost" style="margin-top:8px" data-act="edit-dayplan">Keep editing</button>`
-            : `<button class="btn" data-act="save-dayplan">Save plan</button>`}
+          <button class="btn" data-act="save-dayplan">Save plan</button>
         </div>
       </div>
     `;
