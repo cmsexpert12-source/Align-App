@@ -589,7 +589,7 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || snd.id));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
   };
 
   const fmtSound = (sec) => {
@@ -727,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -4254,7 +4254,6 @@
         <div class="next-hero">
           <div class="tag">Books</div>
           <h3>Your shelf is empty.</h3>
-          <p>Upload a PDF you already own. Titles follow the account even before the file is on this phone.</p>
           <button type="button" class="btn" data-act="pick-pdf">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
         </div>`}
       </div>
@@ -4334,8 +4333,6 @@
             <span class="pg">${state.pdfPage}${state.pdfPages ? " / " + state.pdfPages : ""}</span>
           </div>
           <button class="txt-btn" data-act="ai-open" title="Ask ALIGN">Ask</button>
-          <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
-          <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
         </div>
         <div class="pdf-wrap" id="pdf-wrap">
           ${state.pdfBusy ? `<p class="pdf-busy hint">Opening book…</p>` : ""}
@@ -4345,6 +4342,10 @@
         </div>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
+            <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
+          </div>
           <div class="pdf-tools">
             <button class="btn ghost" data-act="pdf-prev">Prev</button>
             ${done
