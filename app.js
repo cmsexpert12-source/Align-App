@@ -4204,14 +4204,12 @@
 
   const viewRecite = () => {
     const v = lockDevotionVerse() || S().todayVerse(today().iso);
-    const sunday = L().clocksFor(today().date).sunday;
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Before you go</div>
+          <div class="tag">Morning</div>
           <h1>Read it again.</h1>
-          <p>The same line from this morning’s devotion. Say it. Then ${sunday ? "leave for church." : "begin the day."}</p>
         </div>
         <div class="verse-body">
           <div class="verse-card">
@@ -4235,9 +4233,8 @@
       <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
       <div class="done-hero" style="padding:24px 22px">
         <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
-        <div class="kicker">${sunday ? "Leave by 5:45" : "The morning is complete"}</div>
+        <div class="kicker">${sunday ? "Leave 5:45" : "Morning"}</div>
         <h1>${sunday ? "Go<br>to church." : "Begin<br>the day."}</h1>
-        <p class="lead" style="color:var(--muted)">${sunday ? "The light path is done. Church is the first appointment." : "The verse is in you. Go well. Read it once more before bed."}</p>
       </div>
       <div class="sticky-cta">
         ${done
