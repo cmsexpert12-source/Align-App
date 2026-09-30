@@ -3240,7 +3240,7 @@
           <div class="avatar sm">${escapeHtml(((m.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
           <div class="grow">
             <h3>${escapeHtml(label)}</h3>
-            <p>${streak ? streak + " day streak" : (mine ? "Your path" : (upEarly && !(todayRow && todayRow.path_done) ? "They’re in the morning." : "Walking with you"))}</p>
+            <p>${streak ? streak + " day streak" : (upEarly && !(todayRow && todayRow.path_done) ? "They’re in the morning." : "")}</p>
           </div>
           <span class="circle-flag ${flagOn ? "" : "wait"}">${escapeHtml(status)}</span>
         </div>
@@ -3267,7 +3267,7 @@
           <div class="avatar sm">${escapeHtml(((r.name || "A").trim().charAt(0) || "A").toUpperCase())}</div>
           <div class="grow">
             <h3>${escapeHtml(r.name || "ALIGN")}</h3>
-            <p>Wants in. You decide.</p>
+            <p>Wants in.</p>
           </div>
         </div>
         <div class="circle-ask-actions">
@@ -3282,9 +3282,6 @@
         <div class="grow">
           <span class="circle-invite-k">Invite code</span>
           <b class="circle-code">${escapeHtml(code || "········")}</b>
-          <p>${code
-            ? (founder ? "They ask with this. You let them in." : "Share this. The founder lets people in.")
-            : (founder ? "Make a code, then share it." : "The founder shares the code.")}</p>
         </div>
         ${code
           ? `<button class="btn ghost sm" data-act="copy-code">Copy</button>`
@@ -3294,19 +3291,15 @@
     const body = !signed
       ? `<div class="room">
            <h3>Walk with someone.</h3>
-           <p>Sign in first. They see the path — not your journal.</p>
            <button class="btn" data-act="open-auth" data-tab="signup">Create account</button>
          </div>`
       : ((c && c.pending) || /cancel your request/i.test(state.circleErr || ""))
         ? `<div class="room">
            <h3>Asked to join.</h3>
-           <p>The founder has to say yes before you walk together.</p>
            <button class="btn ghost" data-act="cancel-request" ${state.circleBusy ? "disabled" : ""}>Cancel request</button>
          </div>`
       : !c
         ? `<div class="room">
-           <h3>Invite a few.</h3>
-           <p>They see today’s path, the schedule, the book, and when you rose. Not your journal.</p>
            ${showErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(showErr)}</p>` : ""}
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
@@ -3317,7 +3310,6 @@
         : `${justYou ? inviteCard(true) : ""}
            ${asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
            ${others.length ? `<div class="set-label">Walking</div><div class="circle-list">${others.map(memberBlock).join("")}${mine ? memberBlock(mine) : ""}</div>` : ""}
-           ${justYou && !asks.length ? `<p class="hint" style="margin:8px 2px 0">Just you so far. Share the code. They ask. You say yes.</p>` : ""}
            ${!justYou ? inviteCard(false) : ""}
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;
     return `
