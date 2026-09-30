@@ -12,6 +12,7 @@ const GROQ_MODELS = [
 
 const MAX_TOK = 700;
 const QUIZ_TOK = 1200;
+const CHAMP_TOK = 1800;
 const CALL_MS = 10000;
 const SUPABASE_URL = (process.env.SUPABASE_URL || "https://sqwwjrddpjkenkhpyntg.supabase.co").replace(/\/$/, "");
 const ANON = process.env.SUPABASE_ANON_KEY || "";
@@ -30,7 +31,9 @@ const SERVER_BASE = [
   "Be accurate. Short paragraphs or a numbered list. Bold labels only. No code fences, no markdown headings, no emojis, no medical claims."
 ].join(" ");
 
-const QUIZ_SYSTEM = "You write short Bible quizzes from the given reading (KJV or WEB). Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding only: meaning, motive, promise, command, character of God, what the text requires of the reader. Never fill-in-the-blank or missing-word. Never ask verse numbers, chapter numbers, or which-verse identification. Wrong answers must be plausible ideas from nearby Scripture, not jokes or obvious rejects. One-sentence stems.";
+const QUIZ_SYSTEM = "You write short Bible quizzes from the given reading (KJV or WEB). Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\"}. Test understanding only: meaning, motive, promise, command, character of God, what the text requires of the reader. Never fill-in-the-blank or missing-word. Never ask verse numbers, chapter numbers, or which-verse identification. Wrong answers must be plausible misreadings of THIS reading, not jokes or obvious rejects. One-sentence stems.";
+
+const CHAMP_SYSTEM = "You write a championship Bible quiz from the given reading only (KJV or WEB). Return a JSON array only. No markdown. Each item: {\"q\":\"...\",\"a\":\"correct\",\"d1\":\"wrong\",\"d2\":\"wrong\",\"why\":\"one sentence from this reading\"}. Test deep understanding: who speaks and to whom, motive, command, promise, character of God, what the text requires of the reader, how claims in this reading hold together. Never fill-in-the-blank or missing-word. Never ask verse numbers, chapter numbers, or which-verse. Wrong answers must be plausible misreadings of THIS reading, not jokes, not other books. If the reading does not support a question, omit it. Prefer 12 items. Stems may be two sentences.";
 
 const hits = new Map();
 
@@ -207,11 +210,11 @@ export default async function handler(req, res) {
     }
     const prompt = String(body.prompt || "").trim().slice(0, 8000);
     if (!prompt) return send(res, req, 400, { error: "prompt required" });
-    const kind = body.kind === "quiz" ? "quiz" : "chat";
+    const kind = body.kind === "champ" ? "champ" : (body.kind === "quiz" ? "quiz" : "chat");
     const context = String(body.context || "").slice(0, 8000);
-    const system = kind === "quiz" ? QUIZ_SYSTEM : SERVER_BASE;
+    const system = kind === "champ" ? CHAMP_SYSTEM : (kind === "quiz" ? QUIZ_SYSTEM : SERVER_BASE);
     const userPrompt = (context ? ("LIVE FACTS:\n" + context + "\n\nQUESTION:\n" + prompt) : prompt).slice(0, 12000);
-    const maxTok = kind === "quiz" ? QUIZ_TOK : MAX_TOK;
+    const maxTok = kind === "champ" ? CHAMP_TOK : (kind === "quiz" ? QUIZ_TOK : MAX_TOK);
     let prefer = body.prefer === "groq" ? ["groq", "gemini"]
       : body.prefer === "gemini" ? ["gemini", "groq"]
         : ["gemini", "groq"];

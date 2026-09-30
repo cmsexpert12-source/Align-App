@@ -101,7 +101,8 @@
     verseSitSec: 0,
     circle: null,
     circleErr: "",
-    circleBusy: false
+    circleBusy: false,
+    champBusy: false
   };
 
   /* ---------- SVG poses ---------- */
@@ -1765,6 +1766,11 @@
       correct: state.drill.correct,
       finished: Date.now()
     }, state.drill.mode || "morning");
+    if ((state.drill.mode || "") === "champ") {
+      toast((state.drill.correct || 0) + " / " + (state.drill.answered || 0) + " right");
+      render();
+      return;
+    }
     if ((state.drill.mode || "") === "night") {
       completeStep("nightquiz");
       toast((state.drill.correct || 0) + " right. Now the verse.");
@@ -1776,9 +1782,80 @@
     goNext();
   };
 
+  const recentReadPacks = async () => {
+    const iso = today().iso;
+    const seen = new Set();
+    const packs = [];
+    const push = async (book, chapter) => {
+      const id = book + " " + chapter;
+      if (!book || !chapter || seen.has(id) || packs.length >= 4) return;
+      seen.add(id);
+      try {
+        const data = await L().fetchChapter(book, chapter);
+        packs.push({ book, chapter, verses: (data && data.verses) || [] });
+      } catch { /* cache miss or offline */ }
+    };
+    (state.readPacks || []).forEach((p) => {
+      const id = (p.book || "") + " " + p.chapter;
+      if (p && p.book && p.verses && p.verses.length && !seen.has(id) && packs.length < 4) {
+        seen.add(id);
+        packs.push(p);
+      }
+    });
+    const todayRead = (L().todayAssignment(iso).read || []).slice();
+    for (let i = 0; i < todayRead.length; i++) {
+      await push(todayRead[i].book, todayRead[i].chapter);
+    }
+    const log = ((L().bibleCursor && L().bibleCursor().log) || []).slice();
+    for (let i = log.length - 1; i >= 0 && packs.length < 4; i--) {
+      await push(log[i].book, log[i].chapter);
+    }
+    return packs;
+  };
+
+  const startChamp = async () => {
+    const iso = today().iso;
+    state.drillMode = "champ";
+    state.champBusy = true;
+    state.drill = null;
+    state.view = "drill";
+    render();
+    const packs = await recentReadPacks();
+    if (packs.length) {
+      try { S().ingestReading(iso, packs); } catch { /* ok */ }
+      try { await S().enrichChamp(iso, packs); } catch { /* local bank */ }
+    }
+    state.champBusy = false;
+    const queue = (S().champQueue && S().champQueue(S().CHAMP_N || 12, iso)) || [];
+    if (!queue.length) {
+      toast("Read today’s Scripture first. Championship is built from chapters you’ve read.");
+      render();
+      return;
+    }
+    const first = queue[0];
+    stopDrillTick();
+    state.drill = {
+      running: true,
+      mode: "champ",
+      left: 0,
+      i: 0,
+      queue,
+      answered: 0,
+      correct: 0,
+      flash: null,
+      picked: null,
+      done: false,
+      hold: false,
+      options: first ? S().optionsOf(first) : []
+    };
+    state.view = "drill";
+    render();
+  };
+
   const startDrill = async (mode) => {
     const iso = today().iso;
     const kind = mode || state.drillMode || "morning";
+    if (kind === "champ") return startChamp();
     if (!(state.readPacks || []).length) {
       const read = (L().todayAssignment(iso).read || []);
       if (read.length && L().fetchChapter) {
@@ -1851,6 +1928,11 @@
     d.picked = i;
     buzz(ok ? 12 : 28);
     sfx(ok ? "ok" : "no");
+    if ((d.mode || "") === "champ") {
+      d.hold = true;
+      render();
+      return;
+    }
     render();
     setTimeout(() => {
       if (!state.drill || state.drill !== d) return;
@@ -1866,6 +1948,23 @@
       d.options = nq ? S().optionsOf(nq) : [];
       render();
     }, 160);
+  };
+
+  const nextChamp = () => {
+    const d = state.drill;
+    if (!d || d.mode !== "champ" || !d.hold) return;
+    d.hold = false;
+    d.flash = null;
+    d.picked = null;
+    d.i += 1;
+    const cap = S().CHAMP_N || 12;
+    if (d.i >= d.queue.length || d.answered >= cap) {
+      finishDrill();
+      return;
+    }
+    const nq = d.queue[d.i];
+    d.options = nq ? S().optionsOf(nq) : [];
+    render();
   };
 
   const weekDoneCount = () => {
@@ -3396,6 +3495,15 @@
             <h3>Sprint</h3>
             <p>${sprintSub}</p>
           </button>
+          <button class="hub-card" data-act="open-champ">
+            <div class="tile">${stepIcon("key")}</div>
+            <h3>Championship</h3>
+            <p>${(() => {
+              const ch = S().champOf && S().champOf(iso);
+              if (ch && ch.answered) return ch.correct + " / " + ch.answered + " last sit";
+              return "Untimed. Chapters you’ve read. Prepare as if you’ll be tested.";
+            })()}</p>
+          </button>
           <button class="hub-card" data-act="open-step" data-step="affirm">
             <div class="tile">${stepIcon("spark")}</div>
             <h3>Affirm</h3>
@@ -3573,8 +3681,32 @@
     if (!d) {
       const iso = today().iso;
       const night = (state.drillMode || "morning") === "night";
-      const nQ = (S().readingQs && S().readingQs(iso) || []).length;
-      const refs = ((S().load().daily[iso] || {}).readRefs || []).join(" · ");
+      const champ = (state.drillMode || "") === "champ";
+      const nQ = champ
+        ? ((S().champQs && S().champQs(iso)) || []).length
+        : (S().readingQs && S().readingQs(iso) || []).length;
+      const refs = champ
+        ? (((S().load().daily[iso] || {}).champRefs || (S().load().daily[iso] || {}).readRefs || []).join(" · "))
+        : ((S().load().daily[iso] || {}).readRefs || []).join(" · ");
+      if (champ) {
+        return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+          <div class="page-title">
+            <div class="tag">Championship</div>
+            <h1>Sit with the chapters.</h1>
+            <p>${state.champBusy
+              ? "Writing questions from the chapters you’ve read. Meaning, not trivia."
+              : (nQ
+                ? ("Untimed. " + (S().CHAMP_N || 12) + " questions. After each answer, the reason. Built from " + (refs || "chapters you’ve read") + ".")
+                : "Read Scripture first. Championship is built from those chapters — not a generic bank.")}</p>
+          </div>
+          <div style="padding:0 22px calc(22px + var(--safe-b))">
+            <button class="btn" ${state.champBusy ? "disabled" : (nQ ? `data-act="drill-start"` : `data-act="open-step" data-step="word"`)}>${state.champBusy ? "Writing…" : (nQ ? "Begin" : "Read first")}</button>
+            <p class="next-up">The 2-minute sprint stays on the path. This is extra practice.</p>
+          </div>
+        </div>`;
+      }
       return `
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
@@ -3595,12 +3727,14 @@
     }
     if (d.done) {
       const acc = d.answered ? Math.round((d.correct / d.answered) * 100) : 0;
+      const champ = d.mode === "champ";
+      const cap = champ ? (S().CHAMP_N || 12) : S().SPRINT_N;
       return `
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
           <div class="done-hero" style="padding:24px 22px">
-            <div class="kicker">Sprint</div>
-            <h1>${d.answered >= S().SPRINT_N ? "Cleared." : "Time."}</h1>
+            <div class="kicker">${champ ? "Championship" : "Sprint"}</div>
+            <h1>${champ ? (d.answered >= cap ? "Held." : "Stopped.") : (d.answered >= S().SPRINT_N ? "Cleared." : "Time.")}</h1>
             <p class="lead" style="color:var(--muted)">${d.answered} answered · ${d.correct} right · ${acc}%. Misses come back sooner.</p>
             <div class="done-stats">
               <div><b>${d.answered}</b><span>answered</span></div>
@@ -3609,9 +3743,11 @@
             </div>
           </div>
           <div style="padding:0 22px calc(22px + var(--safe-b))">
-            ${d.mode === "night"
+            ${champ
+              ? `<button class="btn" data-go="word">Back to Word</button>`
+              : (d.mode === "night"
               ? `<button class="btn" data-act="complete-step" data-step="nightquiz">Continue</button>`
-              : `<button class="btn" data-act="open-step" data-step="affirm">Continue to affirm</button>`}
+              : `<button class="btn" data-act="open-step" data-step="affirm">Continue to affirm</button>`)}
             <button class="btn ghost" style="margin-top:8px" data-act="drill-start">Go again</button>
           </div>
         </div>`;
@@ -3622,16 +3758,19 @@
       d.running = false;
       return viewDrill();
     }
+    const champ = d.mode === "champ";
+    const cap = champ ? (S().CHAMP_N || 12) : S().SPRINT_N;
+    const why = champ && d.hold ? (q.why || (d.flash === "ok" ? "That is what the reading says." : ("The reading says: " + q.a))) : "";
     return `
       <div class="screen full has-cta">
         <div class="back-row">
           <button class="icon-btn" data-act="drill-quit">${chev()}</button>
         </div>
         <div class="drill-top">
-          <div class="drill-clock">${fmtClock(d.left)}</div>
-          <div class="drill-count">${d.answered} / ${S().SPRINT_N}</div>
+          <div class="drill-clock ${champ ? "plain" : ""}">${champ ? "Sit" : fmtClock(d.left)}</div>
+          <div class="drill-count">${d.answered} / ${cap}</div>
         </div>
-        <div class="prog-thin"><i style="width:${Math.min(100, (d.answered / Math.max(1, S().SPRINT_N)) * 100)}%;background:var(--lime)"></i></div>
+        <div class="prog-thin"><i style="width:${Math.min(100, (d.answered / Math.max(1, cap)) * 100)}%;background:var(--lime)"></i></div>
         <div class="drill-body">
           <h2 class="drill-q">${escapeHtml(q.q)}</h2>
           <div class="drill-opts">
@@ -3642,7 +3781,9 @@
               return `<button ${d.flash ? "disabled" : ""} class="${cls}" data-act="drill-ans" data-i="${i}">${escapeHtml(opt)}</button>`;
             }).join("")}
           </div>
+          ${why ? `<p class="drill-why">${escapeHtml(why)}</p>` : ""}
         </div>
+        ${champ && d.hold ? `<div class="sticky-cta"><button class="btn" data-act="drill-next">Next</button></div>` : ""}
       </div>
     `;
   };
@@ -5829,6 +5970,13 @@
       state.drillMode = "morning";
       state.view = "drill";
       render();
+    } else if (act === "open-champ") {
+      stopDrillTick();
+      state.drill = null;
+      state.drillMode = "champ";
+      state.view = "drill";
+      render();
+      startChamp();
     } else if (act === "open-nightdrill") {
       stopDrillTick();
       state.drill = null;
@@ -5839,12 +5987,15 @@
       startDrill(state.drillMode || "morning");
     } else if (act === "drill-ans") {
       answerDrill(Number(el.dataset.i));
+    } else if (act === "drill-next") {
+      nextChamp();
     } else if (act === "drill-quit") {
       if (state.drill && state.drill.running && state.drill.answered) finishDrill();
       else {
         stopDrillTick();
         state.drill = null;
-        state.view = stepIsDone("drill") ? "home" : "word";
+        state.champBusy = false;
+        state.view = (state.drillMode === "champ" || !stepIsDone("drill")) ? "word" : "home";
         render();
       }
     } else if (act === "open-devotionlog") {

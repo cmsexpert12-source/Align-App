@@ -5,6 +5,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const DAY_MS = 86400000;
   const SPRINT_SEC = 120;
   const SPRINT_N = 30;
+  const CHAMP_N = 12;
 
   const V = (id, book, chapter, verse, thru, text, theme, why, score) =>
     ({ id, book, chapter, verse, thru: thru || verse, text, theme, why, score });
@@ -839,7 +840,9 @@ window.ALIGN_SCRIPTURE = (() => {
         const d2 = cleanText(row.d2 || (row.d && row.d[1]) || row.wrong2);
         if (!q || !a || !d1 || !d2) return null;
         if (/_{3,}/.test(q) || /fill in/i.test(q) || /missing word/i.test(q)) return null;
-        return { q, a, d: [d1, d2], i };
+        if (/which verse|what verse|verse numbers?|chapter numbers?/i.test(q)) return null;
+        const why = cleanText(row.why || row.reason || "");
+        return { q, a, d: [d1, d2], why, i };
       }).filter(Boolean);
     } catch {
       return [];
@@ -883,7 +886,7 @@ window.ALIGN_SCRIPTURE = (() => {
       (row.readingQs || []).forEach((q) => { have[q.id] = q; });
       made.forEach((q, i) => {
         const id = "rd:" + iso + ":ai:" + i;
-        if (!have[id]) have[id] = { id, q: q.q, a: q.a, d: q.d, tag: "read-ai", ref: (row.readRefs || []).join(", ") };
+        if (!have[id]) have[id] = { id, q: q.q, a: q.a, d: q.d, why: q.why || "", tag: "read-ai", ref: (row.readRefs || []).join(", ") };
       });
       row.readingQs = Object.values(have);
       row.aiQuizDone = true;
@@ -893,6 +896,100 @@ window.ALIGN_SCRIPTURE = (() => {
       /* local questions still stand */
     }
     return readingQs(iso);
+  };
+
+  const champQs = (iso) => {
+    const data = load();
+    const out = [];
+    const seen = new Set();
+    const add = (q) => {
+      if (!q || !q.id || seen.has(q.id) || isIdQuiz(q) || isCloze(q)) return;
+      seen.add(q.id);
+      out.push(q);
+    };
+    const keys = Object.keys(data.daily || {}).sort();
+    const recent = iso ? keys.filter((d) => d <= iso).slice(-10) : keys.slice(-10);
+    recent.forEach((d) => {
+      ((data.daily[d] || {}).champQs || []).forEach(add);
+    });
+    recent.forEach((d) => {
+      ((data.daily[d] || {}).readingQs || []).filter((q) => q && q.tag === "read-ai").forEach(add);
+    });
+    return out;
+  };
+
+  const enrichChamp = async (iso, packs) => {
+    const stamp = (packs || []).map((p) => (p.book || "") + " " + (p.chapter || "")).filter((s) => s.trim()).join("|");
+    const data0 = load();
+    const row0 = data0.daily[iso] || {};
+    if (stamp && row0.champStamp === stamp && (row0.champQs || []).length >= 6) return champQs(iso);
+    const body = (packs || []).map((p) => {
+      const vs = (p.verses || []).slice(0, 48).map((v) => (v.verse || "") + ". " + cleanText(v.text || v)).join(" ");
+      return (p.book || "") + " " + (p.chapter || "") + "\n" + vs;
+    }).join("\n\n").slice(0, 4800);
+    if (body.length < 80) return champQs(iso);
+    try {
+      const tok = (window.AlignDB && AlignDB.token && AlignDB.token()) || "";
+      const headers = { "Content-Type": "application/json" };
+      if (tok) headers.Authorization = "Bearer " + tok;
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          kind: "champ",
+          prompt: "Write 12 championship questions that test deep understanding of this reading only. Meaning, motive, command, promise, character of God, what the text requires — not fill-in-the-blank, not which-verse. Wrong answers must be plausible misreadings of this text.\n\n" + body
+        })
+      });
+      const js = await res.json().catch(() => ({}));
+      const made = parseAiQuiz(js.text || "");
+      if (!made.length) return champQs(iso);
+      const data = load();
+      const row = data.daily[iso] || {};
+      const have = {};
+      (row.champQs || []).forEach((q) => { if (q && q.id) have[q.id] = q; });
+      made.forEach((q, i) => {
+        const id = "rd:" + iso + ":champ:" + i;
+        have[id] = { id, q: q.q, a: q.a, d: q.d, why: q.why || "", tag: "champ", ref: stamp.replace(/\|/g, " · ") };
+      });
+      row.champQs = Object.values(have);
+      row.champStamp = stamp;
+      row.champRefs = (packs || []).map((p) => p.book + " " + p.chapter);
+      data.daily[iso] = row;
+      save(data);
+    } catch {
+      /* local reading questions still stand */
+    }
+    return champQs(iso);
+  };
+
+  const champQueue = (n = CHAMP_N, iso) => {
+    const data = load();
+    const now = Date.now();
+    const pool = champQs(iso);
+    if (!pool.length) return [];
+    const missed = [];
+    const due = [];
+    const fresh = [];
+    const later = [];
+    pool.forEach((q) => {
+      const c = data.quiz[q.id];
+      if (!c) fresh.push(q);
+      else if ((c.lapses || 0) > 0 && (c.reps || 0) === 0) missed.push(q);
+      else if (c.due <= now) due.push(q);
+      else later.push(q);
+    });
+    const byDue = (a, b) => {
+      const ca = data.quiz[a.id], cb = data.quiz[b.id];
+      return ((ca && ca.due) || 0) - ((cb && cb.due) || 0);
+    };
+    missed.sort(byDue);
+    due.sort(byDue);
+    const aiFirst = (arr) => arr.slice().sort((a, b) => {
+      const pa = (a.tag === "champ" ? 0 : 1);
+      const pb = (b.tag === "champ" ? 0 : 1);
+      return pa - pb;
+    });
+    return takeN(n, [aiFirst(missed), aiFirst(fresh), aiFirst(due), shuffle(later)]);
   };
 
   const allReadingBank = () => {
@@ -961,7 +1058,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const markSprint = (iso, payload, mode) => {
     const data = load();
     const row = data.daily[iso] || {};
-    const key = mode === "night" ? "nightSprint" : "sprint";
+    const key = mode === "night" ? "nightSprint" : (mode === "champ" ? "champ" : "sprint");
     row[key] = Object.assign({}, row[key] || {}, payload);
     data.daily[iso] = row;
     save(data);
@@ -970,6 +1067,7 @@ window.ALIGN_SCRIPTURE = (() => {
 
   const sprintOf = (iso) => (load().daily[iso] || {}).sprint || null;
   const nightSprintOf = (iso) => (load().daily[iso] || {}).nightSprint || null;
+  const champOf = (iso) => (load().daily[iso] || {}).champ || null;
 
   const clozeOf = (text, want = 4) => {
     const parts = String(text || "").split(/(\s+)/);
@@ -1009,14 +1107,14 @@ window.ALIGN_SCRIPTURE = (() => {
   };
 
   return {
-    VERSES, QUIZ, SPRINT_SEC, SPRINT_N,
+    VERSES, QUIZ, SPRINT_SEC, SPRINT_N, CHAMP_N,
     load, save, refOf, byId,
     review, gradeQuiz, gradeVerse,
     dueVerses, learnedCount, verseStreak,
     pickFromReadings, fromChapter, ensureTodayVerse, setTodayVerse,
     markVerseDone, todayVerse,
-    shuffle, optionsOf, dailyQueue, markSprint, sprintOf, nightSprintOf,
-    ingestReading, enrichReading, readingQs, fromPacks,
+    shuffle, optionsOf, dailyQueue, markSprint, sprintOf, nightSprintOf, champOf,
+    ingestReading, enrichReading, enrichChamp, readingQs, champQs, champQueue, fromPacks,
     clozeOf, initialsOf, stats, cardOf
   };
 })();

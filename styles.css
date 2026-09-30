@@ -1518,6 +1518,13 @@ img { max-width: 100%; display: block; }
   letter-spacing: -.04em;
   color: var(--lime);
 }
+.drill-clock.plain { color: var(--text); font-size: 20px; letter-spacing: -.03em; }
+.drill-why {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
 .drill-count { font-size: 13px; font-weight: 700; color: var(--muted); }
 .drill-body {
   padding: 8px 16px 12px;
