@@ -3864,6 +3864,7 @@
   const viewJournal = () => {
     let notes = [];
     try { notes = (L().notesList && L().notesList()) || []; } catch { notes = []; }
+    notes = notes.filter((n) => String(n.title || "").trim() || String(n.body || "").trim());
     return `
       <div class="screen home journal">
         <div class="topbar">
@@ -3873,7 +3874,6 @@
             <button type="button" class="icon-btn add" data-act="journal-new" title="New note">+</button>
           </div>
         </div>
-        <p class="plan-kicker">Tap + for a new page. Write as many as you want. Not the devotion.</p>
         ${notes.length ? `<div class="journal-list">${notes.map((n) => `
           <button type="button" class="journal-row" data-act="journal-open" data-id="${escapeAttr(n.id)}">
             <div>
@@ -3882,12 +3882,12 @@
             </div>
             <span aria-hidden="true">›</span>
           </button>`).join("")}</div>` : `
-        <button type="button" class="room journal-hero" data-act="journal-new">
+        <div class="next-hero">
           <div class="tag">Notepad</div>
           <h3>The page is blank.</h3>
-          <p>Tap and write. Add another with + whenever you want. Not the devotion.</p>
-          <span class="journal-cta">Start writing</span>
-        </button>`}
+          <p>Write anything. Not the devotion. + always starts a new page.</p>
+          <button type="button" class="btn" data-act="journal-new">Start writing</button>
+        </div>`}
       </div>
     `;
   };

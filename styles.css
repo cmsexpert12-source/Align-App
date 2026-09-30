@@ -2092,6 +2092,8 @@ img { max-width: 100%; display: block; }
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px 14px;
+  box-shadow: var(--highlight);
+  transition: transform .14s ease;
 }
 .journal-row h4 {
   font-size: 14px;
@@ -2475,6 +2477,7 @@ img { max-width: 100%; display: block; }
 .setting:active,
 .day-card:active,
 .move-day:active,
+.journal-row:active,
 .station:active,
 .plan-card:active,
 .ex-row:active {
