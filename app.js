@@ -4307,11 +4307,13 @@
     if (!b || !b.id) return "";
     const due = (B().dueToday(iso) || []).some((x) => x.id === b.id);
     const pct = Math.round(B().progress(b) * 100);
+    const page = b.pages
+      ? ("p. " + (b.current_page || 1) + " of " + b.pages)
+      : "Title on this account";
     return `
-      <button class="book-card" data-act="open-book-meta" data-id="${b.id}">
-        <div class="book-shelf">${escapeHtml(bookCat(b.category))}</div>
+      <button class="book-card" data-act="open-book-meta" data-id="${escapeAttr(b.id)}">
         <h3>${escapeHtml(b.title || "Untitled")}</h3>
-        <p>${b.pages ? "p. " + (b.current_page || 1) + " of " + b.pages : "Opening will count pages"} · ${B().slotLabel(b.slot)} · ${B().daysLabel(b.days)}${due ? " · due today" : ""}</p>
+        <p>${escapeHtml(page)}${due ? " · due today" : ""}</p>
         <div class="book-prog"><i style="width:${pct}%"></i></div>
       </button>`;
   };
@@ -4327,7 +4329,7 @@
     const match = (b, s) => bookCat(b.category) === s;
     let body = "";
     if (!books.length) {
-      body = `<div class="room"><div class="tag">Library</div><h3>Your shelf is empty.</h3><p>${state.session ? "Titles on this account show here even before the PDF is on this device. Upload a PDF you already own." : "Drop in a book you already own. Schedule a sitting. It stays offline after the first save."}</p></div>`;
+      body = "";
     } else if (filter !== "all") {
       const rows = books.filter((b) => match(b, filter));
       body = rows.length ? rows.map((b) => bookCardHtml(b, iso)).join("") : `<div class="empty">Nothing on this shelf yet.</div>`;
@@ -4343,18 +4345,21 @@
     }
     return `
       <div class="screen home">
-        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-        <div class="page-title">
-          <div class="tag">Library</div>
-          <h1>Books.</h1>
-          <p>Upload a PDF. Put it on a shelf. Read it here, offline${state.session ? " — on your account" : ""}. 50 MB for books and audio, together.</p>
+        <div class="topbar">
+          <div class="greet">Books<h2>Your shelf.</h2></div>
+          <div class="topbar-actions">
+            ${soundLaunch()}
+            <button type="button" class="icon-btn add" data-act="pick-pdf" title="Upload a PDF">${state.uploadBusy ? "…" : "+"}</button>
+          </div>
         </div>
-        <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
-          <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
-          <button class="btn" data-act="pick-pdf" style="margin-bottom:14px">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
-          ${books.length ? `<div class="shelf-chips">${chips}</div>` : ""}
-          ${body}
-        </div>
+        <input id="pdf-file" type="file" accept="application/pdf" class="hidden" />
+        ${books.length ? `<div style="padding:0 16px 8px"><div class="shelf-chips">${chips}</div>${body}</div>` : `
+        <div class="next-hero">
+          <div class="tag">Books</div>
+          <h3>Your shelf is empty.</h3>
+          <p>Upload a PDF you already own. Titles follow the account even before the file is on this phone.</p>
+          <button type="button" class="btn" data-act="pick-pdf">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
+        </div>`}
       </div>
     `;
   };
@@ -4367,9 +4372,8 @@
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="library">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">${B().fmtSize(b.bytes)} · ${b.pages ? b.pages + " pages" : "PDF"}</div>
+          <div class="tag">${B().fmtSize(b.bytes) ? B().fmtSize(b.bytes) + " · " : ""}${b.pages ? b.pages + " pages" : "On this account"}</div>
           <h1>${escapeHtml(b.title)}</h1>
-          <p>Schedule a sitting. The file stays on this phone for offline reading.</p>
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
           <div class="field"><label>Title</label>

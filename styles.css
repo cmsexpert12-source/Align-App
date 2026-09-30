@@ -2499,6 +2499,7 @@ img { max-width: 100%; display: block; }
 .day-card:active,
 .move-day:active,
 .journal-row:active,
+.book-card:active,
 .station:active,
 .plan-card:active,
 .ex-row:active {
