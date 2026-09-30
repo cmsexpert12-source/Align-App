@@ -1201,6 +1201,15 @@ img { max-width: 100%; display: block; }
 .devotion-body {
   font-size: 16.5px; line-height: 1.7; color: #ebe6da; white-space: pre-wrap; margin: 12px 0 18px;
 }
+.devo-take {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
 .devotion-verse {
   font-size: 15px; color: var(--lime); font-weight: 700; line-height: 1.45; margin: 8px 0 12px;
 }

@@ -96,6 +96,8 @@
     planJustSaved: false,
     journalIso: "",
     journalNoteId: "",
+    devotionLogIso: "",
+    logFrom: "",
     showHow: false,
     verseSitOn: false,
     verseSitSec: 0,
@@ -725,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -3075,7 +3077,7 @@
           <button class="setting" data-go="journal">
             <div class="grow"><h4>Notepad</h4><p>Write anything. Not the devotion.</p></div>
           </button>
-          <button class="setting" data-act="open-devotionlog">
+          <button class="setting" data-act="open-devotionlog" data-from="profile">
             <div class="grow"><h4>Devotion journal</h4><p>Past morning takeaways.</p></div>
           </button>
           <button class="setting" data-go="library">
@@ -3934,7 +3936,7 @@
         <div class="back-row">
           <button class="icon-btn" data-go="home">${chev()}</button>
           <div style="flex:1"></div>
-          <button class="linkish" data-act="open-devotionlog">Past days</button>
+          <button class="linkish" data-act="open-devotionlog" data-from="devotion">Past days</button>
         </div>
         <div class="page-title">
           <div class="tag">Morning · in this app</div>
@@ -3990,21 +3992,41 @@
 
   const viewDevotionLog = () => {
     const rows = (L().devotionLog && L().devotionLog()) || [];
+    const openIso = state.devotionLogIso || "";
+    const open = openIso ? rows.find((r) => r.iso === openIso) : null;
+    if (open) {
+      return `
+        <div class="screen full">
+          <div class="back-row"><button class="icon-btn" data-act="close-devotionday">${chev()}</button></div>
+          <div class="page-title">
+            <div class="tag">Devotion journal</div>
+            <h1>${escapeHtml(prettyIso(open.iso))}.</h1>
+          </div>
+          <div class="scroll-body" style="padding:0 20px calc(22px + var(--safe-b))">
+            ${open.verse ? `<p class="word-src" style="margin:0 0 14px">${escapeHtml(open.source || "Word")} · ${escapeHtml(open.verse)}</p>` : ""}
+            <p class="devo-take">${escapeHtml(open.devotion)}</p>
+          </div>
+        </div>`;
+    }
     return `
       <div class="screen full">
-        <div class="back-row"><button class="icon-btn" data-act="open-step" data-step="devotion">${chev()}</button></div>
+        <div class="back-row"><button class="icon-btn" data-act="close-devotionlog">${chev()}</button></div>
         <div class="page-title">
           <div class="tag">Devotion journal</div>
-          <h1>Past days.</h1>
-          <p>What remained. Not the notepad.</p>
+          <h1>Past mornings.</h1>
         </div>
         <div class="scroll-body" style="padding:0 16px calc(22px + var(--safe-b))">
           ${rows.length ? rows.map((r) => `
-            <div class="journal-row" style="display:block;text-align:left;margin-bottom:10px">
-              <h4>${escapeHtml(prettyIso(r.iso))}</h4>
-              ${r.verse ? `<p class="word-src" style="margin:4px 0 6px">${escapeHtml(r.source || "Word")} · ${escapeHtml(r.verse)}</p>` : ""}
-              <p>${escapeHtml(r.devotion)}</p>
-            </div>`).join("") : `<p class="hint">When you save a devotion takeaway, it will live here.</p>`}
+            <button type="button" class="journal-row" data-act="open-devotionday" data-iso="${escapeAttr(r.iso)}" style="margin-bottom:10px;width:100%">
+              <div>
+                <h4>${escapeHtml(prettyIso(r.iso))}</h4>
+                <p>${escapeHtml(clipText(r.devotion, 90))}</p>
+              </div>
+              <span aria-hidden="true">›</span>
+            </button>`).join("") : `<div class="room">
+            <h3>No takeaways yet.</h3>
+            <p>What remained after the morning reading lives here.</p>
+          </div>`}
         </div>
       </div>
     `;
@@ -6075,7 +6097,24 @@
         render();
       }
     } else if (act === "open-devotionlog") {
+      state.logFrom = (el && el.dataset && el.dataset.from) || state.logFrom || "profile";
+      state.devotionLogIso = "";
       state.view = "devotionlog";
+      render();
+    } else if (act === "open-devotionday") {
+      state.devotionLogIso = (el && el.dataset && el.dataset.iso) || "";
+      state.view = "devotionlog";
+      render();
+    } else if (act === "close-devotionday") {
+      state.devotionLogIso = "";
+      state.view = "devotionlog";
+      render();
+    } else if (act === "close-devotionlog") {
+      state.devotionLogIso = "";
+      const from = state.logFrom;
+      state.logFrom = "";
+      if (from === "devotion") state.view = "devotion";
+      else state.view = "profile";
       render();
     } else if (act === "edit-affirm") {
       state.affirmEdit = true;
