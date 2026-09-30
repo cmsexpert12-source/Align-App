@@ -5344,8 +5344,14 @@
         state.circle = r.data || null;
         state.circleErr = "";
         toast((r.data && r.data.pending) ? "You already asked. Wait for the founder." : "Circle started. Share the code.");
+      } else {
+        const msg = (r && r.error) || "Could not start a circle. Run sql/schema-circle-start.sql in Supabase.";
+        if (/cancel your request|already asked/i.test(msg)) {
+          state.circle = { pending: true, name: "ALIGN circle", members: [], requests: [], code: "" };
+          state.circleErr = "";
+          toast("You already asked. Wait for the founder.");
+        } else state.circleErr = msg;
       }
-      else state.circleErr = (r && r.error) || "Could not start a circle. Run sql/schema-circle-start.sql in Supabase.";
       render();
     } else if (act === "join-circle") {
       if (!state.session) { state.view = "auth"; render(); return; }
@@ -5354,10 +5360,20 @@
       const r = await AlignDB.joinCircle(code);
       state.circleBusy = false;
       if (r && r.ok) {
-        state.circle = r.data || null;
-        toast((r.data && r.data.pending) ? "Asked to join. Waiting for the founder." : "You’re in.");
+        state.circle = r.data || { pending: true, name: "ALIGN circle", members: [], requests: [], code: "" };
+        if (!state.circle.pending && !(state.circle.members || []).length && !state.circle.code) {
+          state.circle.pending = true;
+        }
+        state.circleErr = "";
+        toast((state.circle.pending) ? "Asked to join. Waiting for the founder." : "You’re in.");
+      } else {
+        const msg = (r && r.error) || "Could not join. Run sql/schema-circle-approve.sql in Supabase.";
+        if (/cancel your request|already asked/i.test(msg)) {
+          state.circle = { pending: true, name: "ALIGN circle", members: [], requests: [], code: "" };
+          state.circleErr = "";
+          toast("You already asked. Wait for the founder.");
+        } else state.circleErr = msg;
       }
-      else state.circleErr = (r && r.error) || "Could not join. Run sql/schema-circle-approve.sql in Supabase.";
       render();
     } else if (act === "approve-circle") {
       const uid = el && el.dataset ? el.dataset.uid : "";

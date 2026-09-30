@@ -64,6 +64,66 @@ $$;
 revoke all on function public.my_pending() from public;
 grant execute on function public.my_pending() to authenticated;
 
+create table if not exists public.circle_requests (
+  circle_id uuid not null references public.circles on delete cascade,
+  user_id uuid not null references auth.users on delete cascade,
+  display_name text not null default '',
+  created_at timestamptz not null default now(),
+  primary key (circle_id, user_id)
+);
+create unique index if not exists circle_requests_user_idx on public.circle_requests (user_id);
+alter table public.circle_requests enable row level security;
+revoke all on table public.circle_requests from public, anon;
+grant select on table public.circle_requests to authenticated;
+drop policy if exists "requests self or founder" on public.circle_requests;
+create policy "requests self or founder" on public.circle_requests
+  for select using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.circles c
+      where c.id = circle_id and c.created_by = auth.uid()
+    )
+  );
+
+create or replace function public.list_circle_requests()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  cid uuid;
+  rec jsonb;
+begin
+  if auth.uid() is null then
+    return '[]'::jsonb;
+  end if;
+  select id into cid from public.circles where created_by = auth.uid() limit 1;
+  if cid is null then
+    return '[]'::jsonb;
+  end if;
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', r.user_id,
+        'name', coalesce(nullif(btrim(r.display_name), ''), 'ALIGN'),
+        'at', r.created_at
+      )
+      order by r.created_at
+    ),
+    '[]'::jsonb
+  )
+  into rec
+  from public.circle_requests r
+  where r.circle_id = cid;
+  return rec;
+end;
+$$;
+
+revoke all on function public.list_circle_requests() from public;
+grant execute on function public.list_circle_requests() to authenticated;
+
 create or replace function public.ensure_circle_code()
 returns text
 language plpgsql
