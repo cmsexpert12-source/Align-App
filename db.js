@@ -1520,32 +1520,30 @@ window.AlignDB = (() => {
       name: names[id] || "ALIGN",
       days: byUser[id] || []
     }));
+    const asAsk = (r) => ({
+      id: r.id || r.user_id,
+      name: r.name || r.display_name || "ALIGN",
+      at: r.at || r.created_at
+    });
     let requests = [];
     if (sbMeta) {
       try {
         const { data: asks, error: askErr } = await sbMeta.rpc("list_circle_requests");
         if (!askErr && asks) {
-          const arr = typeof asks === "string" ? JSON.parse(asks) : asks;
-          if (Array.isArray(arr)) {
-            requests = arr.map((r) => ({
-              id: r.id,
-              name: r.name || "ALIGN",
-              at: r.at
-            }));
+          let arr = asks;
+          if (typeof arr === "string") {
+            try { arr = JSON.parse(arr); } catch { arr = []; }
           }
+          if (Array.isArray(arr)) requests = arr.map(asAsk);
         }
       } catch { /* list_circle_requests may not be applied yet */ }
     }
-    if (!requests.length && String(circle.created_by || "") === String(userId || "")) {
+    if (!requests.length) {
       const rows = await restSelect(
         "circle_requests",
         "select=user_id,display_name,created_at&circle_id=eq." + encodeURIComponent(cid) + "&order=created_at.asc"
       );
-      requests = (rows || []).map((r) => ({
-        id: r.user_id,
-        name: r.display_name || "ALIGN",
-        at: r.created_at
-      }));
+      requests = (rows || []).map(asAsk);
     }
     return ok({
       id: circle.id,

@@ -3313,7 +3313,7 @@
         ${bookBlock}
       </div>`;
     };
-    const founder = !!(c && c.created_by && c.created_by === me);
+    const founder = !!(c && String(c.created_by || "").toLowerCase() === String(me || "").toLowerCase());
     const asks = (c && c.requests) || [];
     const askBlock = (r) => `<div class="circle-row circle-ask">
         <div class="circle-who">
@@ -3366,7 +3366,7 @@
                ? `<button class="btn ghost sm" data-act="copy-code">Copy</button>`
                : (founder ? `<button class="btn ghost sm" data-act="ensure-code" ${state.circleBusy ? "disabled" : ""}>Get code</button>` : "")}
            </div>
-           ${founder && asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
+           ${asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
            <div class="set-label">${(c.members || []).length ? "Walking" : ""}</div>
            <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\\\"room\\\"><h3>Just you so far.</h3><p>Share the code. They ask. You say yes.</p></div>"}</div>
            <button class="btn ghost" data-act="leave-circle" style="margin-top:16px;height:44px">Leave circle</button>`;

@@ -99,7 +99,12 @@ begin
   if auth.uid() is null then
     return '[]'::jsonb;
   end if;
-  select id into cid from public.circles where created_by = auth.uid() limit 1;
+  select c.id into cid
+  from public.circles c
+  join public.circle_members m on m.circle_id = c.id
+  where m.user_id = auth.uid()
+    and c.created_by = auth.uid()
+  limit 1;
   if cid is null then
     return '[]'::jsonb;
   end if;
