@@ -1,5 +1,5 @@
 -- ALIGN Circle — founder sees who asked. Safe to run again.
--- Run this once in Supabase SQL Editor, then force-close ALIGN.
+-- Run this once in Supabase SQL Editor (paste all, then Run). Then force-close ALIGN.
 
 create table if not exists public.circle_requests (
   circle_id uuid not null references public.circles on delete cascade,
@@ -21,6 +21,51 @@ create policy "requests self or founder" on public.circle_requests
       where c.id = circle_id and c.created_by = auth.uid()
     )
   );
+
+create or replace function public.my_circle()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  rec jsonb;
+begin
+  if auth.uid() is null then
+    return null;
+  end if;
+  select jsonb_build_object(
+    'id', c.id,
+    'name', c.name,
+    'code', c.code,
+    'created_by', c.created_by,
+    'founder', (c.created_by = auth.uid()),
+    'requests', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', r.user_id,
+          'name', coalesce(nullif(btrim(r.display_name), ''), 'ALIGN'),
+          'at', r.created_at
+        )
+        order by r.created_at
+      )
+      from public.circle_requests r
+      join public.circles oc on oc.id = r.circle_id
+      where oc.created_by = auth.uid()
+    ), '[]'::jsonb)
+  )
+  into rec
+  from public.circles c
+  join public.circle_members m on m.circle_id = c.id
+  where m.user_id = auth.uid()
+  limit 1;
+  return rec;
+end;
+$$;
+
+revoke all on function public.my_circle() from public;
+grant execute on function public.my_circle() to authenticated;
 
 create or replace function public.my_pending()
 returns jsonb
@@ -61,19 +106,9 @@ security definer
 set search_path = public
 as $$
 declare
-  cid uuid;
   rec jsonb;
 begin
   if auth.uid() is null then
-    return '[]'::jsonb;
-  end if;
-  select c.id into cid
-  from public.circles c
-  join public.circle_members m on m.circle_id = c.id
-  where m.user_id = auth.uid()
-    and c.created_by = auth.uid()
-  limit 1;
-  if cid is null then
     return '[]'::jsonb;
   end if;
   select coalesce(
@@ -89,7 +124,8 @@ begin
   )
   into rec
   from public.circle_requests r
-  where r.circle_id = cid;
+  join public.circles c on c.id = r.circle_id
+  where c.created_by = auth.uid();
   return rec;
 end;
 $$;
@@ -113,23 +149,19 @@ begin
   if p_user_id is null or p_user_id = auth.uid() then
     raise exception 'Pick someone waiting';
   end if;
-  select c.id into cid
-  from public.circles c
-  join public.circle_members m on m.circle_id = c.id
-  where m.user_id = auth.uid()
+  select r.circle_id into cid
+  from public.circle_requests r
+  join public.circles c on c.id = r.circle_id
+  where r.user_id = p_user_id
     and c.created_by = auth.uid()
   limit 1;
   if cid is null then
-    raise exception 'Only the founder can let someone in';
-  end if;
-  if not exists (
-    select 1 from public.circle_requests
-    where circle_id = cid and user_id = p_user_id
-  ) then
     raise exception 'No one waiting with that account';
   end if;
   if exists (select 1 from public.circle_members where user_id = p_user_id) then
-    delete from public.circle_requests where circle_id = cid and user_id = p_user_id;
+    delete from public.circle_requests r
+    using public.circles c
+    where r.circle_id = c.id and c.created_by = auth.uid() and r.user_id = p_user_id;
     raise exception 'They already walk in a circle';
   end if;
   select count(*) into n from public.circle_members where circle_id = cid;
@@ -159,10 +191,10 @@ begin
   if auth.uid() is null then
     raise exception 'Sign in to decide';
   end if;
-  select c.id into cid
-  from public.circles c
-  join public.circle_members m on m.circle_id = c.id
-  where m.user_id = auth.uid()
+  select r.circle_id into cid
+  from public.circle_requests r
+  join public.circles c on c.id = r.circle_id
+  where r.user_id = p_user_id
     and c.created_by = auth.uid()
   limit 1;
   if cid is null then

@@ -19,7 +19,21 @@ begin
     'id', c.id,
     'name', c.name,
     'code', c.code,
-    'created_by', c.created_by
+    'created_by', c.created_by,
+    'founder', (c.created_by = auth.uid()),
+    'requests', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', r.user_id,
+          'name', coalesce(nullif(btrim(r.display_name), ''), 'ALIGN'),
+          'at', r.created_at
+        )
+        order by r.created_at
+      )
+      from public.circle_requests r
+      join public.circles oc on oc.id = r.circle_id
+      where oc.created_by = auth.uid()
+    ), '[]'::jsonb)
   )
   into rec
   from public.circles c

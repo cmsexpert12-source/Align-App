@@ -1525,16 +1525,25 @@ window.AlignDB = (() => {
       name: r.name || r.display_name || "ALIGN",
       at: r.at || r.created_at
     });
-    let requests = [];
+    const fromAny = (asks) => {
+      let arr = asks;
+      if (typeof arr === "string") {
+        try { arr = JSON.parse(arr); } catch { return []; }
+      }
+      return Array.isArray(arr) ? arr.map(asAsk).filter((x) => x.id) : [];
+    };
+    let requests = fromAny(circle && circle.requests);
     if (sbMeta) {
       try {
         const { data: asks, error: askErr } = await sbMeta.rpc("list_circle_requests");
         if (!askErr && asks) {
-          let arr = asks;
-          if (typeof arr === "string") {
-            try { arr = JSON.parse(arr); } catch { arr = []; }
+          const extra = fromAny(asks);
+          if (extra.length) {
+            const seen = {};
+            requests.forEach((r) => { seen[r.id] = r; });
+            extra.forEach((r) => { seen[r.id] = r; });
+            requests = Object.keys(seen).map((k) => seen[k]);
           }
-          if (Array.isArray(arr)) requests = arr.map(asAsk);
         }
       } catch { /* list_circle_requests may not be applied yet */ }
     }
