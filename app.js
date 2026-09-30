@@ -589,7 +589,7 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || snd.id));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine"].includes(state.view);
+    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap"].includes(state.view);
   };
 
   const fmtSound = (sec) => {
@@ -727,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -2714,8 +2714,6 @@
     const planId = (L().loadRoutine && L().loadRoutine().trainPlan) || "energy";
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
     const week = weekDays();
-    const cur = currentStep();
-    const canMove = canOpenStep("move");
     const rest = week.filter((d) => d.dow !== t.dow);
     return `
       <div class="screen plan">
@@ -2725,13 +2723,10 @@
         <div class="hero p-${todayD.pattern}">
           <div class="tag">${moveDone ? "Logged today" : "Today · " + DOW_FULL[todayD.dow]}</div>
           <h3>${todayD.name}</h3>
-          <p class="sub">${moveDone
-            ? todayD.subtitle
-            : (canMove ? todayD.subtitle : (todayD.subtitle + (cur ? " · on the path after " + cur.title : "")))}</p>
+          <p class="sub">${todayD.subtitle}</p>
           <div class="hero-meta"><span><b>${todayD.minutes}</b> min</span><span><b>${todayD.items.length}</b> moves</span></div>
-          ${canMove ? `<button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>` : ""}
+          <button class="btn p" data-go-day="${todayD.dow}">${moveDone ? "Review session" : "Open session"}</button>
         </div>
-        <p class="plan-kicker">Bodyweight · no gear. Training is one step on the path — not the product.</p>
         ${rest.length ? `<div class="section-h" style="padding:0 16px"><h4>The rest of the week</h4></div>
         <div class="move-rest">${rest.map((d) => `
           <button type="button" class="move-day p-${d.pattern}" data-go-day="${d.dow}">
@@ -2756,9 +2751,7 @@
         <div class="page-title">
           <div class="tag">${DOW_FULL[day.dow]} · ${day.minutes} min</div>
           <h1>${day.name}</h1>
-          <p>${day.subtitle} · bodyweight</p>
         </div>
-        <div class="why">${day.why}</div>
         <div class="ex-list">
           ${day.items.map((it, i) => {
             const ex = exercises[it.id];
@@ -2807,7 +2800,6 @@
           <div class="big-ico">${pose(ex.svg)}</div>
         </div>`}
         <ul class="cues">${ex.cues.map(c => `<li>${c}</li>`).join("")}</ul>
-        ${ex.yt ? `<p class="hint" style="padding:0 20px 28px">Watch how. Then the cues. Stay in ALIGN.</p>` : ""}
       </div>
     `;
   };
@@ -2902,7 +2894,6 @@
           <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
           <div class="kicker">Session logged</div>
           <h1>${day.name}<br>done.</h1>
-          <p class="lead" style="color:var(--muted)">Back to the path. Word is next if you haven’t opened it.</p>
           <div class="done-stats">
             <div><b>${mins}m</b><span>time</span></div>
             <div><b>${logged}</b><span>logged</span></div>
@@ -4681,10 +4672,7 @@
     }));
     app.querySelectorAll("[data-go-day]").forEach(b => b.addEventListener("click", () => {
       const d = weekDays().find(x => x.dow === Number(b.dataset.goDay));
-      if (d && d.dow === today().dow && !canOpenStep("move")) {
-        gateStep("move");
-        return;
-      }
+      if (!d) return;
       state.selectedDay = d.id;
       state.view = "ready";
       render();
