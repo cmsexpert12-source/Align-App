@@ -2975,47 +2975,47 @@
   const viewAuth = () => {
     const connected = AlignDB.configured();
     const tab = state.authTab;
+    const creating = tab === "signup";
+    const magic = tab === "magic";
+    const busyLab = creating ? "Creating…" : magic ? "Sending…" : "Signing in…";
+    const goLab = creating ? "Create account" : magic ? "Email me a link" : "Sign in";
     return `
       <div class="screen full">
         <div class="back-row">
-          <button class="icon-btn" data-go="home">${chev()}</button>
-          <div class="brand" style="margin-left:4px"><div class="mark">${markSvg()}</div>ALIGN</div>
+          <button class="icon-btn" data-go="profile">${chev()}</button>
         </div>
         <div class="page-title">
-          <div class="kicker">${connected ? "Account" : "Local only"}</div>
-          <h1>${tab === "signup" ? "Create your account." : "Welcome back."}</h1>
-          <p>${connected ? "Your morning syncs across devices. Reminders need an account." : "Accounts aren’t connected on this build."}</p>
+          <div class="tag">Account</div>
+          <h1>${creating ? "Create your account." : (magic ? "Email you a link." : "Welcome back.")}</h1>
+          <p>${connected ? "Same morning on your phone and laptop." : "You can walk the morning on this phone."}</p>
         </div>
         <div style="padding:0 20px 24px">
           ${!connected ? `
-            <p class="hint">You can still walk the morning on this device without an account.</p>
             <button class="btn" data-go="home">Continue</button>
           ` : `
             <div class="seg">
-              <button class="${tab==="signin"?"on":""}" data-act="auth-tab" data-tab="signin">Sign in</button>
-              <button class="${tab==="signup"?"on":""}" data-act="auth-tab" data-tab="signup">Create account</button>
+              <button class="${!creating?"on":""}" data-act="auth-tab" data-tab="signin">Sign in</button>
+              <button class="${creating?"on":""}" data-act="auth-tab" data-tab="signup">Create account</button>
             </div>
             ${state.authError ? `<div class="err">${escapeHtml(state.authError)}</div>` : ""}
             ${state.authInfo ? `<div class="okmsg">${escapeHtml(state.authInfo)}</div>` : ""}
             <div class="field"><label>Email</label>
               <input id="auth-email" type="email" autocomplete="email" inputmode="email" placeholder="you@email.com" value="${escapeAttr(state.authEmail)}" />
             </div>
-            ${tab !== "magic" ? `<div class="field"><label>Password</label>
+            ${magic ? "" : `<div class="field"><label>Password</label>
               <div class="pw">
-                <input id="auth-pass" type="${state.showPass ? "text" : "password"}" autocomplete="${tab==="signup"?"new-password":"current-password"}" placeholder="At least 6 characters" />
+                <input id="auth-pass" type="${state.showPass ? "text" : "password"}" autocomplete="${creating?"new-password":"current-password"}" placeholder="At least 6 characters" />
                 <button type="button" data-act="toggle-pass">${state.showPass ? "Hide" : "Show"}</button>
               </div>
-            </div>` : ""}
-            ${tab === "signup" ? `<div class="field"><label>Name</label>
+            </div>`}
+            ${creating ? `<div class="field"><label>Name</label>
               <input id="auth-name" maxlength="24" placeholder="What we call you" value="${escapeAttr(state.profile.name)}" />
             </div>` : ""}
-            <button class="btn ${state.authBusy?"busy":""}" data-act="auth-submit">${
-              state.authBusy ? "Working…" : tab === "signup" ? "Create account" : tab === "magic" ? "Email me a link" : "Sign in"
-            }</button>
-            <div style="display:flex;justify-content:space-between;margin-top:14px">
-              <button class="linkish" data-act="auth-tab" data-tab="${tab==="magic"?"signin":"magic"}">${tab==="magic"?"Use password":"Magic link instead"}</button>
-              <button class="linkish" data-act="auth-forgot">Forgot password</button>
-            </div>
+            <button class="btn ${state.authBusy?"busy":""}" data-act="auth-submit">${state.authBusy ? busyLab : goLab}</button>
+            ${creating ? "" : `<div style="display:flex;justify-content:space-between;margin-top:14px">
+              <button class="linkish" data-act="auth-tab" data-tab="${magic?"signin":"magic"}">${magic ? "Use a password" : "Email me a link"}</button>
+              ${magic ? "" : `<button class="linkish" data-act="auth-forgot">Forgot password</button>`}
+            </div>`}
             <button class="btn ghost" style="margin-top:18px" data-go="home">Skip for now</button>
           `}
         </div>
@@ -3023,43 +3023,7 @@
     `;
   };
 
-  const viewSetup = () => {
-    const cfg = AlignDB.readCfg();
-    const url = state.setupUrl || cfg.url || "";
-    const key = state.setupKey || cfg.anonKey || "";
-    return `
-      <div class="screen full">
-        <div class="back-row">
-          <button class="icon-btn" data-go="profile">${chev()}</button>
-        </div>
-        <div class="page-title">
-          <div class="kicker">Backend</div>
-          <h1>Connect Supabase.</h1>
-          <p>One project powers accounts, synced history, and push. Takes about five minutes.</p>
-        </div>
-        <div style="padding:0 20px 28px">
-          <div class="steps">
-            <div class="step"><b>1. Create a project</b><p>Go to supabase.com → New project. Wait until it’s ready.</p></div>
-            <div class="step"><b>2. Copy the API keys</b><p>Project Settings → API. You need the Project URL and the anon public key. Never paste the service role key in this app.</p></div>
-            <div class="step"><b>3. Run the SQL</b><p>SQL Editor → paste the ALIGN schema → Run. That creates tables, RLS, and the new-user trigger.</p>
-              <button class="btn ghost" data-act="copy-sql" style="margin-top:10px;height:44px">Copy schema SQL</button>
-            </div>
-            <div class="step"><b>4. Auth settings</b><p>Authentication → Providers → Email on. For easier testing, turn off “Confirm email”. Add this site’s URL under Redirect URLs.</p></div>
-            <div class="step"><b>5. Push (optional)</b><p>Run <code>sql/push-alarms.sql</code> in the SQL Editor so 5-min-before-rise and 10-min-before-lights still arrive when ALIGN is closed.</p></div>
-          </div>
-          ${state.setupErr ? `<div class="err">${escapeHtml(state.setupErr)}</div>` : ""}
-          ${state.setupMsg ? `<div class="okmsg">${escapeHtml(state.setupMsg)}</div>` : ""}
-          <div class="field"><label>Project URL</label>
-            <input id="sb-url" placeholder="https://xxxx.supabase.co" value="${escapeAttr(url)}" />
-          </div>
-          <div class="field"><label>Anon public key</label>
-            <textarea id="sb-key" placeholder="eyJhbGciOi…">${escapeHtml(key)}</textarea>
-          </div>
-          <button class="btn ${state.authBusy?"busy":""}" data-act="save-supabase">Save & test connection</button>
-        </div>
-      </div>
-    `;
-  };
+  const viewSetup = () => viewAuth();
 
   const viewProfile = () => {
     const email = state.session && state.session.user ? state.session.user.email : "";
@@ -3083,7 +3047,7 @@
               <p>${signed ? escapeHtml(email) : "On this phone until you create an account"}</p>
             </div>
           </div>
-          ${signed ? "" : `<button class="btn" data-go="auth" style="margin-bottom:8px">Create account</button>`}
+          ${signed ? "" : `<button class="btn" data-act="open-auth" data-tab="signup" style="margin-bottom:8px">Create account</button>`}
 
           <div class="set-label">Morning</div>
           <button class="setting" data-go="routine">
@@ -3383,7 +3347,7 @@
       ? `<div class="room">
            <h3>Walk with someone.</h3>
            <p>Sign in first. They see the path — not your journal.</p>
-           <button class="btn" data-go="auth">Create account</button>
+           <button class="btn" data-act="open-auth" data-tab="signup">Create account</button>
          </div>`
       : ((c && c.pending) || /cancel your request/i.test(state.circleErr || ""))
         ? `<div class="room">
@@ -5182,13 +5146,18 @@
     state.authError = "";
     state.authInfo = "";
     if (!email) { state.authError = "Email is required."; render(); return; }
+    const authFail = (m) => {
+      const s = String(m || "");
+      if (!s || /supabase|anon key|jwt|configured|sql\//i.test(s)) return "Could not reach your account. Try again.";
+      return s;
+    };
     state.authBusy = true; render();
     let res;
     if (state.authTab === "magic") {
       res = await AlignDB.magicLink(email);
       state.authBusy = false;
-      if (res.ok) state.authInfo = "Check your email for the login link.";
-      else state.authError = res.error;
+      if (res.ok) state.authInfo = "Check your email for the link.";
+      else state.authError = authFail(res.error);
       render();
       return;
     }
@@ -5203,12 +5172,12 @@
       save();
       res = await AlignDB.signUp(email, password, display);
       state.authBusy = false;
-      if (!res.ok) { state.authError = res.error; render(); return; }
+      if (!res.ok) { state.authError = authFail(res.error); render(); return; }
       if (res.data && res.data.session) {
         await applySession(res.data.session);
         state.view = "home";
       } else {
-        state.authInfo = "Account created. Confirm your email if that’s required, then sign in.";
+        state.authInfo = "Account created. Check your email if it asks you to confirm, then sign in.";
         state.authTab = "signin";
       }
       render();
@@ -5216,7 +5185,7 @@
     }
     res = await AlignDB.signIn(email, password);
     state.authBusy = false;
-    if (!res.ok) { state.authError = res.error; render(); return; }
+    if (!res.ok) { state.authError = authFail(res.error); render(); return; }
     await applySession(res.data.session);
     state.view = "home";
     render();
@@ -5360,6 +5329,12 @@
       const it = itemsOf(state.workout)[state.workout.index];
       it.id = el.dataset.id;
       enterExercise(state.workout.index);
+    } else if (act === "open-auth") {
+      state.authTab = el && el.dataset && el.dataset.tab ? el.dataset.tab : "signup";
+      state.authError = "";
+      state.authInfo = "";
+      state.view = "auth";
+      render();
     } else if (act === "auth-tab") {
       state.authTab = el.dataset.tab;
       state.authError = "";
@@ -5374,7 +5349,7 @@
       const res = await AlignDB.resetPassword(email);
       state.authBusy = false;
       if (res.ok) { state.authError = ""; state.authInfo = "Reset link sent. Check your inbox."; }
-      else state.authError = res.error;
+      else state.authError = /supabase|anon key|jwt|sql\//i.test(String(res.error || "")) ? "Could not send a reset." : (res.error || "Could not send a reset.");
       render();
     } else if (act === "save-supabase") {
       const url = (document.getElementById("sb-url") || {}).value || state.setupUrl;
