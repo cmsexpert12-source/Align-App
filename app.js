@@ -2937,7 +2937,6 @@
         <div class="page-title">
           <div class="tag">Account</div>
           <h1>${creating ? "Create your account." : (magic ? "Email you a link." : "Welcome back.")}</h1>
-          <p>${connected ? "Same morning on your phone and laptop." : "You can walk the morning on this phone."}</p>
         </div>
         <div style="padding:0 20px 24px">
           ${!connected ? `
@@ -2982,10 +2981,10 @@
     const r = L().loadRoutine();
     const onN = (L().STEP_IDS || []).filter((id) => r.on[id] !== false).length;
     const circleLine = state.circle && state.circle.pending
-      ? "Asked to join · waiting for the founder"
+      ? "Asked to join"
       : (state.circle && state.circle.members && state.circle.members.length
         ? (state.circle.members.length + " people")
-        : "Invite. They see the path — not your journal.");
+        : "Invite.");
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">You<h2>${escapeHtml((state.profile.name || "").trim() || "You.")}</h2></div>${soundLaunch()}</div>
@@ -2994,7 +2993,7 @@
             <div class="avatar">${initials()}</div>
             <div class="grow">
               <input id="prof-name" class="you-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
-              <p>${signed ? escapeHtml(email) : "On this phone until you create an account"}</p>
+              <p>${signed ? escapeHtml(email) : "Not signed in"}</p>
             </div>
           </div>
           ${signed ? "" : `<button class="btn" data-act="open-auth" data-tab="signup" style="margin-bottom:8px">Create account</button>`}
@@ -3020,23 +3019,23 @@
 
           <div class="set-label">More</div>
           <button class="setting" data-go="sound">
-            <div class="grow"><h4>Sound</h4><p>Stations, your files, cues when a step lands.</p></div>
+            <div class="grow"><h4>Sound</h4><p>Stations and your files.</p></div>
           </button>
           <button class="setting" data-go="journal">
-            <div class="grow"><h4>Notepad</h4><p>Write anything. Not the devotion.</p></div>
+            <div class="grow"><h4>Notepad</h4></div>
           </button>
           <button class="setting" data-act="open-devotionlog" data-from="profile">
-            <div class="grow"><h4>Devotion journal</h4><p>Past morning takeaways.</p></div>
+            <div class="grow"><h4>Devotion journal</h4><p>Past mornings.</p></div>
           </button>
           <button class="setting" data-go="library">
-            <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload a PDF you already own."}</p></div>
+            <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " on the shelf" : "Your shelf."}</p></div>
           </button>
           ${isStandalone() ? "" : (state.installPrompt ? `
             <button class="setting" data-act="install-pwa">
-              <div class="grow"><h4>Add to Home Screen</h4><p>Opens like an app. Reminders need this on iPhone.</p></div>
+              <div class="grow"><h4>Add to Home Screen</h4></div>
             </button>` : `
             <button class="setting" data-act="ios-install">
-              <div class="grow"><h4>Add to Home Screen</h4><p>${isIos() ? "Share → Add to Home Screen" : "Open this on your phone, then add it like an app"}</p></div>
+              <div class="grow"><h4>Add to Home Screen</h4><p>${isIos() ? "Share → Add to Home Screen" : ""}</p></div>
             </button>
           `)}
 
