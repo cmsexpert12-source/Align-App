@@ -1006,6 +1006,13 @@ img { max-width: 100%; display: block; }
   display: flex; flex-wrap: wrap; gap: 6px;
   padding: 0 16px 10px;
 }
+.path-rest {
+  margin: 0 16px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1.45;
+}
 .path-done span {
   display: inline-flex; align-items: center; gap: 5px;
   height: 28px; padding: 0 10px;

@@ -2394,24 +2394,19 @@
           ${shortOn && !allDone ? `<button type="button" class="linkish short-full" data-act="full-today">Full path</button>` : ""}
           ${install}
         </div>
-        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
-        <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        ${(() => {
+        ${allDone ? "" : (() => {
           const rows = steps.map((s) => {
             const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
             const now = !!(cur && cur.id === s.id && !done);
             return { s, done, now };
           });
           const finished = rows.filter((r) => r.done);
-          const open = rows.filter((r) => !r.done);
+          const later = rows.filter((r) => !r.done && !r.now);
           return `
+        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
+        <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
         ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
-        ${open.length ? `<div class="path">${open.map((r) => stepRow(
-            { ...r.s, sub: r.now ? subFor(r.s) : ("After " + (cur ? cur.title : "the last step")) },
-            false,
-            r.now,
-            r.now ? `data-act="open-step" data-step="${r.s.id}"` : `data-act="locked-step"`
-          )).join("")}</div>` : ""}`;
+        ${later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : ""}`;
         })()}
         ${evening && dueE.length ? `
           <div class="section-h" style="padding:16px 16px 0"><h4>Tonight’s book</h4></div>
@@ -2435,6 +2430,7 @@
             const now = !!(cur && cur.id === s.id && !done);
             return { s, done, now };
           });
+          if (!evening && !rows.some((r) => r.done)) return "";
           return `
         <div class="section-h" style="padding:16px 16px 0"><h4>Tonight</h4><span>${rows.filter((r) => r.done).length}/${rows.length}</span></div>
         <div class="path">${rows.map((r) => stepRow(
@@ -2456,17 +2452,18 @@
                 <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
               </div>
             </div>
-            <div class="pulse-stats">
+            ${(pulse.mornings || pulse.sessions || pulse.chapters) ? `<div class="pulse-stats">
               <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
               <div><b>${pulse.sessions}</b><span>Sessions</span></div>
               <div><b>${pulse.chapters}</b><span>Chapters</span></div>
-            </div>
+            </div>` : ""}
             ${(() => {
+              if (!morningDone(t.iso)) return "";
               const ms = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
               const ideal = (L().pathIdealMs && L().pathIdealMs(t.iso, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) || 0;
               const label = ms >= 1000
                 ? ((L().fmtSpan && L().fmtSpan(ms)) || "") + " / " + ((L().fmtSpan && L().fmtSpan(ideal)) || "") + " ideal"
-                : "Ideal vs actual · open Time";
+                : "Ideal vs actual";
               return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Pace</span></button>`;
             })()}
           </div>
