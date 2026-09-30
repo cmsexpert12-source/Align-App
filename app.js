@@ -3143,7 +3143,6 @@
     const goStep = onSteps.find((s) => s.id === "go") || byId.go;
     const midOn = onSteps.filter((s) => s.id !== "rise" && s.id !== "go");
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
-    const eve = L().EVENING || [];
     const grip = `<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4.5" r="1.35"/><circle cx="12" cy="4.5" r="1.35"/><circle cx="6" cy="9" r="1.35"/><circle cx="12" cy="9" r="1.35"/><circle cx="6" cy="13.5" r="1.35"/><circle cx="12" cy="13.5" r="1.35"/></svg>`;
     const rowOf = (s, i, opts) => {
       const on = !opts || opts.on !== false;
@@ -3175,25 +3174,20 @@
     const rows = midOn.map((s, i) => rowOf(s, i + 2, { on: true, drag: true })).join("");
     const goRow = goStep ? rowOf(goStep, 1 + midOn.length + 1, { on: true, pinned: true }) : "";
     const offRows = offSteps.map((s) => rowOf(s, 0, { on: false })).join("");
-    const eveRows = eve.map((s, i) => rowOf(s, i + 1, { on: true, pinned: true })).join("");
     return `
       <div class="screen full has-cta routine">
         <div class="back-row"><button class="icon-btn" data-go="profile">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Edit</div>
+          <div class="tag">Morning</div>
           <h1>Your path.</h1>
-          <p>Rise is first. Begin is last. Hold the dots to order the middle. The night path does not move.</p>
         </div>
         <div class="scroll-body routine-scroll">
-          <div class="set-label">Morning · ${onSteps.length} steps</div>
+          <div class="set-label">The walk · ${onSteps.length} steps</div>
           <div class="circle-list">${riseRow}</div>
           <div class="circle-list path-edit-list">${rows}</div>
           <div class="circle-list">${goRow}</div>
-          ${offRows ? `<div class="set-label">Off the path</div><p class="hint" style="margin-top:0">You can add these back anytime.</p><div class="circle-list">${offRows}</div>` : ""}
-          <div class="set-label">Tonight · fixed</div>
-          <p class="hint" style="margin-top:0">Night devotion, the verse, then goodnight. Every night. Not editable.</p>
-          <div class="circle-list">${eveRows}</div>
-          <div class="set-label">When you rise</div>
+          ${offRows ? `<div class="set-label">Off the path</div><div class="circle-list">${offRows}</div>` : ""}
+          <div class="set-label">Hours</div>
           <div class="hours-block">
             <p class="hours-kicker">Sunday</p>
             <div class="hours-grid">
@@ -3210,10 +3204,17 @@
               <div class="field"><label>Chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
             </div>
           </div>
-          <div class="set-label">How you train</div>
-          <p class="hint" style="margin-top:0">Same floor. Pick the week that matches the goal.</p>
-          <div class="plan-pick">
-            ${packs.map((p) => `<button type="button" class="plan-card ${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}"><h4>${escapeHtml(p.name)}</h4><p>${escapeHtml(p.goal || p.blurb)}</p></button>`).join("")}
+          <div class="set-label">Tonight · fixed</div>
+          <div class="routine-step pinned path-night">
+            <div class="grow">
+              <h3>Night path</h3>
+              <p>Night devotion · the verse · goodnight</p>
+            </div>
+            <span class="path-lock">Stays</span>
+          </div>
+          <div class="set-label">Train</div>
+          <div class="shelf-chips" style="padding:0 0 12px">
+            ${packs.map((p) => `<button type="button" class="${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
           </div>
         </div>
         <div class="sticky-cta"><button class="btn" data-act="save-routine">Save path</button></div>

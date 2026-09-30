@@ -2407,6 +2407,14 @@ img { max-width: 100%; display: block; }
 .path-card-actions { padding-left: 72px; }
 .routine-step.pinned .path-card-actions { padding-left: 36px; }
 .routine-step.pinned { background: color-mix(in srgb, var(--surface) 88%, #000); }
+.path-night {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.path-night .grow h3 { margin: 0 0 2px; }
 .plan-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 16px; }
 .plan-card {
   text-align: left; color: inherit;
