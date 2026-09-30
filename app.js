@@ -4126,37 +4126,28 @@
     const verses = (data && data.verses) || [];
     const sunday = target === 1;
     const tr = (L().bibleTr && L().bibleTr()) || "kjv";
-    const trName = tr === "web" ? "World English Bible" : "King James";
+    const ref = (data && data.reference) || ((state.readBook || "") + (state.readCh ? " " + state.readCh : "")) || "Scripture";
     return `
       <div class="screen full has-cta">
         <div class="back-row">
           <button class="icon-btn" data-go="home">${chev()}</button>
           <div style="flex:1"></div>
-          <button class="linkish" data-act="bible-pick">Jump</button>
-        </div>
-        <div class="page-title" style="padding-bottom:0">
-          <div class="tag">${readN}/${target} today${sunday ? " · church morning" : ""} · ${trName}</div>
-          <div class="seg bible-tr" style="grid-template-columns:1fr 1fr;margin:10px 0 0">
+          <div class="bible-tr-mini">
             <button type="button" class="${tr === "kjv" ? "on" : ""}" data-act="bible-tr" data-tr="kjv">KJV</button>
             <button type="button" class="${tr === "web" ? "on" : ""}" data-act="bible-tr" data-tr="web">WEB</button>
           </div>
         </div>
+        <div class="page-title" style="padding-bottom:4px">
+          <div class="tag">${sunday ? "Sunday · one" : (readN + " of " + target)}</div>
+          <button type="button" class="bible-ref" data-act="bible-pick">${escapeHtml(ref)}.</button>
+        </div>
         <div class="scripture">
           ${state.bibleLoading ? `<p class="hint">Loading chapter…</p>` : ""}
           ${state.bibleErr ? `<div class="err">${escapeHtml(state.bibleErr)}</div>` : ""}
-          ${data ? `
-            <div class="ref">${escapeHtml(data.reference || (state.readBook + " " + state.readCh))}</div>
-            ${verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("")}
-          ` : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
+          ${data ? verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
         </div>
         <div class="sticky-cta">
-          <div class="row-btns">
-            <button class="btn ghost" data-act="bible-prev">Previous</button>
-            <button class="btn" data-act="bible-done">${sunday ? "Chapter read · done" : "Chapter read"}</button>
-          </div>
-          ${readN >= target
-            ? `<button class="btn ghost" style="margin-top:8px" data-act="complete-step" data-step="word">${(L().isShort && L().isShort(iso)) ? "Scripture done · continue" : "Scripture done · sprint next"}</button>`
-            : `<p class="next-up" style="margin-top:8px">${(sunday || (L().isShort && L().isShort(iso))) ? "One chapter. Then keep walking." : (target - readN) + " more to the usual three"}</p>`}
+          <button class="btn" data-act="bible-done">Chapter read</button>
         </div>
       </div>
     `;
