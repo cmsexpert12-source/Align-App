@@ -3906,20 +3906,15 @@
   };
 
   const viewPray = () => {
-    const j = L().journalOf(today().iso);
     return `
-      <div class="screen full">
+      <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Devotion · first</div>
+          <div class="tag">Morning</div>
           <h1>Pray.</h1>
-          <p>No list. No Bible yet. Just you and Him.</p>
         </div>
         <div class="pray-stage">
           <div class="pray-time">${fmtClock(state.praySec)}</div>
-          <div class="acts">
-            ${L().ACTS.map((a) => `<div class="card"><b>${a.k}</b><p>${a.d}</p></div>`).join("")}
-          </div>
         </div>
         <div class="sticky-cta">
           ${state.prayOn
