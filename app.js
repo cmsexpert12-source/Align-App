@@ -3571,8 +3571,7 @@
       return `
         <div class="screen full">
           <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-          <div class="page-title"><div class="tag">Memory</div><h1>The devotion verse.</h1>
-            <p>Two minutes on the line from this morning’s devotion. Then hide the words.</p></div>
+          <div class="page-title"><div class="tag">Memory</div><h1>The devotion verse.</h1></div>
           <div style="padding:0 22px"><button class="btn" data-act="open-step" data-step="verse">Begin</button></div>
         </div>`;
     }
@@ -3594,29 +3593,43 @@
     }
     const phase = sess.phase;
     if (phase === "sit") {
-      const left = Math.max(0, 120 - (state.verseSitSec || 0));
-      const ready = left <= 0;
+      const ready = (state.verseSitSec || 0) >= 120;
       return `
         <div class="screen full has-cta">
           <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
           <div class="page-title" style="padding-bottom:4px">
-            <div class="tag">From today’s devotion</div>
-            <h1>Read it for 2 minutes.</h1>
-            <p>Stay with the line. Don’t rush it. Then you’ll hide the words.</p>
-          </div>
-          <div class="pray-stage">
-            <div class="pray-time verse-sit">${fmtClock(state.verseSitSec || 0)}</div>
-            <p class="hint">${ready ? "Two minutes. Now hide it." : "Keep reading until the clock hits 2:00."}</p>
+            <div class="tag">Memory · ${v.kjv ? "KJV" : "Devotion"}</div>
+            <h1>${escapeHtml(S().refOf(v))}.</h1>
           </div>
           <div class="verse-body">
             <div class="verse-card">
-              <div class="verse-theme">${v.kjv ? "KJV" : "Devotion"}</div>
-              <div class="ref">${escapeHtml(S().refOf(v))}</div>
               <q class="mv-text">${escapeHtml(v.text)}</q>
             </div>
           </div>
+          <div class="pray-stage" style="padding-top:0">
+            <div class="pray-time verse-sit">${fmtClock(state.verseSitSec || 0)}</div>
+            <p class="hint">${ready ? "Two minutes. Now hide it." : ""}</p>
+          </div>
           <div class="sticky-cta">
             <button class="btn" data-act="verse-sit-done" ${ready ? "" : "disabled"}>${ready ? "Hide the words" : "Keep reading"}</button>
+          </div>
+        </div>`;
+    }
+    if (phase === "hide") {
+      return `
+        <div class="screen full has-cta">
+          <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
+          <div class="page-title" style="padding-bottom:4px">
+            <div class="tag">Memory · ${v.kjv ? "KJV" : "Devotion"}</div>
+            <h1>${escapeHtml(S().refOf(v))}.</h1>
+          </div>
+          <div class="verse-body">
+            <div class="verse-card">
+              <p class="mv-text" style="letter-spacing:.04em">${escapeHtml(S().initialsOf(v.text))}</p>
+            </div>
+          </div>
+          <div class="sticky-cta">
+            <button class="btn" data-act="verse-continue">It’s hidden</button>
           </div>
         </div>`;
     }
@@ -6020,10 +6033,8 @@
       }
       state.verseSitOn = false;
       const sess = state.verseSess;
-      const item = currentVerse();
-      if (!sess || !item) return;
-      startCloze(item.verse);
-      sess.phase = (sess.cloze && sess.cloze.answers && sess.cloze.answers.length) ? "cloze" : "grade";
+      if (!sess) return;
+      sess.phase = "hide";
       render();
     } else if (act === "begin-day") {
       const iso = today().iso;
