@@ -3256,14 +3256,18 @@
            <button class="btn" data-act="join-circle" ${state.circleBusy ? "disabled" : ""}>Ask to join</button>
            <button class="btn ghost" data-act="create-circle" ${state.circleBusy ? "disabled" : ""}>Start a circle</button>
          </div>`
-        : `${c.code ? `<div class="circle-invite">
+        : `<div class="circle-invite">
              <div class="grow">
                <span class="circle-invite-k">Invite code</span>
-               <b class="circle-code">${escapeHtml(c.code)}</b>
-               <p>${founder ? "They ask with this. You let them in." : "Share this. The founder lets people in."}</p>
+               <b class="circle-code">${escapeHtml(c.code || "········")}</b>
+               <p>${c.code
+                 ? (founder ? "They ask with this. You let them in." : "Share this. The founder lets people in.")
+                 : "No code yet. The founder can make one."}</p>
              </div>
-             <button class="btn ghost sm" data-act="copy-code">Copy</button>
-           </div>` : ""}
+             ${c.code
+               ? `<button class="btn ghost sm" data-act="copy-code">Copy</button>`
+               : (founder ? `<button class="btn ghost sm" data-act="ensure-code" ${state.circleBusy ? "disabled" : ""}>Get code</button>` : "")}
+           </div>
            ${founder && asks.length ? `<div class="set-label">Wants in</div><div class="circle-list">${asks.map(askBlock).join("")}</div>` : ""}
            <div class="set-label">${(c.members || []).length ? "Walking" : ""}</div>
            <div class="circle-list">${(c.members || []).map(memberBlock).join("") || "<div class=\\\"room\\\"><h3>Just you so far.</h3><p>Share the code. They ask. You say yes.</p></div>"}</div>
@@ -5247,6 +5251,16 @@
       if (!code) return;
       try { await navigator.clipboard.writeText(code); toast("Code copied"); }
       catch { toast(code); }
+    } else if (act === "ensure-code") {
+      if (!window.AlignDB || !AlignDB.ensureCircleCode) return;
+      state.circleBusy = true; render();
+      const r = await AlignDB.ensureCircleCode();
+      state.circleBusy = false;
+      if (r && r.ok && r.data) {
+        state.circle = Object.assign({}, state.circle || {}, { code: r.data });
+        toast("Code ready. Share it.");
+      } else toast((r && r.error) || "Run sql/schema-circle-code.sql in Supabase once.");
+      render();
     } else if (act === "save-routine") {
       try { pushRoutine(readPathForm()); toast("Path saved"); }
       catch { toast("Could not save path"); }

@@ -1455,8 +1455,26 @@ window.AlignDB = (() => {
       });
     }
     const cid = mine[0].circle_id;
-    const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
-    const circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+    let circle = null;
+    const sbMeta = client();
+    if (sbMeta) {
+      try {
+        const { data: meta, error: metaErr } = await sbMeta.rpc("my_circle");
+        if (!metaErr && meta) {
+          circle = typeof meta === "string" ? JSON.parse(meta) : meta;
+        }
+      } catch { /* my_circle may not be applied yet */ }
+    }
+    if (!circle || !circle.id) {
+      const circ = await restSelect("circles", "select=id,name,code,created_by&id=eq." + encodeURIComponent(cid));
+      circle = circ[0] || { id: cid, name: "ALIGN circle", code: "" };
+    }
+    if (!circle.code && sbMeta) {
+      try {
+        const { data: filled, error: fillErr } = await sbMeta.rpc("ensure_circle_code");
+        if (!fillErr && filled) circle.code = filled;
+      } catch { /* ensure_circle_code may not be applied yet */ }
+    }
     const mems = await restSelect("circle_members", "select=user_id,joined_at&circle_id=eq." + encodeURIComponent(cid));
     const ids = (mems || []).map((m) => m.user_id).filter(Boolean);
     let names = {};
@@ -1582,6 +1600,17 @@ window.AlignDB = (() => {
     return ok(true);
   };
 
+  const ensureCircleCode = async () => {
+    const sb = client();
+    if (!sb) return fail("Cloud is not ready");
+    const { data, error } = await sb.rpc("ensure_circle_code");
+    if (error && (missingTable(error) || /ensure_circle_code|Could not find the function/i.test(error.message || ""))) {
+      return fail("Run sql/schema-circle-code.sql in Supabase once.");
+    }
+    if (error) return fail(error);
+    return ok(data || "");
+  };
+
   const leaveCircle = async () => {
     const sb = client();
     const userId = await uidOf();
@@ -1620,7 +1649,7 @@ window.AlignDB = (() => {
     downloadBookFile, deleteBookRemote, saveReadingLog,
     fetchSounds, upsertSoundMeta, uploadSoundFile, soundUrl, deleteSoundRemote,
     token: () => cachedToken || ((sessionFromStorage() || {}).access_token) || "",
-    fetchMyCircle, createCircle, joinCircle, leaveCircle,
+    fetchMyCircle, createCircle, joinCircle, leaveCircle, ensureCircleCode,
     approveCircle, denyCircle, cancelCircleRequest,
     flush, pendingCount, status, syncNow, onStatus, seedLocal, markHydrated: () => { hydrated = true; scheduleFlush(0); }
   };
