@@ -3081,7 +3081,6 @@
       const on = !opts || opts.on !== false;
       const pinned = !!(opts && opts.pinned);
       const drag = !!(opts && opts.drag);
-      const why = (PATH_WHY[s.id] && PATH_WHY[s.id].why) || s.sub;
       const mins = on && !pinned;
       return `<div class="routine-step ${on ? "" : "off"} ${pinned ? "pinned" : ""}" data-id="${escapeAttr(s.id)}">
         <div class="path-card-top">
@@ -3089,7 +3088,6 @@
           ${drag ? `<span class="path-num">${i + 1}</span>` : ""}
           <div class="grow">
             <h3>${escapeHtml(s.title)}</h3>
-            <p>${escapeHtml(why)}</p>
           </div>
         </div>
         <div class="path-card-actions">
