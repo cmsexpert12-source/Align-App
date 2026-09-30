@@ -3046,91 +3046,68 @@
     const email = state.session && state.session.user ? state.session.user.email : "";
     const signed = !!state.session;
     const nBooks = B().list().length;
+    const r = L().loadRoutine();
+    const onN = (L().STEP_IDS || []).filter((id) => r.on[id] !== false).length;
+    const circleLine = state.circle && state.circle.pending
+      ? "Asked to join · waiting for the founder"
+      : (state.circle && state.circle.members && state.circle.members.length
+        ? (state.circle.members.length + " people")
+        : "Invite. They see the path — not your journal.");
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">You<h2>Account.</h2></div>${soundLaunch()}</div>
+        <div class="topbar"><div class="greet">You<h2>${escapeHtml((state.profile.name || "").trim() || "You.")}</h2></div>${soundLaunch()}</div>
         <div style="padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px)">
           <div class="account-card">
             <div class="avatar">${initials()}</div>
             <div class="grow">
-              <h3>${escapeHtml(state.profile.name || "ALIGN")}</h3>
-              <p>${signed ? escapeHtml(email) : "On this device · create an account to keep mornings everywhere"}</p>
+              <input id="prof-name" class="you-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
+              <p>${signed ? escapeHtml(email) : "On this phone until you create an account"}</p>
             </div>
           </div>
+          ${signed ? "" : `<button class="btn" data-go="auth" style="margin-bottom:8px">Create account</button>`}
 
-          <div class="set-label">Profile</div>
-          <div class="field"><label>Display name</label>
-            <input id="prof-name" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
-          </div>
-          <button class="btn ghost" data-act="save-name" style="height:44px">Save name</button>
-
-          <div class="set-label">Circle</div>
-          <button class="setting" data-go="circle">
-            <div class="grow"><h4>Walk together</h4><p>${state.circle && state.circle.pending
-              ? "Asked to join · waiting for the founder"
-              : (state.circle && state.circle.members && state.circle.members.length
-              ? (state.circle.members.length + " people · path, schedule, book, rise, sleep")
-              : "Invite people. They see path, schedule, the book, and when you rose and slept — not your journal.")}</p></div>
+          <div class="set-label">Morning</div>
+          <button class="setting" data-go="routine">
+            <div class="grow"><h4>Your path</h4><p>Sunday ${escapeHtml(L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "")} · Mon–Sat ${escapeHtml(L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : "")} · ${onN} steps</p></div>
           </button>
-
-          <div class="set-label">Morning hours</div>
-          ${(() => {
-            const r = L().loadRoutine();
-            const onN = (L().STEP_IDS || []).filter((id) => r.on[id] !== false).length;
-            return `<button class="setting" data-go="routine">
-              <div class="grow"><h4>Your path</h4><p>Sunday ${escapeHtml(L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "")} · Mon–Sat ${escapeHtml(L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : "")} · ${onN} steps</p></div>
-            </button>`;
-          })()}
-
-          <div class="set-label">Notifications</div>
           <div class="setting">
             <div class="grow">
               <h4>Reminders</h4>
-              <p>${(() => {
-                const r = L().loadRoutine();
-                const wk = L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : "";
-                const su = L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "";
-                return state.prefs.enabled
-                  ? ("On · 5 min before rise · 10 min before lights out")
-                  : ("Off · 5 min before " + su + " / " + wk);
-              })()}</p>
+              <p>${state.prefs.enabled
+                ? "On · 5 min before rise · 10 min before lights"
+                : ("Off · 5 min before " + (L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "") + " / " + (L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : ""))}</p>
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
-          <button class="btn ghost" data-act="test-push" style="height:44px">Send a test</button>
 
-          <div class="set-label">Sound</div>
-          <button class="setting" data-go="sound">
-            <div class="grow"><h4>Play through the morning</h4><p>Stations in the app, or your own audio. Cues when a step lands.</p></div>
+          <div class="set-label">Together</div>
+          <button class="setting" data-go="circle">
+            <div class="grow"><h4>Circle</h4><p>${escapeHtml(circleLine)}</p></div>
           </button>
 
-          <div class="set-label">Journal</div>
+          <div class="set-label">More</div>
+          <button class="setting" data-go="sound">
+            <div class="grow"><h4>Sound</h4><p>Stations, your files, cues when a step lands.</p></div>
+          </button>
           <button class="setting" data-go="journal">
-            <div class="grow"><h4>Notepad</h4><p>Write anything. New notes whenever you want. Not the devotion.</p></div>
+            <div class="grow"><h4>Notepad</h4><p>Write anything. Not the devotion.</p></div>
           </button>
           <button class="setting" data-act="open-devotionlog">
             <div class="grow"><h4>Devotion journal</h4><p>Past morning takeaways.</p></div>
           </button>
-
-          <div class="set-label">Library</div>
           <button class="setting" data-go="library">
-            <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload PDFs. Read them offline."}</p></div>
+            <div class="grow"><h4>Books</h4><p>${nBooks ? nBooks + " PDF" + (nBooks===1?"":"s") + " on this device" : "Upload a PDF you already own."}</p></div>
           </button>
-
-          <div class="set-label">App</div>
           ${isStandalone() ? "" : (state.installPrompt ? `
             <button class="setting" data-act="install-pwa">
-              <div class="grow"><h4>Add to Home Screen</h4><p>Install ALIGN like an app</p></div>
+              <div class="grow"><h4>Add to Home Screen</h4><p>Opens like an app. Reminders need this on iPhone.</p></div>
             </button>` : `
             <button class="setting" data-act="ios-install">
               <div class="grow"><h4>Add to Home Screen</h4><p>${isIos() ? "Share → Add to Home Screen" : "Open this on your phone, then add it like an app"}</p></div>
             </button>
           `)}
 
-          ${signed
-            ? `<button class="btn ghost" style="margin-top:18px" data-act="sign-out">Sign out</button>`
-            : `<button class="btn" style="margin-top:18px" data-go="auth">Create account</button>`
-          }
+          ${signed ? `<button class="btn ghost" style="margin-top:18px" data-act="sign-out">Sign out</button>` : ""}
           <div class="ver">ALIGN</div>
         </div>
       </div>
@@ -4744,7 +4721,16 @@
       await AlignDB.savePrefs(state.prefs);
     });
     const pn = $("#prof-name");
-    if (pn) pn.addEventListener("input", e => { state.profile.name = e.target.value; });
+    if (pn) {
+      pn.addEventListener("input", e => { state.profile.name = e.target.value; });
+      const persistName = () => {
+        state.profile.name = String(pn.value || "").trim();
+        save();
+        if (state.session && AlignDB.upsertProfile) AlignDB.upsertProfile(state.profile.name).catch(() => {});
+      };
+      pn.addEventListener("change", persistName);
+      pn.addEventListener("blur", persistName);
+    }
     const dn = $("#devotion-note");
     if (dn) dn.addEventListener("input", e => {
       const iso = today().iso;
