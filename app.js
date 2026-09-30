@@ -3974,16 +3974,14 @@
     const editing = !custom || state.affirmEdit;
     return `
       <div class="screen full has-cta affirm">
-        <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Word</div>
+          <div class="tag">Morning</div>
           <h1>Affirm.</h1>
-          <p>${editing ? "Your line. Write it. Read it aloud. It saves to this account." : "Your line. Speak it. Edit whenever it needs to change."}</p>
         </div>
         <div class="scroll-body affirm-wrap">
           ${editing
-            ? `<label class="field-label" for="affirm-text">My affirmation</label>
-               <textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>`
+            ? `<textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>`
             : `<p class="affirm-said">${escapeHtml(custom)}</p>`}
         </div>
         <div class="sticky-cta">
