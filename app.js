@@ -4038,25 +4038,21 @@
 
   const viewEvening = () => {
     const sp = state.spurgeonPm;
-    const clk = L().clocksFor(today().date);
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">Tonight · lights ${clk.tonightLabel}</div>
+          <div class="tag">Tonight</div>
           <h1>Night devotion.</h1>
-          <p>Read this. Then the verse. Then goodnight.</p>
         </div>
         <div class="scripture">
           ${sp ? `
-            <div class="tag">Spurgeon · Evening</div>
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
             <div class="devotion-body">${escapeHtml(sp.b)}</div>
           ` : `<p class="hint">Loading evening reading…</p>`}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="complete-step" data-step="evening">Devotion done · verse next</button>
-          <button class="btn ghost" style="margin-top:8px" data-act="open-nightdrill">Test today’s reading</button>
+          <button class="btn" data-act="complete-step" data-step="evening">Continue</button>
         </div>
       </div>
     `;
@@ -4070,7 +4066,6 @@
         <div class="page-title">
           <div class="tag">Tonight</div>
           <h1>Memory verse.</h1>
-          <p>The same line from this morning’s devotion. Read it once more. Then goodnight.</p>
         </div>
         <div class="verse-body">
           <div class="verse-card">
@@ -4091,13 +4086,10 @@
     return `
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-        <div class="page-title">
-          <div class="tag">Goodnight · ${clk.tonightLabel}</div>
-          <h1>Phone down.</h1>
-          <p>${clk.sunday ? "Sunday. Rise at 4:00 AM." : "Rise at " + clk.wakeLabel + "."} The morning path is already waiting.</p>
-        </div>
-        <div class="done-hero" style="padding:12px 22px 0">
-          <p class="lead" style="color:var(--muted)">You closed the day. Sleep like the first appointment is His.</p>
+        <div class="done-hero" style="padding:24px 22px">
+          <img class="done-burst" src="./assets/done-burst.jpg" alt="" />
+          <div class="kicker">${escapeHtml(clk.tonightLabel)}</div>
+          <h1>Goodnight.</h1>
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="complete-step" data-step="lights">Goodnight</button>
