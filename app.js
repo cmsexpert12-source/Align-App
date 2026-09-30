@@ -3336,7 +3336,6 @@
     const stations = snd.stations || [];
     const tracks = snd.tracks || [];
     const library = snd.library || [];
-    const signed = !!state.session;
     const on = !!(snd.playing || snd.id);
     const live = !!(snd.live || snd.kind === "station");
     const pct = snd.seekable && snd.duration ? Math.round((snd.current / snd.duration) * 1000) : 0;
@@ -3345,7 +3344,7 @@
       : `<input class="now-scrub" type="range" min="0" max="1000" value="${pct}" aria-label="Position" />`;
     return `
       <div class="screen home sound-page">
-        <div class="topbar"><div class="greet">Sound<h2>${on ? escapeHtml(snd.title || "Sound") : "Play through the morning."}</h2></div></div>
+        <div class="topbar"><div class="greet">Sound<h2>Play.</h2></div></div>
         ${on ? `<div class="sound-now">
           <button type="button" class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
           <div class="now-body">
@@ -3376,7 +3375,6 @@
               </button>`).join("")}
           </div>` : ""}
           <div class="set-label">Your files</div>
-          <p class="hint" style="margin-top:0">${signed ? "On this account. 50 MB with books." : "On this phone. 50 MB with books."}</p>
           <input id="sound-files" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple hidden />
           <button class="btn ghost" style="height:44px" data-act="sound-add">${state.uploadBusy ? "Saving…" : "Upload audio"}</button>
           <div class="track-list">
@@ -3384,14 +3382,14 @@
               <div class="setting">
                 <button class="grow" data-act="sound-track" data-id="${escapeAttr(t.id)}" style="text-align:left">
                   <h4>${escapeHtml(t.name)}</h4>
-                  <p>${snd.kind==="track" && snd.id===t.id ? (snd.playing ? "Playing" : "Paused") : (signed ? "On this account" : "On this phone")}</p>
+                  ${snd.kind==="track" && snd.id===t.id ? `<p>${snd.playing ? "Playing" : "Paused"}</p>` : ""}
                 </button>
                 <button class="linkish" data-act="sound-remove" data-id="${escapeAttr(t.id)}">Remove</button>
               </div>`).join("")}
           </div>
           <div class="set-label">Cues</div>
           <div class="setting">
-            <div class="grow"><h4>When a step lands</h4><p>A short tone on a step, set, or rest.</p></div>
+            <div class="grow"><h4>Step tones</h4></div>
             <button class="toggle ${snd.sfxOn?"on":""}" data-act="sound-sfx"><i></i></button>
           </div>
           <div class="field" style="margin-top:12px">
