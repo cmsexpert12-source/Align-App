@@ -1942,25 +1942,22 @@ img { max-width: 100%; display: block; }
 .saved-banner b { color: var(--lime); }
 
 .sound-now {
-  margin: 0 16px 14px;
+  margin: 8px 16px 10px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
-  padding: 10px 12px;
+  padding: 12px 12px 14px;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 44px minmax(0, 1fr) 36px;
+  gap: 8px 10px;
   align-items: center;
 }
 .sound-now .now-play {
   width: 44px; height: 44px; border-radius: 14px; font-size: 14px;
+  grid-row: 1 / span 2;
 }
-.sound-now-meta { text-align: left; min-width: 0; color: inherit; }
-.sound-now-meta h4 {
-  font-size: 15px; font-weight: 700;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sound-now-meta p { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.sound-now .now-x { grid-row: 1 / span 2; grid-column: 3; }
+.sound-now .now-body { grid-column: 2; }
 
 .now-chip {
   position: absolute;

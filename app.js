@@ -637,7 +637,7 @@
   const armNowTick = () => {
     if (nowTick) return;
     nowTick = setInterval(() => {
-      const el = app.querySelector(".now-chip");
+      const el = app.querySelector(".now-chip") || app.querySelector(".sound-now");
       if (!el) { clearInterval(nowTick); nowTick = null; return; }
       paintNowProgress(el);
     }, 250);
@@ -675,12 +675,31 @@
     }
   };
 
+  const paintSoundNow = (box) => {
+    if (!box) return;
+    const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
+    const play = box.querySelector(".now-play");
+    const title = box.querySelector(".now-meta b");
+    if (play) {
+      play.textContent = snd.playing ? "❚❚" : "▶";
+      play.dataset.act = snd.playing ? "sound-pause" : "sound-resume";
+      play.title = snd.playing ? "Pause" : "Play";
+    }
+    if (title) title.textContent = snd.title || "Sound";
+    paintNowProgress(box);
+  };
+
   const paintNow = () => {
     try { app.classList.toggle("has-now", !nowHidden()); } catch { app.classList.remove("has-now"); }
+    const inpage = app.querySelector(".sound-now");
+    if (inpage) {
+      paintSoundNow(inpage);
+      armNowTick();
+    }
     let el = app.querySelector(".now-chip");
     if (nowHidden()) {
       if (el) el.remove();
-      if (nowTick) { clearInterval(nowTick); nowTick = null; }
+      if (!inpage && nowTick) { clearInterval(nowTick); nowTick = null; }
       return;
     }
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || { playing: false, title: "Sound" };
@@ -3404,56 +3423,67 @@
     const tracks = snd.tracks || [];
     const library = snd.library || [];
     const signed = !!state.session;
+    const on = !!(snd.playing || snd.id);
+    const live = !!(snd.live || snd.kind === "station");
+    const pct = snd.seekable && snd.duration ? Math.round((snd.current / snd.duration) * 1000) : 0;
+    const bar = live
+      ? `<div class="now-live" aria-hidden="true"><i></i></div>`
+      : `<input class="now-scrub" type="range" min="0" max="1000" value="${pct}" aria-label="Position" />`;
     return `
-      <div class="screen">
-        <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
-        <div class="page-title">
-          <div class="tag">Sound</div>
-          <h1>Stay in ALIGN.</h1>
-          <p>Open recordings in the library. Your own files stay on this account. 50 MB for books and audio, together.</p>
-        </div>
-        <div class="scroll-body" style="padding:0 16px calc(var(--nav-h) + 24px)">
-          <div class="set-label" style="padding-top:0">ALIGN library</div>
-          <p class="hint" style="margin-top:0">Public-domain field recordings (PDsounds via Wikimedia). Stored on your ALIGN database after you run the sounds SQL.</p>
-          <div class="station-grid">
-            ${library.map((s) => `
-              <button class="station ${snd.kind==="library" && snd.id===s.id && snd.playing ? "on" : ""}" data-act="sound-library" data-id="${s.id}">
-                <h4>${escapeHtml(s.title)}</h4>
-                <p>${escapeHtml((s.artist || "Open source") + (s.mood ? " · " + s.mood : ""))}</p>
-              </button>`).join("")}
+      <div class="screen home sound-page">
+        <div class="topbar"><div class="greet">Sound<h2>${on ? escapeHtml(snd.title || "Sound") : "Play through the morning."}</h2></div></div>
+        ${on ? `<div class="sound-now">
+          <button type="button" class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
+          <div class="now-body">
+            <div class="now-meta">
+              <b>${escapeHtml(snd.title || "Sound")}</b>
+              <span class="now-time">${escapeHtml(nowLine(snd))}</span>
+            </div>
+            ${bar}
           </div>
-          <div class="set-label">Stations</div>
+          <button type="button" class="now-x" data-act="sound-stop" title="Stop">×</button>
+        </div>` : ""}
+        <div style="padding:0 16px 8px">
+          <div class="set-label" style="padding-top:0">Stations</div>
           <div class="station-grid">
             ${stations.map((s) => `
-              <button class="station ${snd.kind==="station" && snd.id===s.id && snd.playing ? "on" : ""}" data-act="sound-station" data-id="${s.id}">
+              <button class="station ${snd.kind==="station" && snd.id===s.id ? "on" : ""}" data-act="sound-station" data-id="${escapeAttr(s.id)}">
                 <h4>${escapeHtml(s.name)}</h4>
                 <p>${escapeHtml(s.sub)}</p>
               </button>`).join("")}
           </div>
-          <div class="set-label">Your music</div>
-          <p class="hint" style="margin-top:0">${signed ? "Uploads save to your account and this phone." : "Saved on this phone. Sign in to keep them on your account."}</p>
+          ${library.length ? `
+          <div class="set-label">Recordings</div>
+          <div class="station-grid">
+            ${library.map((s) => `
+              <button class="station ${snd.kind==="library" && snd.id===s.id ? "on" : ""}" data-act="sound-library" data-id="${escapeAttr(s.id)}">
+                <h4>${escapeHtml(s.title)}</h4>
+                <p>${escapeHtml((s.artist || "Open source") + (s.mood ? " · " + s.mood : ""))}</p>
+              </button>`).join("")}
+          </div>` : ""}
+          <div class="set-label">Your files</div>
+          <p class="hint" style="margin-top:0">${signed ? "On this account. 50 MB with books." : "On this phone. 50 MB with books."}</p>
           <input id="sound-files" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple hidden />
           <button class="btn ghost" style="height:44px" data-act="sound-add">${state.uploadBusy ? "Saving…" : "Upload audio"}</button>
           <div class="track-list">
-            ${tracks.length ? tracks.map((t) => `
+            ${tracks.map((t) => `
               <div class="setting">
-                <button class="grow" data-act="sound-track" data-id="${t.id}" style="text-align:left">
+                <button class="grow" data-act="sound-track" data-id="${escapeAttr(t.id)}" style="text-align:left">
                   <h4>${escapeHtml(t.name)}</h4>
-                  <p>${snd.kind==="track" && snd.id===t.id && snd.playing ? "Playing" : "On this phone"}</p>
+                  <p>${snd.kind==="track" && snd.id===t.id ? (snd.playing ? "Playing" : "Paused") : (signed ? "On this account" : "On this phone")}</p>
                 </button>
-                <button class="linkish" data-act="sound-remove" data-id="${t.id}">Remove</button>
-              </div>`).join("") : `<p class="hint">Nothing added yet.</p>`}
+                <button class="linkish" data-act="sound-remove" data-id="${escapeAttr(t.id)}">Remove</button>
+              </div>`).join("")}
           </div>
           <div class="set-label">Cues</div>
           <div class="setting">
-            <div class="grow"><h4>Sound feedback</h4><p>A short tone when a step, set, or rest lands.</p></div>
+            <div class="grow"><h4>When a step lands</h4><p>A short tone on a step, set, or rest.</p></div>
             <button class="toggle ${snd.sfxOn?"on":""}" data-act="sound-sfx"><i></i></button>
           </div>
           <div class="field" style="margin-top:12px">
             <label>Volume</label>
             <input id="sound-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" />
           </div>
-          ${snd.playing ? `<button class="btn ghost" style="height:44px;margin-top:8px" data-act="sound-stop">Stop</button>` : ""}
         </div>
       </div>
     `;
@@ -4847,6 +4877,7 @@
       el.addEventListener("input", setVol);
       el.addEventListener("change", setVol);
     });
+    bindNowChip(app.querySelector(".sound-now"));
     const files = document.getElementById("sound-files");
     if (files) files.addEventListener("change", async (e) => {
       const picked = Array.from(e.target.files || []);
