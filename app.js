@@ -3939,20 +3939,22 @@
           <button class="linkish" data-act="open-devotionlog" data-from="devotion">Past days</button>
         </div>
         <div class="page-title">
-          <div class="tag">Morning · in this app</div>
+          <div class="tag">Morning</div>
           <h1>Devotion.</h1>
-          <p>Stay here. Spurgeon for the morning${odb ? ", and a word from Our Daily Bread" : ""}. No other tab.</p>
         </div>
         <div class="scripture">
-          ${odb ? `<div class="votd"><cite>Our Daily Bread</cite><q style="margin-top:8px">${escapeHtml(odb.title)}</q><p style="color:var(--muted);font-size:14px;margin-top:8px;line-height:1.5">${escapeHtml(odb.excerpt || "")}</p></div>` : ""}
           ${sp ? `
-            <div class="tag" style="margin-top:8px">Spurgeon · Morning</div>
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
             <div class="devotion-body">${escapeHtml(sp.b)}</div>
           ` : `<p class="hint">Loading today’s reading…</p>`}
           <div class="field"><label>What remained</label>
             <textarea class="note-box" id="devotion-note" placeholder="A sentence is enough.">${escapeHtml(j.devotion || "")}</textarea>
           </div>
+          ${odb ? `<div class="votd votd-extra">
+            <cite>Our Daily Bread</cite>
+            <q>${escapeHtml(odb.title || "")}</q>
+            ${odb.excerpt ? `<p class="hint" style="margin:8px 0 0">${escapeHtml(clipText(odb.excerpt, 140))}</p>` : ""}
+          </div>` : ""}
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="save-devotion">Save & continue</button>
