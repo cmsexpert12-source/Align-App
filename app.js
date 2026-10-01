@@ -476,7 +476,7 @@
           seen.add(k);
           log.push(x);
         });
-        if (log.length > 220) log.splice(0, log.length - 220);
+        if (log.length > 2500) log.splice(0, log.length - 2500);
         const useRemote = remoteLog.length >= localLog.length;
         Life.setBibleCursor({
           book: useRemote ? life.data.bible.book : c.book,
@@ -727,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -3137,6 +3137,7 @@
             </div>
           </div>
           <div class="set-label">Scripture</div>
+          <p class="hours-kicker">Three chapters a day is the aim. Sunday can stay lighter.</p>
           <div class="shelf-chips" style="padding:0 0 12px">
             ${(L().READ_PLANS || []).map((p) => `<button type="button" class="${p.id === (r.biblePlan || "cover") ? "on" : ""}" data-act="bible-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
           </div>
@@ -3402,9 +3403,7 @@
     const j = L().journalOf(iso);
     const n = (a.read || []).length;
     const target = L().chapterTarget(iso);
-    const scriptureSub = n
-      ? n + " / " + target + " today · next " + a.next.book + " " + a.next.chapter
-      : (target === 1 ? "Sunday · one chapter · " : "Today · ") + a.next.book + " " + a.next.chapter;
+    const scriptureSub = n + " / " + target + " chapters today · next " + a.next.book + " " + a.next.chapter;
     const st = S().stats();
     const tv = S().todayVerse(iso);
     const sprint = S().sprintOf(iso);
@@ -3471,6 +3470,7 @@
           ${n ? `<button class="setting" data-act="open-champ"><div class="grow"><h4>Championship</h4><p>${escapeHtml(champSub)}</p></div></button>` : ""}
           ${morn.affirm ? `<button class="setting" data-act="open-step" data-step="affirm"><div class="grow"><h4>Affirm</h4><p>${escapeHtml(line ? clipText(line, 72) : "Spoken today")}</p></div></button>` : ""}
           ${evening ? `<button class="setting" data-act="open-step" data-step="evening"><div class="grow"><h4>Night devotion</h4><p>${morn.lights ? "Goodnight is in." : (morn.nightverse ? "Verse read. Goodnight next." : (morn.evening ? "Verse, then goodnight." : "Night devotion, the verse, then goodnight."))}</p></div></button>` : ""}
+          <button class="setting" type="button" data-act="open-readlog"><div class="grow"><h4>Chapters read</h4><p>${n} / ${target} today · ${(L().uniqueReadCount && L().uniqueReadCount()) || n} in your record</p></div></button>
           <button class="setting" type="button" data-act="open-wordplan"><div class="grow"><h4>Reading plan</h4><p>${escapeHtml((((L().READ_PLANS || []).filter((p) => p.id === ((L().biblePlan && L().biblePlan()) || "cover"))[0] || {}).name) || "Cover to cover")} · ${escapeHtml((L().bibleCursor().book || "Genesis") + " " + (L().bibleCursor().chapter || 1))}</p></div></button>
           <button class="setting" type="button" data-act="bible-tr-open"><div class="grow"><h4>Translation</h4><p>${escapeHtml(((L().trMeta && L().trMeta(L().bibleTr())) || {}).name || "King James")}</p></div></button>
           <button class="setting" type="button" data-act="open-library"><div class="grow"><h4>Books</h4><p>${B().list().length ? B().list().length + " in your library" : "Titles sync. Upload a PDF you already own."}</p></div></button>
@@ -4043,7 +4043,7 @@
     const readN = (assign.read || []).length;
     const target = L().chapterTarget(iso);
     const verses = (data && data.verses) || [];
-    const sunday = target === 1;
+    const alreadyToday = (assign.read || []).some((x) => x && x.book === state.readBook && Number(x.chapter) === Number(state.readCh));
     const tr = (L().bibleTr && L().bibleTr()) || "kjv";
     const trShort = (L().trMeta && L().trMeta(tr) && L().trMeta(tr).short) || String(tr).toUpperCase();
     const ref = (data && data.reference) || ((state.readBook || "") + (state.readCh ? " " + state.readCh : "")) || "Scripture";
@@ -4057,7 +4057,7 @@
           </div>
         </div>
         <div class="page-title" style="padding-bottom:4px">
-          <div class="tag">${sunday ? "Sunday · one" : (readN + " of " + target)}</div>
+          <div class="tag">${readN} of ${target} today</div>
           <button type="button" class="bible-ref" data-act="bible-pick">${escapeHtml(ref)}.</button>
         </div>
         <div class="bible-nav">
@@ -4070,7 +4070,7 @@
           ${data ? verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="bible-done">Chapter read</button>
+          <button class="btn" data-act="bible-done">${alreadyToday ? "In today’s record" : "Mark as read"}</button>
         </div>
       </div>
     `;
@@ -4182,9 +4182,11 @@
   const viewBiblePick = () => {
     const pick = state.biblePickBook;
     const b = pick ? L().bookByName(pick) : null;
+    const isDid = (book, ch) => !!(L().chapterIsRead && L().chapterIsRead(book, ch));
     if (b) {
       const here = (state.readBook === b.name) ? Number(state.readCh) || 0 : 0;
       const n = b.chapters || 1;
+      const got = (L().readCountInBook && L().readCountInBook(b.name)) || 0;
       const nums = [];
       for (let i = 1; i <= n; i++) nums.push(i);
       return `
@@ -4193,10 +4195,10 @@
       <div class="page-title">
         <div class="tag">Jump</div>
         <h1>${escapeHtml(b.name)}.</h1>
-        <p>${n} chapter${n === 1 ? "" : "s"}. Tap the one you want.</p>
+        <p>${got} of ${n} in your record. Open a chapter, then Mark as read.</p>
       </div>
       <button type="button" class="linkish" data-act="bible-books" style="margin:0 20px 12px">All books</button>
-      <div class="bible-chs">${nums.map((i) => `<button type="button" class="${i === here ? "on" : ""}" data-act="bible-ch" data-book="${escapeAttr(b.name)}" data-ch="${i}">${i}</button>`).join("")}</div>
+      <div class="bible-chs">${nums.map((i) => `<button type="button" class="${i === here ? "on" : ""}${isDid(b.name, i) ? " did" : ""}" data-act="bible-ch" data-book="${escapeAttr(b.name)}" data-ch="${i}">${i}</button>`).join("")}</div>
     </div>`;
     }
     return `
@@ -4204,11 +4206,13 @@
       <div class="back-row"><button class="icon-btn" data-act="bible-pick-back">${chev()}</button></div>
       <div class="page-title"><div class="tag">Jump</div><h1>Choose a book.</h1></div>
       <div class="word-hub">
-        ${L().BOOKS.map((bk) => `
+        ${L().BOOKS.map((bk) => {
+          const got = (L().readCountInBook && L().readCountInBook(bk.name)) || 0;
+          return `
           <button class="setting" data-act="bible-book" data-book="${escapeAttr(bk.name)}">
-            <div class="grow"><h4>${bk.name}</h4><p>${bk.chapters} chapter${bk.chapters === 1 ? "" : "s"}</p></div>
-          </button>
-        `).join("")}
+            <div class="grow"><h4>${bk.name}</h4><p>${got ? (got + " of " + bk.chapters + " read") : (bk.chapters + " chapter" + (bk.chapters === 1 ? "" : "s"))}</p></div>
+          </button>`;
+        }).join("")}
       </div>
     </div>`;
   };
@@ -4259,6 +4263,42 @@
           </button>
         `).join("")}
       </div>
+    </div>`;
+  };
+
+  const viewReadLog = () => {
+    const iso = today().iso;
+    const target = L().chapterTarget(iso);
+    const aim = ((L().loadRoutine && L().loadRoutine()) || {}).chaptersWk || 3;
+    const log = ((L().bibleCursor() || {}).log || []).slice();
+    const todayN = log.filter((x) => x && x.date === iso).length;
+    const uniq = (L().uniqueReadCount && L().uniqueReadCount()) || 0;
+    const days = [];
+    const seen = {};
+    for (let i = log.length - 1; i >= 0; i--) {
+      const d = log[i] && log[i].date;
+      if (!d || seen[d]) continue;
+      seen[d] = 1;
+      days.push(d);
+    }
+    const rows = days.slice(0, 21).map((d) => {
+      const items = log.filter((x) => x && x.date === d);
+      return `
+        <div class="section-h" style="padding:12px 16px 4px"><h4>${escapeHtml(prettyIso(d))}</h4><span>${items.length}</span></div>
+        <div class="word-hub" style="padding-top:0">${items.map((x) => `
+          <button class="setting" data-act="bible-ch" data-book="${escapeAttr(x.book || "")}" data-ch="${Number(x.chapter) || 1}">
+            <div class="grow"><h4>${escapeHtml((x.id || ((x.book || "") + " " + x.chapter)))}</h4><p>Saved to this account</p></div>
+          </button>`).join("")}</div>`;
+    }).join("");
+    return `
+    <div class="screen full">
+      <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+      <div class="page-title">
+        <div class="tag">Scripture</div>
+        <h1>Chapters read.</h1>
+        <p>${todayN} / ${target} today. Aim is ${aim} a day. ${uniq} in your record on this account.</p>
+      </div>
+      ${rows || `<p class="hint" style="padding:8px 20px">Open a chapter and tap Mark as read. It saves to this account.</p>`}
     </div>`;
   };
 
@@ -4572,6 +4612,7 @@
       biblepick: viewBiblePick,
       bibletr: viewBibleTr,
       wordplan: viewWordPlan,
+      readlog: viewReadLog,
       evening: viewEvening,
       nightverse: viewNightVerse,
       lights: viewLights,
@@ -5704,17 +5745,29 @@
       else {
         L().todaySpurgeon("am").then((sp) => { state.spurgeonAm = sp; startMem(); }).catch(() => startMem());
       }
+    } else if (act === "open-readlog") {
+      state.view = "readlog";
+      render();
     } else if (act === "bible-done") {
       if (!state.readBook) return;
       const verses = (state.bibleData && state.bibleData.verses && state.bibleData.verses.length) || 0;
       const iso = today().iso;
+      const alreadyToday = (L().todayAssignment(iso).read || []).some((x) => x && x.book === state.readBook && Number(x.chapter) === Number(state.readCh));
       const cur = L().markChapterRead(iso, state.readBook, state.readCh, verses);
-      AlignDB.saveBible(cur).catch(() => {});
+      try { AlignDB.saveBible(cur, { now: true }); } catch { AlignDB.saveBible(cur).catch(() => {}); }
       const readN = (L().todayAssignment(iso).read || []).length;
       const target = L().chapterTarget(iso);
       try { S().ingestReading(iso, state.readPacks || []); } catch { /* ok */ }
       S().enrichReading(iso, state.readPacks || []).catch(() => {});
-      toast(state.readBook + " " + state.readCh + " · done");
+      toast(state.readBook + " " + state.readCh + (alreadyToday ? " · already in today’s record" : " · saved to this account"));
+      if (alreadyToday) {
+        render();
+        return;
+      }
+      if (readN >= target && stepIsDone("word")) {
+        openBible(cur.book, cur.chapter);
+        return;
+      }
       if (readN >= target && target >= 3 && verses < 30 && readN < 4) {
         openBible(cur.book, cur.chapter);
       } else if (readN >= target) {

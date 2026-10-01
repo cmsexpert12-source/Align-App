@@ -578,6 +578,7 @@ img { max-width: 100%; display: block; }
   color: inherit; font-family: inherit; font-size: 14px; font-weight: 700;
 }
 .bible-chs button.on { background: var(--lime); color: #111; border-color: var(--lime); }
+.bible-chs button.did { color: var(--lime); border-color: color-mix(in srgb, var(--lime) 45%, var(--line)); }
 .page-title p { color: var(--muted); font-size: 13px; line-height: 1.45; }
 .why {
   margin: 0 16px 14px; padding: 12px 14px; border-radius: 16px;

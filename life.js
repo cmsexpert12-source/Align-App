@@ -783,16 +783,39 @@ window.ALIGN_LIFE = (() => {
     } catch { /* ignore */ }
   };
 
+  const chapterId = (book, chapter) => String(book || "").trim() + " " + Number(chapter);
+  const chapterIsRead = (book, chapter) => {
+    const id = chapterId(book, chapter);
+    return (bibleCursor().log || []).some((x) => x && (x.id === id || (x.book === book && Number(x.chapter) === Number(chapter))));
+  };
+  const uniqueReadCount = () => {
+    const s = new Set();
+    (bibleCursor().log || []).forEach((x) => {
+      const id = (x && x.id) || (x && x.book ? chapterId(x.book, x.chapter) : "");
+      if (id) s.add(id);
+    });
+    return s.size;
+  };
+  const readCountInBook = (book) => {
+    const s = new Set();
+    (bibleCursor().log || []).forEach((x) => {
+      if (x && x.book === book) s.add(Number(x.chapter));
+    });
+    return s.size;
+  };
   const markChapterRead = (iso, book, chapter, verses) => {
     const c = bibleCursor();
-    const id = book + " " + chapter;
+    const id = chapterId(book, chapter);
     c.log = c.log || [];
     if (!c.log.find((x) => x.id === id && x.date === iso)) {
-      c.log.push({ id, book, chapter, verses: verses || 0, date: iso });
+      c.log.push({ id, book, chapter: Number(chapter) || 1, verses: verses || 0, date: iso });
     }
-    const n = planNext(book, chapter);
-    c.book = n.book;
-    c.chapter = n.chapter;
+    const atPlace = c.book === book && Number(c.chapter) === Number(chapter);
+    if (atPlace) {
+      const n = planNext(book, chapter);
+      c.book = n.book;
+      c.chapter = n.chapter;
+    }
     setBibleCursor(c);
     return c;
   };
@@ -1221,6 +1244,7 @@ window.ALIGN_LIFE = (() => {
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     TRANSLATIONS, READ_PLANS, biblePlan, planStart, planNext, planBooks, trMeta,
     fetchChapter, prefetchChapter, bibleTr, setBibleTr, markChapterRead, todayAssignment,
+    chapterIsRead, uniqueReadCount, readCountInBook, chapterId,
     planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
     affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse, fetchKjv
