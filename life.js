@@ -94,6 +94,9 @@ window.ALIGN_LIFE = (() => {
     trainPlan: "energy",
     biblePlan: "cover",
     bibleTr: "kjv",
+    aimMornings: 6,
+    aimChapters: 19,
+    aimSessions: 6,
     min: Object.assign({}, DEFAULT_MIN),
     minSun: Object.assign({}, DEFAULT_MIN_SUN),
     updated_at: ""
@@ -115,6 +118,10 @@ window.ALIGN_LIFE = (() => {
     d.leaveOn = raw.leaveOn !== false;
     d.chaptersWk = Math.max(1, Math.min(12, Number(raw.chaptersWk) || 3));
     d.chaptersSun = Math.max(1, Math.min(12, Number(raw.chaptersSun) || 1));
+    const derivedCh = d.chaptersWk * 6 + d.chaptersSun;
+    d.aimMornings = Math.max(1, Math.min(7, Number(raw.aimMornings) || 6));
+    d.aimSessions = Math.max(1, Math.min(7, Number(raw.aimSessions) || 6));
+    d.aimChapters = Math.max(1, Math.min(84, Number(raw.aimChapters) || derivedCh));
     STEP_IDS.forEach((id) => {
       const locked = id === "rise" || id === "go";
       d.on[id] = locked ? true : !(raw.on && raw.on[id] === false);

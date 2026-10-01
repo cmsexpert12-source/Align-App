@@ -817,6 +817,12 @@
     const chS = document.getElementById(pfx + "ch-sun");
     if (chW) out.chaptersWk = Math.max(1, Math.min(12, Number(chW.value) || r.chaptersWk));
     if (chS) out.chaptersSun = Math.max(1, Math.min(12, Number(chS.value) || r.chaptersSun));
+    const am = document.getElementById(pfx + "aim-morn");
+    const ac = document.getElementById(pfx + "aim-ch");
+    const as = document.getElementById(pfx + "aim-sess");
+    if (am) out.aimMornings = Math.max(1, Math.min(7, Number(am.value) || r.aimMornings || 6));
+    if (ac) out.aimChapters = Math.max(1, Math.min(84, Number(ac.value) || r.aimChapters || 19));
+    if (as) out.aimSessions = Math.max(1, Math.min(7, Number(as.value) || r.aimSessions || 6));
     return out;
   };
   const readPathForm = () => {
@@ -2264,6 +2270,43 @@
     return { mornings, sessions, chapters, days };
   };
 
+  const weekAims = () => {
+    const r = (L().loadRoutine && L().loadRoutine()) || {};
+    const derivedCh = (Number(r.chaptersWk) || 3) * 6 + (Number(r.chaptersSun) || 1);
+    return {
+      mornings: Math.max(1, Math.min(7, Number(r.aimMornings) || 6)),
+      sessions: Math.max(1, Math.min(7, Number(r.aimSessions) || 6)),
+      chapters: Math.max(1, Math.min(84, Number(r.aimChapters) || derivedCh))
+    };
+  };
+
+  const monthPulse = () => {
+    const t = today();
+    const y = t.date.getFullYear();
+    const mo = t.date.getMonth();
+    const dim = new Date(y, mo + 1, 0).getDate();
+    const prefix = t.iso.slice(0, 7);
+    let mornings = 0, sessions = 0;
+    for (let d = 1; d <= dim; d++) {
+      const dt = new Date(y, mo, d);
+      const iso = isoOf(dt);
+      if (morningDone(iso)) mornings++;
+      if (completedOn(iso)) sessions++;
+    }
+    let chapters = 0;
+    try {
+      chapters = (L().bibleCursor().log || []).filter((x) => String((x && x.date) || "").slice(0, 7) === prefix).length;
+    } catch { /* ignore */ }
+    const w = weekAims();
+    const scale = (n) => Math.max(1, Math.round((n / 7) * dim));
+    return {
+      mornings, sessions, chapters, days: dim,
+      aimMornings: scale(w.mornings),
+      aimSessions: scale(w.sessions),
+      aimChapters: scale(w.chapters)
+    };
+  };
+
   const streakCopy = (n) => {
     if (n <= 0) {
       return missedYesterday()
@@ -2485,11 +2528,20 @@
                 <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
               </div>
             </div>
-            ${(pulse.mornings || pulse.sessions || pulse.chapters) ? `<div class="pulse-stats">
-              <div><b>${pulse.mornings}/7</b><span>Mornings</span></div>
-              <div><b>${pulse.sessions}</b><span>Sessions</span></div>
-              <div><b>${pulse.chapters}</b><span>Chapters</span></div>
-            </div>` : ""}
+            ${(() => {
+              const aim = weekAims();
+              const mo = monthPulse();
+              return `<div class="pulse-stats">
+              <div><b>${pulse.mornings}/${aim.mornings}</b><span>Mornings</span></div>
+              <div><b>${pulse.sessions}/${aim.sessions}</b><span>Sessions</span></div>
+              <div><b>${pulse.chapters}/${aim.chapters}</b><span>Chapters</span></div>
+            </div>
+            <div class="pulse-stats">
+              <div><b>${mo.mornings}/${mo.aimMornings}</b><span>Month · path</span></div>
+              <div><b>${mo.sessions}/${mo.aimSessions}</b><span>Month · move</span></div>
+              <div><b>${mo.chapters}/${mo.aimChapters}</b><span>Month · Word</span></div>
+            </div>`;
+            })()}
             ${(() => {
               if (!morningDone(t.iso)) return "";
               const ms = (L().dayTotalMs && L().dayTotalMs(t.iso)) || 0;
@@ -2668,6 +2720,17 @@
           </div>
           ${areaBlock}
         </div>
+        ${(() => {
+          const mo = monthPulse();
+          return `<div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This month</h4><span>${mo.days} days</span></div>
+          <div class="pulse-stats" style="margin:0;padding:0;border:0">
+            <div><b>${mo.mornings}/${mo.aimMornings}</b><span>Mornings</span></div>
+            <div><b>${mo.sessions}/${mo.aimSessions}</b><span>Sessions</span></div>
+            <div><b>${mo.chapters}/${mo.aimChapters}</b><span>Chapters</span></div>
+          </div>
+        </div>`;
+        })()}
         <div class="time-area">
           <div class="section-h" style="padding:0;margin:0 0 4px"><h4>Days</h4><span>Used / ideal</span></div>
           ${dayRows}
@@ -2878,6 +2941,7 @@
     const total = state.history.length;
     const minutes = state.history.reduce((a, h) => a + (h.minutes || 0), 0);
     const pulse = weekPulse();
+    const aim = weekAims();
     const mStreak = morningStreak();
     const trainStreak = streak();
     return `
@@ -2899,7 +2963,7 @@
           <div class="pulse-stats">
             <div><b>${total}</b><span>All-time</span></div>
             <div><b>${minutes}</b><span>Minutes</span></div>
-            <div><b>${pulse.sessions}/7</b><span>This week</span></div>
+            <div><b>${pulse.sessions}/${aim.sessions}</b><span>This week</span></div>
           </div>
         </div>
         <div class="section-h"><h4>Recent</h4></div>
@@ -3140,6 +3204,13 @@
           <p class="hours-kicker">Three chapters a day is the aim. Sunday can stay lighter.</p>
           <div class="shelf-chips" style="padding:0 0 12px">
             ${(L().READ_PLANS || []).map((p) => `<button type="button" class="${p.id === (r.biblePlan || "cover") ? "on" : ""}" data-act="bible-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
+          </div>
+          <div class="set-label">This week</div>
+          <p class="hours-kicker">Counted from the path you already walk. Sunday’s light morning still counts. Month is the same three, scaled to the days in it.</p>
+          <div class="hours-grid">
+            <div class="field"><label>Mornings</label><input id="rt-aim-morn" type="number" min="1" max="7" inputmode="numeric" value="${r.aimMornings || 6}" /></div>
+            <div class="field"><label>Chapters</label><input id="rt-aim-ch" type="number" min="1" max="84" inputmode="numeric" value="${r.aimChapters || 19}" /></div>
+            <div class="field"><label>Sessions</label><input id="rt-aim-sess" type="number" min="1" max="7" inputmode="numeric" value="${r.aimSessions || 6}" /></div>
           </div>
           <div class="set-label">Tonight · fixed</div>
           <div class="routine-step pinned path-night">
