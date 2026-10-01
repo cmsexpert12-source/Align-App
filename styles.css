@@ -557,6 +557,27 @@ img { max-width: 100%; display: block; }
   background: var(--surface); border: 1px solid var(--line); color: var(--muted);
 }
 .bible-tr-mini button.on { background: var(--lime); color: #111; border-color: var(--lime); }
+.bible-nav {
+  display: flex; gap: 8px;
+  padding: 0 20px 10px;
+}
+.bible-nav button {
+  flex: 1; height: 40px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: inherit; font-family: inherit; font-size: 13px; font-weight: 700;
+}
+.bible-chs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px 16px calc(24px + var(--safe-b, 0px));
+}
+.bible-chs button {
+  height: 44px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: inherit; font-family: inherit; font-size: 14px; font-weight: 700;
+}
+.bible-chs button.on { background: var(--lime); color: #111; border-color: var(--lime); }
 .page-title p { color: var(--muted); font-size: 13px; line-height: 1.45; }
 .why {
   margin: 0 16px 14px; padding: 12px 14px; border-radius: 16px;

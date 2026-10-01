@@ -727,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -1723,6 +1723,17 @@
     }
     state.bibleLoading = false;
     render();
+  };
+
+  const jumpBible = (book, chapter) => {
+    const b = String(book || "").trim() || "Genesis";
+    const ch = Math.max(1, Number(chapter) || 1);
+    try {
+      const cur = L().bibleCursor() || {};
+      L().setBibleCursor(Object.assign({}, cur, { book: b, chapter: ch }));
+    } catch { /* local */ }
+    state.biblePickBook = null;
+    openBible(b, ch);
   };
 
   const lockDevotionVerse = () => {
@@ -4047,6 +4058,10 @@
           <div class="tag">${sunday ? "Sunday · one" : (readN + " of " + target)}</div>
           <button type="button" class="bible-ref" data-act="bible-pick">${escapeHtml(ref)}.</button>
         </div>
+        <div class="bible-nav">
+          <button type="button" data-act="bible-prev">Previous</button>
+          <button type="button" data-act="bible-next">Next</button>
+        </div>
         <div class="scripture">
           ${state.bibleLoading ? `<p class="hint">Loading chapter…</p>` : ""}
           ${state.bibleErr ? `<div class="err">${escapeHtml(state.bibleErr)}</div>` : ""}
@@ -4162,19 +4177,39 @@
   `;
   };
 
-  const viewBiblePick = () => `
+  const viewBiblePick = () => {
+    const pick = state.biblePickBook;
+    const b = pick ? L().bookByName(pick) : null;
+    if (b) {
+      const here = (state.readBook === b.name) ? Number(state.readCh) || 0 : 0;
+      const n = b.chapters || 1;
+      const nums = [];
+      for (let i = 1; i <= n; i++) nums.push(i);
+      return `
     <div class="screen full">
-      <div class="back-row"><button class="icon-btn" data-act="open-step" data-step="word">${chev()}</button></div>
+      <div class="back-row"><button class="icon-btn" data-act="bible-pick-back">${chev()}</button></div>
+      <div class="page-title">
+        <div class="tag">Jump</div>
+        <h1>${escapeHtml(b.name)}.</h1>
+        <p>${n} chapter${n === 1 ? "" : "s"}. Tap the one you want.</p>
+      </div>
+      <button type="button" class="linkish" data-act="bible-books" style="margin:0 20px 12px">All books</button>
+      <div class="bible-chs">${nums.map((i) => `<button type="button" class="${i === here ? "on" : ""}" data-act="bible-ch" data-book="${escapeAttr(b.name)}" data-ch="${i}">${i}</button>`).join("")}</div>
+    </div>`;
+    }
+    return `
+    <div class="screen full">
+      <div class="back-row"><button class="icon-btn" data-act="bible-pick-back">${chev()}</button></div>
       <div class="page-title"><div class="tag">Jump</div><h1>Choose a book.</h1></div>
       <div class="word-hub">
-        ${L().BOOKS.map((b) => `
-          <button class="setting" data-act="bible-book" data-book="${escapeAttr(b.name)}">
-            <div class="grow"><h4>${b.name}</h4><p>${b.chapters} chapters</p></div>
+        ${L().BOOKS.map((bk) => `
+          <button class="setting" data-act="bible-book" data-book="${escapeAttr(bk.name)}">
+            <div class="grow"><h4>${bk.name}</h4><p>${bk.chapters} chapter${bk.chapters === 1 ? "" : "s"}</p></div>
           </button>
         `).join("")}
       </div>
-    </div>
-  `;
+    </div>`;
+  };
 
   const bookCat = (c) => {
     try { if (B() && B().catLabel) return B().catLabel(c); } catch { /* local */ }
@@ -5646,13 +5681,32 @@
       else render();
     } else if (act === "bible-prev") {
       const p = L().prevRef(state.readBook || "Genesis", state.readCh || 1);
-      openBible(p.book, p.chapter);
+      jumpBible(p.book, p.chapter);
+    } else if (act === "bible-next") {
+      const n = L().nextRef(state.readBook || "Genesis", state.readCh || 1);
+      jumpBible(n.book, n.chapter);
     } else if (act === "bible-pick") {
+      state.biblePickBook = state.readBook || ((L().bibleCursor() || {}).book) || null;
+      state.view = "biblepick";
+      render();
+    } else if (act === "bible-pick-back") {
+      state.biblePickBook = null;
+      if (state.readBook) { state.view = "bible"; render(); }
+      else openPathStep("word");
+    } else if (act === "bible-books") {
+      state.biblePickBook = null;
       state.view = "biblepick";
       render();
     } else if (act === "bible-book") {
-      L().setBibleCursor({ ...L().bibleCursor(), book: el.dataset.book, chapter: 1 });
-      openBible(el.dataset.book, 1);
+      const name = el.dataset.book;
+      const b = L().bookByName(name);
+      if (!b) return;
+      if ((b.chapters || 1) <= 1) { jumpBible(b.name, 1); return; }
+      state.biblePickBook = b.name;
+      state.view = "biblepick";
+      render();
+    } else if (act === "bible-ch") {
+      jumpBible(el.dataset.book, el.dataset.ch);
     } else if (act === "save-dayplan") {
       const iso = today().iso;
       const p = L().planOf(iso);
