@@ -17,6 +17,31 @@ window.ALIGN_LIFE = (() => {
     ["3 John", 1], ["Jude", 1], ["Revelation", 22]
   ].map(([name, chapters]) => ({ name, chapters }));
 
+  /* Public-domain / freely licensed English texts on bible-api.com.
+     NIV, ESV, NLT, The Message and similar are copyrighted — not available here. */
+  const TRANSLATIONS = [
+    { id: "kjv", name: "King James", short: "KJV", sub: "1611 · ALIGN’s default" },
+    { id: "web", name: "World English", short: "WEB", sub: "Modern public domain" },
+    { id: "webbe", name: "World English (UK)", short: "WEBBE", sub: "British spelling" },
+    { id: "asv", name: "American Standard", short: "ASV", sub: "1901" },
+    { id: "bbe", name: "Basic English", short: "BBE", sub: "Simple words" },
+    { id: "darby", name: "Darby", short: "Darby", sub: "1890" },
+    { id: "dra", name: "Douay-Rheims", short: "D-R", sub: "1899 · Catholic" },
+    { id: "oeb-cw", name: "Open English", short: "OEB", sub: "Commonwealth spelling" },
+    { id: "oeb-us", name: "Open English (US)", short: "OEB-US", sub: "US spelling" }
+  ];
+  const TR_OK = {};
+  TRANSLATIONS.forEach((t) => { TR_OK[t.id] = t; });
+
+  const READ_PLANS = [
+    { id: "cover", name: "Cover to cover", sub: "Genesis to Revelation. The long walk." },
+    { id: "nt", name: "New Testament first", sub: "Matthew through Revelation, then the Old." },
+    { id: "gospels", name: "Gospels first", sub: "Matthew to John, the rest of the NT, then the Old." },
+    { id: "ntonly", name: "New Testament", sub: "Matthew to Revelation, then again." }
+  ];
+  const PLAN_OK = {};
+  READ_PLANS.forEach((p) => { PLAN_OK[p.id] = p; });
+
   const STEP_IDS = ["rise", "move", "pray", "devotion", "verse", "word", "drill", "affirm", "plan", "ready", "recite", "go"];
   const LS_R = "align-routine";
   const DEFAULT_MIN = { rise: 1, move: 28, pray: 7, devotion: 8, verse: 4, word: 12, drill: 2, affirm: 2, plan: 5, ready: 12, recite: 2, go: 1 };
@@ -56,6 +81,8 @@ window.ALIGN_LIFE = (() => {
     on: Object.fromEntries(STEP_IDS.map((id) => [id, true])),
     order: STEP_IDS.slice(),
     trainPlan: "energy",
+    biblePlan: "cover",
+    bibleTr: "kjv",
     min: Object.assign({}, DEFAULT_MIN),
     minSun: Object.assign({}, DEFAULT_MIN_SUN),
     updated_at: ""
@@ -95,6 +122,12 @@ window.ALIGN_LIFE = (() => {
     });
     d.order = ["rise"].concat(mid, ["go"]);
     d.trainPlan = ["energy", "strength", "mobility", "capacity"].indexOf(raw.trainPlan) >= 0 ? raw.trainPlan : "energy";
+    d.biblePlan = PLAN_OK[raw.biblePlan] ? raw.biblePlan : "cover";
+    let tr = String(raw.bibleTr || "").toLowerCase();
+    if (!TR_OK[tr]) {
+      try { tr = String(localStorage.getItem("align-bible-tr") || "").toLowerCase(); } catch { tr = ""; }
+    }
+    d.bibleTr = TR_OK[tr] ? tr : "kjv";
     d.updated_at = raw.updated_at || "";
     return d;
   };
@@ -596,20 +629,56 @@ window.ALIGN_LIFE = (() => {
     return { book: p.name, chapter: p.chapters };
   };
 
+  const planBooks = (id) => {
+    const ntAt = BOOKS.findIndex((b) => b.name === "Matthew");
+    const ot = ntAt >= 0 ? BOOKS.slice(0, ntAt) : [];
+    const nt = ntAt >= 0 ? BOOKS.slice(ntAt) : BOOKS;
+    if (id === "nt") return nt.concat(ot);
+    if (id === "gospels") return nt.slice(0, 4).concat(nt.slice(4), ot);
+    if (id === "ntonly") return nt;
+    return BOOKS;
+  };
+  const biblePlan = () => {
+    const id = (loadRoutine() || {}).biblePlan;
+    return PLAN_OK[id] ? id : "cover";
+  };
+  const planStart = (id) => {
+    const seq = planBooks(id || biblePlan());
+    const b = seq[0] || BOOKS[0];
+    return { book: b.name, chapter: 1 };
+  };
+  const planNext = (book, chapter, id) => {
+    const seq = planBooks(id || biblePlan());
+    const b = bookByName(book);
+    const i = seq.findIndex((x) => x.name === b.name);
+    if (i < 0) {
+      if (chapter < b.chapters) return { book: b.name, chapter: chapter + 1 };
+      return { book: seq[0].name, chapter: 1 };
+    }
+    if (chapter < seq[i].chapters) return { book: seq[i].name, chapter: chapter + 1 };
+    const n = seq[(i + 1) % seq.length];
+    return { book: n.name, chapter: 1 };
+  };
+
   const LS_TR = "align-bible-tr";
   const LS_CH = "align-bible-ch";
   const bibleTr = () => {
     try {
+      const r = loadRoutine();
+      if (r && TR_OK[r.bibleTr]) return r.bibleTr;
+    } catch { /* ignore */ }
+    try {
       const t = localStorage.getItem(LS_TR);
-      if (t === "web" || t === "kjv") return t;
+      if (TR_OK[t]) return t;
     } catch { /* ignore */ }
     return "kjv";
   };
   const setBibleTr = (id) => {
-    const t = id === "web" ? "web" : "kjv";
+    const t = TR_OK[id] ? id : "kjv";
     try { localStorage.setItem(LS_TR, t); } catch { /* ignore */ }
     return t;
   };
+  const trMeta = (id) => TR_OK[id] || TR_OK.kjv;
   const pruneMap = (map, cap) => {
     const keys = Object.keys(map || {});
     if (keys.length <= cap) return map;
@@ -670,7 +739,7 @@ window.ALIGN_LIFE = (() => {
     if (!c.log.find((x) => x.id === id && x.date === iso)) {
       c.log.push({ id, book, chapter, verses: verses || 0, date: iso });
     }
-    const n = nextRef(book, chapter);
+    const n = planNext(book, chapter);
     c.book = n.book;
     c.chapter = n.chapter;
     setBibleCursor(c);
@@ -1099,6 +1168,7 @@ window.ALIGN_LIFE = (() => {
     timesOf, markOpen, markClose, stampClock, clockAt, fmtClockAt, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
     idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
+    TRANSLATIONS, READ_PLANS, biblePlan, planStart, planNext, planBooks, trMeta,
     fetchChapter, prefetchChapter, bibleTr, setBibleTr, markChapterRead, todayAssignment,
     planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,

@@ -727,7 +727,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -1728,10 +1728,6 @@
   const jumpBible = (book, chapter) => {
     const b = String(book || "").trim() || "Genesis";
     const ch = Math.max(1, Number(chapter) || 1);
-    try {
-      const cur = L().bibleCursor() || {};
-      L().setBibleCursor(Object.assign({}, cur, { book: b, chapter: ch }));
-    } catch { /* local */ }
     state.biblePickBook = null;
     openBible(b, ch);
   };
@@ -3140,6 +3136,10 @@
               <div class="field"><label>Chapters</label><input id="rt-ch-wk" type="number" min="1" max="12" inputmode="numeric" value="${r.chaptersWk}" /></div>
             </div>
           </div>
+          <div class="set-label">Scripture</div>
+          <div class="shelf-chips" style="padding:0 0 12px">
+            ${(L().READ_PLANS || []).map((p) => `<button type="button" class="${p.id === (r.biblePlan || "cover") ? "on" : ""}" data-act="bible-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
+          </div>
           <div class="set-label">Tonight · fixed</div>
           <div class="routine-step pinned path-night">
             <div class="grow">
@@ -3471,6 +3471,8 @@
           ${n ? `<button class="setting" data-act="open-champ"><div class="grow"><h4>Championship</h4><p>${escapeHtml(champSub)}</p></div></button>` : ""}
           ${morn.affirm ? `<button class="setting" data-act="open-step" data-step="affirm"><div class="grow"><h4>Affirm</h4><p>${escapeHtml(line ? clipText(line, 72) : "Spoken today")}</p></div></button>` : ""}
           ${evening ? `<button class="setting" data-act="open-step" data-step="evening"><div class="grow"><h4>Night devotion</h4><p>${morn.lights ? "Goodnight is in." : (morn.nightverse ? "Verse read. Goodnight next." : (morn.evening ? "Verse, then goodnight." : "Night devotion, the verse, then goodnight."))}</p></div></button>` : ""}
+          <button class="setting" type="button" data-act="open-wordplan"><div class="grow"><h4>Reading plan</h4><p>${escapeHtml((((L().READ_PLANS || []).filter((p) => p.id === ((L().biblePlan && L().biblePlan()) || "cover"))[0] || {}).name) || "Cover to cover")} · ${escapeHtml((L().bibleCursor().book || "Genesis") + " " + (L().bibleCursor().chapter || 1))}</p></div></button>
+          <button class="setting" type="button" data-act="bible-tr-open"><div class="grow"><h4>Translation</h4><p>${escapeHtml(((L().trMeta && L().trMeta(L().bibleTr())) || {}).name || "King James")}</p></div></button>
           <button class="setting" type="button" data-act="open-library"><div class="grow"><h4>Books</h4><p>${B().list().length ? B().list().length + " in your library" : "Titles sync. Upload a PDF you already own."}</p></div></button>
         </div>
         ${(st.verseStreak || st.learned || st.due) ? `
@@ -4043,6 +4045,7 @@
     const verses = (data && data.verses) || [];
     const sunday = target === 1;
     const tr = (L().bibleTr && L().bibleTr()) || "kjv";
+    const trShort = (L().trMeta && L().trMeta(tr) && L().trMeta(tr).short) || String(tr).toUpperCase();
     const ref = (data && data.reference) || ((state.readBook || "") + (state.readCh ? " " + state.readCh : "")) || "Scripture";
     return `
       <div class="screen full has-cta">
@@ -4050,8 +4053,7 @@
           <button class="icon-btn" data-go="home">${chev()}</button>
           <div style="flex:1"></div>
           <div class="bible-tr-mini">
-            <button type="button" class="${tr === "kjv" ? "on" : ""}" data-act="bible-tr" data-tr="kjv">KJV</button>
-            <button type="button" class="${tr === "web" ? "on" : ""}" data-act="bible-tr" data-tr="web">WEB</button>
+            <button type="button" class="on" data-act="bible-tr-open">${escapeHtml(trShort)}</button>
           </div>
         </div>
         <div class="page-title" style="padding-bottom:4px">
@@ -4205,6 +4207,55 @@
         ${L().BOOKS.map((bk) => `
           <button class="setting" data-act="bible-book" data-book="${escapeAttr(bk.name)}">
             <div class="grow"><h4>${bk.name}</h4><p>${bk.chapters} chapter${bk.chapters === 1 ? "" : "s"}</p></div>
+          </button>
+        `).join("")}
+      </div>
+    </div>`;
+  };
+
+  const bibleTrBack = () => {
+    if (state.readBook) { state.view = "bible"; render(); }
+    else openPathStep("word");
+  };
+
+  const viewBibleTr = () => {
+    const cur = (L().bibleTr && L().bibleTr()) || "kjv";
+    const list = (L().TRANSLATIONS || []).slice();
+    return `
+    <div class="screen full">
+      <div class="back-row"><button class="icon-btn" data-act="bible-tr-back">${chev()}</button></div>
+      <div class="page-title">
+        <div class="tag">Scripture</div>
+        <h1>Translation.</h1>
+        <p>Public-domain English. KJV stays the default. Memory verse stays KJV.</p>
+      </div>
+      <div class="word-hub">
+        ${list.map((t) => `
+          <button class="setting" data-act="bible-tr" data-tr="${escapeAttr(t.id)}">
+            <div class="grow"><h4>${escapeHtml(t.name)}</h4><p>${t.id === cur ? "On now · " : ""}${escapeHtml(t.sub)}</p></div>
+          </button>
+        `).join("")}
+      </div>
+    </div>`;
+  };
+
+  const viewWordPlan = () => {
+    const cur = (L().biblePlan && L().biblePlan()) || "cover";
+    const list = (L().READ_PLANS || []).slice();
+    const place = L().bibleCursor() || {};
+    const here = (place.book || "Genesis") + " " + (place.chapter || 1);
+    return `
+    <div class="screen full">
+      <div class="back-row"><button class="icon-btn" data-go="word">${chev()}</button></div>
+      <div class="page-title">
+        <div class="tag">Scripture</div>
+        <h1>Reading plan.</h1>
+        <p>Place now: ${escapeHtml(here)}. Starting a plan begins at its first book. Your log stays. Chapter counts stay on Your path.</p>
+      </div>
+      <div class="word-hub">
+        ${list.map((p) => `
+          <button class="setting" data-act="bible-plan" data-id="${escapeAttr(p.id)}">
+            <div class="grow"><h4>${escapeHtml(p.name)}</h4><p>${p.id === cur ? "On now · " : ""}${escapeHtml(p.sub)}</p></div>
           </button>
         `).join("")}
       </div>
@@ -4519,6 +4570,8 @@
       go: viewGo,
       recite: viewRecite,
       biblepick: viewBiblePick,
+      bibletr: viewBibleTr,
+      wordplan: viewWordPlan,
       evening: viewEvening,
       nightverse: viewNightVerse,
       lights: viewLights,
@@ -5674,11 +5727,38 @@
       } else {
         openBible(cur.book, cur.chapter);
       }
+    } else if (act === "bible-tr-open") {
+      state.view = "bibletr";
+      render();
+    } else if (act === "bible-tr-back") {
+      bibleTrBack();
     } else if (act === "bible-tr") {
-      const tr = el.dataset.tr === "web" ? "web" : "kjv";
-      if (L().setBibleTr) L().setBibleTr(tr);
+      const id = el.dataset.tr;
+      const tr = L().setBibleTr ? L().setBibleTr(id) : "kjv";
+      try { pushRoutine({ bibleTr: tr }); } catch { /* local */ }
+      toast((L().trMeta && L().trMeta(tr) && L().trMeta(tr).name) || tr);
       if (state.readBook && state.readCh) openBible(state.readBook, state.readCh);
-      else render();
+      else { state.view = "word"; render(); }
+    } else if (act === "open-wordplan") {
+      state.view = "wordplan";
+      render();
+    } else if (act === "bible-plan") {
+      const id = el.dataset.id;
+      const plans = L().READ_PLANS || [];
+      const row = plans.filter((p) => p.id === id)[0];
+      if (!row) return;
+      const cur = (L().biblePlan && L().biblePlan()) || "cover";
+      const patch = (state.view === "routine") ? readPathForm() : {};
+      patch.biblePlan = id;
+      pushRoutine(patch);
+      if (id !== cur) {
+        const start = L().planStart(id);
+        const c = L().bibleCursor() || {};
+        L().setBibleCursor(Object.assign({}, c, { book: start.book, chapter: start.chapter }));
+        try { if (window.AlignDB && AlignDB.saveBible) AlignDB.saveBible(L().bibleCursor()); } catch { /* local */ }
+        toast(row.name + " · " + start.book + " 1.");
+      } else toast(row.name);
+      render();
     } else if (act === "bible-prev") {
       const p = L().prevRef(state.readBook || "Genesis", state.readCh || 1);
       jumpBible(p.book, p.chapter);
