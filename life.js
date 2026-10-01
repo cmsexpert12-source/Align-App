@@ -37,7 +37,18 @@ window.ALIGN_LIFE = (() => {
     { id: "cover", name: "Cover to cover", sub: "Genesis to Revelation. The long walk." },
     { id: "nt", name: "New Testament first", sub: "Matthew through Revelation, then the Old." },
     { id: "gospels", name: "Gospels first", sub: "Matthew to John, the rest of the NT, then the Old." },
-    { id: "ntonly", name: "New Testament", sub: "Matthew to Revelation, then again." }
+    { id: "mark", name: "Begin with Mark", sub: "Mark, the rest of the NT, then the Old." },
+    { id: "ntonly", name: "New Testament", sub: "Matthew to Revelation, then again." },
+    { id: "ot", name: "Old Testament", sub: "Genesis to Malachi, then again." },
+    { id: "gospelsonly", name: "Gospels", sub: "Matthew, Mark, Luke, John — looping." },
+    { id: "law", name: "The Law", sub: "Genesis through Deuteronomy." },
+    { id: "history", name: "History", sub: "Joshua through Esther." },
+    { id: "wisdom", name: "Wisdom", sub: "Job, Psalms, Proverbs, Ecclesiastes, Song." },
+    { id: "psalms", name: "Psalms", sub: "The prayer book. Then again." },
+    { id: "prophets", name: "The Prophets", sub: "Isaiah through Malachi." },
+    { id: "letters", name: "Letters", sub: "Romans through Revelation." },
+    { id: "chrono", name: "Chronological", sub: "Job sits with the patriarchs, then the rest in order." },
+    { id: "hebrew", name: "Hebrew order", sub: "Law, Prophets, Writings, then the New Testament." }
   ];
   const PLAN_OK = {};
   READ_PLANS.forEach((p) => { PLAN_OK[p.id] = p; });
@@ -629,13 +640,53 @@ window.ALIGN_LIFE = (() => {
     return { book: p.name, chapter: p.chapters };
   };
 
+  const booksNamed = (names) => (names || []).map((n) => BOOKS.find((b) => b.name === n)).filter(Boolean);
   const planBooks = (id) => {
     const ntAt = BOOKS.findIndex((b) => b.name === "Matthew");
     const ot = ntAt >= 0 ? BOOKS.slice(0, ntAt) : [];
     const nt = ntAt >= 0 ? BOOKS.slice(ntAt) : BOOKS;
+    const gospels = nt.slice(0, 4);
     if (id === "nt") return nt.concat(ot);
-    if (id === "gospels") return nt.slice(0, 4).concat(nt.slice(4), ot);
+    if (id === "gospels") return gospels.concat(nt.slice(4), ot);
+    if (id === "mark") {
+      const mark = nt.find((b) => b.name === "Mark");
+      return (mark ? [mark] : []).concat(nt.filter((b) => b.name !== "Mark"), ot);
+    }
     if (id === "ntonly") return nt;
+    if (id === "ot") return ot;
+    if (id === "gospelsonly") return gospels;
+    if (id === "law") return booksNamed(["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy"]);
+    if (id === "history") return booksNamed([
+      "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings",
+      "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther"
+    ]);
+    if (id === "wisdom") return booksNamed(["Job", "Psalm", "Proverbs", "Ecclesiastes", "Song of Solomon"]);
+    if (id === "psalms") return booksNamed(["Psalm"]);
+    if (id === "prophets") return booksNamed([
+      "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel",
+      "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi"
+    ]);
+    if (id === "letters") return booksNamed([
+      "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians",
+      "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon",
+      "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
+    ]);
+    if (id === "chrono") {
+      const job = BOOKS.find((b) => b.name === "Job");
+      const rest = BOOKS.filter((b) => b.name !== "Job");
+      const i = rest.findIndex((b) => b.name === "Exodus");
+      if (!job || i < 0) return BOOKS;
+      return rest.slice(0, i).concat([job], rest.slice(i));
+    }
+    if (id === "hebrew") {
+      return booksNamed([
+        "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy",
+        "Joshua", "Judges", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings",
+        "Isaiah", "Jeremiah", "Ezekiel",
+        "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi",
+        "Psalm", "Proverbs", "Job", "Song of Solomon", "Ruth", "Lamentations", "Ecclesiastes", "Esther", "Daniel", "Ezra", "Nehemiah", "1 Chronicles", "2 Chronicles"
+      ]).concat(nt);
+    }
     return BOOKS;
   };
   const biblePlan = () => {
