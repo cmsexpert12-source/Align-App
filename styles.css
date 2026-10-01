@@ -2206,8 +2206,31 @@ img { max-width: 100%; display: block; }
 }
 .journal-pad .diary-box {
   flex: 1;
-  min-height: 42vh;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
+.note-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 2px 0 4px;
+}
+.note-tools button {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.note-tools button b { font-weight: 800; }
+.note-tools button i { font-style: italic; }
+.note-tools button u { text-decoration: underline; }
 .icon-btn.add {
   background: var(--lime-dim);
   border-color: rgba(214,255,63,.28);
@@ -2268,6 +2291,67 @@ img { max-width: 100%; display: block; }
 }
 .diary-box.pad:focus { border-color: transparent; }
 .diary-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
+.diary-box[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  white-space: normal;
+  word-break: break-word;
+}
+.diary-box.is-empty:before {
+  content: attr(data-placeholder);
+  color: var(--faint);
+  -webkit-text-fill-color: var(--faint);
+  pointer-events: none;
+}
+.diary-box h2 {
+  font-family: var(--display);
+  font-size: 20px;
+  letter-spacing: -.03em;
+  margin: 14px 0 8px;
+}
+.diary-box ul,
+.diary-box ol { padding-left: 1.25em; margin: 6px 0; }
+.diary-box li { margin: 4px 0; }
+.diary-box strong,
+.diary-box b { font-weight: 800; }
+.note-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin: 6px 0;
+  min-height: 28px;
+}
+.note-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin: 3px 0 0;
+  flex: 0 0 22px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+.note-item input[type="checkbox"]:checked {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.note-item input[type="checkbox"]:checked::after {
+  content: "";
+  width: 10px;
+  height: 6px;
+  border: 2px solid #111;
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.note-item:has(input:checked) {
+  color: var(--muted);
+  text-decoration: line-through;
+}
 .nav button { font-size: 9.5px; }
 
 .circle-list { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }

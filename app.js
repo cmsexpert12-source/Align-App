@@ -1107,7 +1107,7 @@
       if (state.view === "journal" || state.view === "journalwrite") {
         lines.push("This is the ALIGN notepad — free writing, not the devotion takeaway, not on the dashboard.");
         const n = (L().noteById && state.journalNoteId) ? L().noteById(state.journalNoteId) : null;
-        if (n && (n.title || n.body)) lines.push("Open note: " + [n.title, n.body].filter(Boolean).join("\n").slice(0, 500));
+        if (n && (n.title || notePlain(n.body))) lines.push("Open note: " + [n.title, notePlain(n.body)].filter(Boolean).join("\n").slice(0, 500));
       }
     } catch { /* optional */ }
     try {
@@ -3816,6 +3816,144 @@
   };
 
 
+  const NOTE_OK = { P:1, DIV:1, BR:1, SPAN:1, STRONG:1, B:1, EM:1, I:1, U:1, S:1, H2:1, H3:1, UL:1, OL:1, LI:1, BLOCKQUOTE:1, INPUT:1 };
+
+  const notePlain = (s) => String(s || "")
+    .replace(/<input[^>]*>/gi, "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|h2|h3|li|blockquote)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const sanitizeNoteHtml = (html) => {
+    let wrap;
+    try {
+      wrap = document.createElement("div");
+      wrap.innerHTML = String(html || "");
+    } catch { return ""; }
+    const clean = (node) => {
+      Array.from(node.childNodes).forEach((child) => {
+        if (child.nodeType === 8 || child.nodeType === 7) { child.remove(); return; }
+        if (child.nodeType === 3) return;
+        if (child.nodeType !== 1) { child.remove(); return; }
+        const tag = child.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "IFRAME" || tag === "OBJECT" || tag === "LINK" || tag === "META") {
+          child.remove();
+          return;
+        }
+        if (!NOTE_OK[tag]) {
+          while (child.firstChild) node.insertBefore(child.firstChild, child);
+          child.remove();
+          clean(node);
+          return;
+        }
+        Array.from(child.attributes || []).forEach((a) => {
+          const n = String(a.name || "").toLowerCase();
+          if (n.indexOf("on") === 0 || n === "style" || n === "src" || n === "href" || n.slice(0, 5) === "data-") {
+            child.removeAttribute(a.name);
+            return;
+          }
+          if (tag === "INPUT") {
+            if (n !== "type" && n !== "checked") child.removeAttribute(a.name);
+          } else if (n === "class") {
+            const keep = String(child.getAttribute("class") || "").split(/\s+/).filter((c) => c === "note-item").join(" ");
+            if (keep) child.setAttribute("class", keep);
+            else child.removeAttribute("class");
+          } else {
+            child.removeAttribute(a.name);
+          }
+        });
+        if (tag === "INPUT") {
+          child.setAttribute("type", "checkbox");
+          child.setAttribute("contenteditable", "false");
+        }
+        clean(child);
+      });
+    };
+    clean(wrap);
+    return wrap.innerHTML;
+  };
+
+  const noteBodyToHtml = (body) => {
+    const s = String(body || "");
+    if (!s.trim()) return "";
+    if (/<[a-z][\s\S]*>/i.test(s)) return sanitizeNoteHtml(s);
+    return s.split("\n").map((line) => {
+      const m = /^\s*[-*]\s*\[(x| )\]\s*(.*)$/i.exec(line);
+      if (m) return `<div class="note-item"><input type="checkbox"${m[1].toLowerCase() === "x" ? " checked" : ""} contenteditable="false"> ${escapeHtml(m[2])}</div>`;
+      if (/^\s*[-*]\s+/.test(line)) return `<ul><li>${escapeHtml(line.replace(/^\s*[-*]\s+/, ""))}</li></ul>`;
+      if (/^#{1,3}\s+/.test(line)) return `<h2>${escapeHtml(line.replace(/^#{1,3}\s+/, ""))}</h2>`;
+      return `<p>${escapeHtml(line) || "<br>"}</p>`;
+    }).join("");
+  };
+
+  const noteCheckHtml = (text) =>
+    `<div class="note-item"><input type="checkbox" contenteditable="false">${text ? " " + escapeHtml(text) : "&nbsp;"}</div>`;
+
+  const insertNoteHtml = (html) => {
+    const diary = document.getElementById("diary-note");
+    if (!diary) return;
+    diary.focus();
+    const safe = sanitizeNoteHtml(html);
+    try {
+      if (document.execCommand("insertHTML", false, safe)) return;
+    } catch { /* selection fallback */ }
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !diary.contains(sel.anchorNode)) {
+      diary.insertAdjacentHTML("beforeend", safe);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const tmp = document.createElement("div");
+    tmp.innerHTML = safe;
+    const frag = document.createDocumentFragment();
+    let last = null;
+    while (tmp.firstChild) last = frag.appendChild(tmp.firstChild);
+    range.insertNode(frag);
+    if (last) {
+      range.setStartAfter(last);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  };
+
+  const paintNoteEmpty = () => {
+    const el = document.getElementById("diary-note");
+    if (!el || !el.isContentEditable) return;
+    el.classList.toggle("is-empty", !notePlain(el.innerHTML));
+  };
+
+  const applyNoteFmt = (cmd) => {
+    const diary = document.getElementById("diary-note");
+    if (!diary) return;
+    diary.focus();
+    const sel = window.getSelection();
+    const picked = (sel && !sel.isCollapsed) ? String(sel.toString() || "") : "";
+    if (cmd === "bold" || cmd === "italic" || cmd === "underline" || cmd === "strikeThrough") {
+      try { document.execCommand(cmd, false, null); } catch { /* skip */ }
+    } else if (cmd === "h2") {
+      try { document.execCommand("formatBlock", false, "h2"); } catch { /* skip */ }
+    } else if (cmd === "ul") {
+      try { document.execCommand("insertUnorderedList", false, null); } catch { /* skip */ }
+    } else if (cmd === "check") {
+      insertNoteHtml(noteCheckHtml(picked));
+    } else if (cmd === "week") {
+      insertNoteHtml(`<h2>This week</h2>${noteCheckHtml("")}${noteCheckHtml("")}${noteCheckHtml("")}`);
+    } else if (cmd === "month") {
+      insertNoteHtml(`<h2>This month</h2>${noteCheckHtml("")}${noteCheckHtml("")}${noteCheckHtml("")}`);
+    }
+    paintNoteEmpty();
+    saveOpenNote();
+  };
+
   const noteTitleOf = (n) => {
     const title = String((n && n.title) || "").trim();
     if (title) return title;
@@ -3851,11 +3989,16 @@
       const titleEl = document.getElementById("note-title");
       const bodyEl = document.getElementById("diary-note");
       const prev = L().noteById(id) || { id, date: state.journalIso || today().iso, created_at: new Date().toISOString() };
+      let body = prev.body || "";
+      if (bodyEl) {
+        body = bodyEl.isContentEditable ? sanitizeNoteHtml(bodyEl.innerHTML) : bodyEl.value;
+        if (bodyEl.isContentEditable && !notePlain(body)) body = "";
+      }
       const note = L().upsertNote({
         id,
         date: prev.date || state.journalIso || today().iso,
         title: titleEl ? titleEl.value : (prev.title || ""),
-        body: bodyEl ? bodyEl.value : (prev.body || ""),
+        body,
         created_at: prev.created_at
       });
       cloudNote(note);
@@ -3869,7 +4012,7 @@
   const viewJournal = () => {
     let notes = [];
     try { notes = (L().notesList && L().notesList()) || []; } catch { notes = []; }
-    notes = notes.filter((n) => String(n.title || "").trim() || String(n.body || "").trim());
+    notes = notes.filter((n) => String(n.title || "").trim() || notePlain(n.body));
     return `
       <div class="screen home journal">
         <div class="topbar">
@@ -3883,14 +4026,14 @@
           <button type="button" class="journal-row" data-act="journal-open" data-id="${escapeAttr(n.id)}">
             <div>
               <h4>${escapeHtml(noteTitleOf(n))}</h4>
-              <p>${escapeHtml(clipText(n.title && n.body ? n.body : (n.body || ""), 90) || prettyIso(n.date))}</p>
+              <p>${escapeHtml(clipText(notePlain(n.title && n.body ? n.body : (n.body || "")), 90) || prettyIso(n.date))}</p>
             </div>
             <span aria-hidden="true">›</span>
           </button>`).join("")}</div>` : `
         <div class="next-hero">
           <div class="tag">Notepad</div>
           <h3>The page is blank.</h3>
-          <p>Write anything. Not the devotion. + always starts a new page.</p>
+          <p>Write. Format. Tick a goal when it’s done. + always starts a new page.</p>
           <button type="button" class="btn" data-act="journal-new">Start writing</button>
         </div>`}
       </div>
@@ -3913,7 +4056,17 @@
         </div>
         <div class="journal-pad">
           <input id="note-title" class="note-title" type="text" maxlength="80" placeholder="Title" autocomplete="off" autocorrect="on" value="${escapeAttr(title)}" />
-          <textarea class="diary-box" id="diary-note" placeholder="Start writing…">${escapeHtml(body)}</textarea>
+          <div class="note-tools">
+            <button type="button" data-act="note-fmt" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button type="button" data-act="note-fmt" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button type="button" data-act="note-fmt" data-cmd="underline" title="Underline"><u>U</u></button>
+            <button type="button" data-act="note-fmt" data-cmd="h2" title="Heading">H</button>
+            <button type="button" data-act="note-fmt" data-cmd="ul" title="List">•</button>
+            <button type="button" data-act="note-fmt" data-cmd="check" title="Tick a goal">☐</button>
+            <button type="button" data-act="note-fmt" data-cmd="week" title="This week">Week</button>
+            <button type="button" data-act="note-fmt" data-cmd="month" title="This month">Month</button>
+          </div>
+          <div class="diary-box${notePlain(body) ? "" : " is-empty"}" id="diary-note" contenteditable="true" role="textbox" spellcheck="true" data-placeholder="Write. Tick a goal when it’s done."></div>
         </div>
       </div>
     `;
@@ -4873,8 +5026,56 @@
     });
     const diary = $("#diary-note");
     const ntitle = $("#note-title");
-    const onNoteInput = () => { saveOpenNote(); };
-    if (diary) diary.addEventListener("input", onNoteInput);
+    const onNoteInput = () => { paintNoteEmpty(); saveOpenNote(); };
+    if (diary) {
+      if (diary.isContentEditable && !diary.dataset.filled) {
+        diary.dataset.filled = "1";
+        try {
+          const n = (L().noteById && state.journalNoteId) ? L().noteById(state.journalNoteId) : null;
+          diary.innerHTML = noteBodyToHtml(n && n.body);
+        } catch { /* keep blank */ }
+        paintNoteEmpty();
+      }
+      diary.addEventListener("input", onNoteInput);
+      diary.addEventListener("change", onNoteInput);
+      diary.addEventListener("click", (e) => {
+        if (e.target && e.target.matches && e.target.matches("input[type=\"checkbox\"]")) onNoteInput();
+      });
+      diary.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const html = (e.clipboardData && e.clipboardData.getData("text/html")) || "";
+        const text = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
+        if (html) insertNoteHtml(html);
+        else {
+          try { document.execCommand("insertText", false, text); } catch {
+            insertNoteHtml(escapeHtml(text).replace(/\n/g, "<br>"));
+          }
+        }
+        onNoteInput();
+      });
+      diary.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+        let node = sel.anchorNode;
+        if (node && node.nodeType === 3) node = node.parentElement;
+        const item = node && node.closest && node.closest(".note-item");
+        if (!item || !diary.contains(item)) return;
+        e.preventDefault();
+        const next = document.createElement("div");
+        next.className = "note-item";
+        next.innerHTML = "<input type=\"checkbox\" contenteditable=\"false\">&nbsp;";
+        item.after(next);
+        const range = document.createRange();
+        range.selectNodeContents(next);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        onNoteInput();
+      });
+    }
+    const tools = app.querySelector(".note-tools");
+    if (tools) tools.addEventListener("mousedown", (e) => { e.preventDefault(); });
     if (ntitle) ntitle.addEventListener("input", onNoteInput);
     [0,1,2].forEach((i) => {
       const el = document.getElementById("prio-" + i);
@@ -6302,6 +6503,8 @@
       completeStep("plan");
       toast("Schedule done.");
       goNext();
+    } else if (act === "note-fmt") {
+      applyNoteFmt(el && el.dataset.cmd);
     }
   };
 
