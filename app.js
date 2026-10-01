@@ -1492,6 +1492,10 @@
     const iso = today().iso;
     try { if (step && L().markOpen) L().markOpen(iso, step); } catch { /* timing optional */ }
     if (step === "rise") {
+      if (stepIsDone("rise")) {
+        toast("You’re up.");
+        return;
+      }
       completeStep("rise");
       const up = L().clockAt && L().clockAt(iso, "rise");
       toast(up && up.label ? ("Good morning · " + up.label) : "Good morning.");
@@ -2278,7 +2282,7 @@
     const steps = pathSteps();
     const dueM = B().dueToday(t.iso, "morning");
     const readDone = !dueM.length || dueM.every((b) => B().loggedToday(t.iso, b.id));
-    const doneN = steps.filter((s) => s.id === "read" ? readDone : (morn[s.id] || (s.id === "move" && !!completedOn(t.iso)))).length;
+    const doneN = steps.filter((s) => stepIsDone(s)).length;
     const dueE = B().dueToday(t.iso, "evening");
     const cur = currentStep();
     const assign = L().todayAssignment(t.iso);
@@ -2415,18 +2419,19 @@
           ${shortOn && !allDone ? `<button type="button" class="linkish short-full" data-act="full-today">Full path</button>` : ""}
           ${install}
         </div>
-        ${allDone ? "" : (() => {
+        ${(() => {
           const rows = steps.map((s) => {
-            const done = s.id === "read" ? readDone : (!!morn[s.id] || (s.id === "move" && moveDone));
+            const done = stepIsDone(s);
             const now = !!(cur && cur.id === s.id && !done);
             return { s, done, now };
           });
           const finished = rows.filter((r) => r.done);
           const later = rows.filter((r) => !r.done && !r.now);
+          if (!finished.length && !later.length) return "";
           return `
         <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
         <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        ${finished.length ? `<div class="path-done">${finished.map((r) => `<span>✓ ${escapeHtml(r.s.title)}</span>`).join("")}</div>` : ""}
+        ${finished.length ? `<div class="path-done">${finished.map((r) => `<button type="button" data-act="open-step" data-step="${r.s.id}">✓ ${escapeHtml(r.s.title)}</button>`).join("")}</div>` : ""}
         ${later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : ""}`;
         })()}
         ${evening && dueE.length ? `
@@ -3448,7 +3453,7 @@
         </div>
         ${wordRows.length ? `
         <div class="section-h" style="padding:0 16px"><h4>In the Word</h4><span>${wordDoneN}/${wordRows.length}</span></div>
-        ${finishedWord.length ? `<div class="path-done">${finishedWord.map((s) => `<span>✓ ${escapeHtml(s.title)}</span>`).join("")}</div>` : ""}
+        ${finishedWord.length ? `<div class="path-done">${finishedWord.map((s) => `<button type="button" data-act="open-step" data-step="${s.id}">✓ ${escapeHtml(s.title)}</button>`).join("")}</div>` : ""}
         ${laterWord.length ? `<p class="path-rest">Then ${laterWord.map((s) => escapeHtml(s.title)).join(" · ")}</p>` : ""}
         ` : ""}
         <div class="word-extras">
