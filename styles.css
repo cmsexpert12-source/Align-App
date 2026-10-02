@@ -2100,10 +2100,23 @@ img { max-width: 100%; display: block; }
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 16px; padding: 14px 12px;
   min-height: 88px;
+  position: relative;
+  padding-right: 52px;
 }
 .station.on { border-color: rgba(214,255,63,.45); background: rgba(214,255,63,.08); }
 .station h4 { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
 .station p { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.station-play {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: .02em;
+  color: var(--faint);
+}
+.station.on .station-play { color: var(--lime); }
 .track-list { margin-top: 10px; }
 .toast.up { bottom: auto; top: calc(18px + env(safe-area-inset-top, 0px)); }
 .plan { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 16px); }

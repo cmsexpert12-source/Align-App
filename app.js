@@ -2110,7 +2110,7 @@
   const soundLaunch = () => {
     const snd = (window.ALIGN_SOUND && ALIGN_SOUND.snapshot()) || {};
     const on = !!(snd.playing || snd.id);
-    return `<button type="button" class="icon-btn sound-launch ${on ? "on" : ""}" data-go="sound" title="Sound">${stepIcon("sound")}</button>`;
+    return `<button type="button" class="icon-btn sound-launch ${on ? "on" : ""}" data-go="sound" title="Play sound">${stepIcon("sound")}</button>`;
   };
 
   /* ---------- VIEWS ---------- */
@@ -3095,7 +3095,7 @@
 
           <div class="set-label">More</div>
           <button class="setting" data-go="sound">
-            <div class="grow"><h4>Sound</h4><p>Stations and your files.</p></div>
+            <div class="grow"><h4>Sound</h4><p>Tap a station. It plays under the morning.</p></div>
           </button>
           <button class="setting" data-go="journal">
             <div class="grow"><h4>Notepad</h4></div>
@@ -3419,9 +3419,16 @@
     const bar = live
       ? `<div class="now-live" aria-hidden="true"><i></i></div>`
       : `<input class="now-scrub" type="range" min="0" max="1000" value="${pct}" aria-label="Position" />`;
+    const playLabel = (kind, id) => {
+      if (snd.kind === kind && snd.id === id) {
+        if (!snd.playing) return "Paused";
+        return (kind === "station" || snd.live) ? "Live" : "Playing";
+      }
+      return "Play";
+    };
     return `
       <div class="screen home sound-page">
-        <div class="topbar"><div class="greet">Sound<h2>Play.</h2></div></div>
+        <div class="topbar"><div class="greet">Sound<h2>Under the path.</h2></div></div>
         ${on ? `<div class="sound-now">
           <button type="button" class="now-play" data-act="${snd.playing ? "sound-pause" : "sound-resume"}" title="${snd.playing ? "Pause" : "Play"}">${snd.playing ? "❚❚" : "▶"}</button>
           <div class="now-body">
@@ -3432,46 +3439,55 @@
             ${bar}
           </div>
           <button type="button" class="now-x" data-act="sound-stop" title="Stop">×</button>
-        </div>` : ""}
+        </div>` : `<div class="next-hero">
+          <div class="tag">Sound</div>
+          <h3>Tap a station.</h3>
+          <p>It keeps playing while you walk the morning. Pause here, or from the bar on Today.</p>
+        </div>`}
         <div style="padding:0 16px 8px">
-          <div class="set-label" style="padding-top:0">Stations</div>
+          <div class="field" style="margin:4px 0 8px">
+            <label>Volume</label>
+            <input id="sound-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" />
+          </div>
+          <div class="set-label">Stations</div>
+          <p class="hint">Loops named for the hour. Tap one to play.</p>
           <div class="station-grid">
             ${stations.map((s) => `
-              <button class="station ${snd.kind==="station" && snd.id===s.id ? "on" : ""}" data-act="sound-station" data-id="${escapeAttr(s.id)}">
+              <button type="button" class="station ${snd.kind==="station" && snd.id===s.id ? "on" : ""}" data-act="sound-station" data-id="${escapeAttr(s.id)}">
+                <em class="station-play">${playLabel("station", s.id)}</em>
                 <h4>${escapeHtml(s.name)}</h4>
                 <p>${escapeHtml(s.sub)}</p>
               </button>`).join("")}
           </div>
           ${library.length ? `
-          <div class="set-label">Recordings</div>
+          <div class="set-label">In ALIGN</div>
+          <p class="hint">Public recordings. Tap to play.</p>
           <div class="station-grid">
             ${library.map((s) => `
-              <button class="station ${snd.kind==="library" && snd.id===s.id ? "on" : ""}" data-act="sound-library" data-id="${escapeAttr(s.id)}">
+              <button type="button" class="station ${snd.kind==="library" && snd.id===s.id ? "on" : ""}" data-act="sound-library" data-id="${escapeAttr(s.id)}">
+                <em class="station-play">${playLabel("library", s.id)}</em>
                 <h4>${escapeHtml(s.title)}</h4>
                 <p>${escapeHtml((s.artist || "Open source") + (s.mood ? " · " + s.mood : ""))}</p>
               </button>`).join("")}
           </div>` : ""}
           <div class="set-label">Your files</div>
+          <p class="hint">Audio you already own. Tap a file to play it.</p>
           <input id="sound-files" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple hidden />
           <button class="btn ghost" style="height:44px" data-act="sound-add">${state.uploadBusy ? "Saving…" : "Upload audio"}</button>
-          <div class="track-list">
+          ${tracks.length ? `<div class="track-list">
             ${tracks.map((t) => `
               <div class="setting">
-                <button class="grow" data-act="sound-track" data-id="${escapeAttr(t.id)}" style="text-align:left">
+                <button type="button" class="grow" data-act="sound-track" data-id="${escapeAttr(t.id)}" style="text-align:left">
                   <h4>${escapeHtml(t.name)}</h4>
-                  ${snd.kind==="track" && snd.id===t.id ? `<p>${snd.playing ? "Playing" : "Paused"}</p>` : ""}
+                  <p>${snd.kind==="track" && snd.id===t.id ? (snd.playing ? "Playing" : "Paused") : "Tap to play"}</p>
                 </button>
-                <button class="linkish" data-act="sound-remove" data-id="${escapeAttr(t.id)}">Remove</button>
+                <button type="button" class="linkish" data-act="sound-remove" data-id="${escapeAttr(t.id)}">Remove</button>
               </div>`).join("")}
-          </div>
-          <div class="set-label">Cues</div>
+          </div>` : `<p class="hint" style="margin-top:8px">Nothing of yours yet.</p>`}
+          <div class="set-label">Path taps</div>
           <div class="setting">
-            <div class="grow"><h4>Step tones</h4></div>
-            <button class="toggle ${snd.sfxOn?"on":""}" data-act="sound-sfx"><i></i></button>
-          </div>
-          <div class="field" style="margin-top:12px">
-            <label>Volume</label>
-            <input id="sound-vol" type="range" min="0" max="100" value="${Math.round((snd.volume || 0) * 100)}" />
+            <div class="grow"><h4>Soft clicks</h4><p>When a step starts.</p></div>
+            <button type="button" class="toggle ${snd.sfxOn?"on":""}" data-act="sound-sfx"><i></i></button>
           </div>
         </div>
       </div>
