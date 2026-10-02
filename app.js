@@ -2323,6 +2323,38 @@
     return n + " days. You’re in the work.";
   };
 
+  const pathShort = (s) => {
+    const map = {
+      rise: "Rise", move: "Train", pray: "Pray", devotion: "Devotion",
+      verse: "Memory", word: "Word", drill: "Sprint", affirm: "Affirm",
+      plan: "Plan", ready: "Ready", recite: "Verse", go: "Begin",
+      evening: "Night", nightverse: "Verse", lights: "Night"
+    };
+    return map[s && s.id] || String((s && s.title) || "").trim().split(/\s+/)[0] || "";
+  };
+
+  const renderPathRail = (rows, title) => {
+    const n = (rows || []).length;
+    if (!n) return "";
+    const doneN = rows.filter((r) => r.done).length;
+    const finished = rows.filter((r) => r.done);
+    const later = rows.filter((r) => !r.done && !r.now);
+    if (!finished.length) {
+      return later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : "";
+    }
+    return `
+      <div class="section-h" style="padding:0 16px"><h4>${escapeHtml(title)}</h4><span>${doneN}/${n}</span></div>
+      <div class="path-rail" style="--n:${n}">
+        ${rows.map((r) => {
+          const cls = r.done ? "done" : (r.now ? "now" : "wait");
+          const can = !!(r.done || r.now);
+          const act = can ? `type="button" data-act="open-step" data-step="${escapeAttr(r.s.id)}"` : "";
+          const tag = can ? "button" : "div";
+          return `<${tag} class="pr ${cls}" ${act}><span class="pr-dot"></span><span class="pr-n">${escapeHtml(pathShort(r.s))}</span></${tag}>`;
+        }).join("")}
+      </div>`;
+  };
+
   const prioOf = (x) => {
     if (x && typeof x === "object") return { text: String(x.text || "").trim(), done: !!x.done };
     return { text: String(x || "").trim(), done: false };
@@ -2481,17 +2513,7 @@
             const now = !!(cur && cur.id === s.id && !done);
             return { s, done, now };
           });
-          const finished = rows.filter((r) => r.done);
-          const later = rows.filter((r) => !r.done && !r.now);
-          if (!finished.length && !later.length) return "";
-          if (!finished.length) {
-            return later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : "";
-          }
-          return `
-        <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
-        <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        <div class="path-done">${finished.map((r) => `<button type="button" data-act="open-step" data-step="${r.s.id}">✓ ${escapeHtml(r.s.title)}</button>`).join("")}</div>
-        ${later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : ""}`;
+          return renderPathRail(rows, "The path");
         })()}
         ${evening && dueE.length ? `
           <div class="section-h" style="padding:16px 16px 0"><h4>Tonight’s book</h4></div>
@@ -3541,9 +3563,6 @@
         ? `<button class="btn" data-act="open-step" data-step="word">${wordCta}</button>`
         : "");
     const wordRows = pathSteps().filter((s) => wordIds[s.id]);
-    const wordDoneN = wordRows.filter((s) => stepIsDone(s)).length;
-    const laterWord = wordRows.filter((s) => !stepIsDone(s) && !(cur && cur.id === s.id));
-    const finishedWord = wordRows.filter((s) => stepIsDone(s));
     const line = (L().affirmationPref && L().affirmationPref()) || "";
     const ch = S().champOf && S().champOf(iso);
     const champSub = (ch && ch.answered)
@@ -3558,11 +3577,11 @@
           <p>${escapeHtml(heroP)}</p>
           ${heroBtn}
         </div>
-        ${wordRows.length ? `
-        <div class="section-h" style="padding:0 16px"><h4>In the Word</h4><span>${wordDoneN}/${wordRows.length}</span></div>
-        ${finishedWord.length ? `<div class="path-done">${finishedWord.map((s) => `<button type="button" data-act="open-step" data-step="${s.id}">✓ ${escapeHtml(s.title)}</button>`).join("")}</div>` : ""}
-        ${laterWord.length ? `<p class="path-rest">Then ${laterWord.map((s) => escapeHtml(s.title)).join(" · ")}</p>` : ""}
-        ` : ""}
+        ${wordRows.length ? renderPathRail(wordRows.map((s) => ({
+          s,
+          done: stepIsDone(s),
+          now: !!(cur && cur.id === s.id && !stepIsDone(s))
+        })), "In the Word") : ""}
         <div class="word-extras">
           ${n ? `<button class="setting" data-act="open-champ"><div class="grow"><h4>Championship</h4><p>${escapeHtml(champSub)}</p></div></button>` : ""}
           ${morn.affirm ? `<button class="setting" data-act="open-step" data-step="affirm"><div class="grow"><h4>Affirm</h4><p>${escapeHtml(line ? clipText(line, 72) : "Spoken today")}</p></div></button>` : ""}

@@ -1111,6 +1111,67 @@ img { max-width: 100%; display: block; }
   color: var(--muted);
   line-height: 1.45;
 }
+.path-rail {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr));
+  gap: 0;
+  align-items: start;
+  justify-items: center;
+  padding: 2px 12px 14px;
+  margin: 0;
+}
+.pr {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  min-height: 0;
+}
+.pr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-2);
+  flex: none;
+}
+.pr.done .pr-dot { background: var(--lime); }
+.pr.now .pr-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--lime);
+  box-shadow: 0 0 0 3px var(--lime-dim);
+}
+.pr.wait { pointer-events: none; }
+.pr.wait .pr-dot {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.pr-n {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  line-height: 1.15;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.pr.done .pr-n { color: var(--muted); }
+.pr.now .pr-n { color: var(--lime); }
 .path-done span,
 .path-done button {
   display: inline-flex; align-items: center; gap: 5px;
