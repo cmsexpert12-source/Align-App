@@ -2118,7 +2118,7 @@
     <div class="screen splash">
       <div class="logo">${markSvg()}</div>
       <h1>ALIGN</h1>
-      <p>The morning, in one place</p>
+      <p>Walk the morning in order</p>
     </div>
   `;
 
@@ -2136,15 +2136,19 @@
           </div>`;
     const bodies = [
       `
-        <div class="kicker">Morning OS</div>
-        <h1>The morning,<br>in one place.</h1>
-        <p class="lead">Wake, train, pray, Word, plan, go — in order, on this phone. Training is a step, not the product.</p>
-        <p class="onboard-path">Rise → Train → Pray → Word → Plan → Begin</p>
+        <div class="kicker">ALIGN</div>
+        <h1>Walk the morning<br>in order.</h1>
+        <p class="lead">One next step. You tap it. When it’s done, the next one opens.</p>
+        <div class="keep-list">
+          <div class="keep"><div class="ic">1</div><div><h4>Today is the path</h4><p>Rise, train, pray, Scripture, plan — then you begin the day.</p></div></div>
+          <div class="keep"><div class="ic">2</div><div><h4>Move and Word</h4><p>Training and Scripture live on that path. Open them here or from Today.</p></div></div>
+          <div class="keep"><div class="ic">3</div><div><h4>Journal is a notepad</h4><p>Free writing and ticked aims. Not the devotion.</p></div></div>
+        </div>
       `,
       `
         <div class="kicker">Your hours</div>
         <h1>When do you<br>rise?</h1>
-        <p class="lead">The morning starts when you tap I’m up. These clocks are the cue — 5 min before rise, 10 min before lights.</p>
+        <p class="lead">Tap I’m up when you stand. That’s the start. Change these clocks if they aren’t yours.</p>
         ${state.obHoursEdit ? hoursForm() : `
           <div class="hours-confirm">
             <div class="hours-row">
@@ -2164,14 +2168,14 @@
       `
         <div class="kicker">You</div>
         <h1>What should we<br>call you?</h1>
-        <p class="lead">It shows on Today. Skip it if you want. You can change it later.</p>
+        <p class="lead">It shows on Today. Skip if you want. After this, one button is waiting.</p>
         <div class="name-field">
           <label>Name</label>
           <input id="name-input" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
         </div>
       `
     ];
-    const labels = ["Your hours", "These hours", "Start this morning"];
+    const labels = ["Your hours", "Use these hours", "Start this morning"];
     return `
       <div class="onboard">
         <div class="onboard-top">
@@ -2461,7 +2465,9 @@
           <h3>${allDone ? (clk.sunday ? "Go to church." : (evening ? "Rest." : "Day is open.")) : escapeHtml(cur ? cur.title : "Rise")}</h3>
           <p>${allDone
             ? (clk.sunday ? "The light path is done. Church is the first appointment." : (evening ? "Night devotion, the verse, goodnight — done. Phone down." : "You walked the whole path. Go well."))
-            : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Mark rise and the morning begins.")}</p>
+            : (cur && cur.id === "rise" && !doneN
+              ? "Tap I’m up. That’s the start. The next step opens when this one is done."
+              : (cur ? (subFor(cur) + ((L().idealMinFor && L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) })) ? (" · ideal " + L().idealMinFor(t.iso, cur.id, { trainMin: day.minutes, chapters: L().chapterTarget(t.iso) }) + " min") : "")) : "Tap I’m up. The morning begins."))}</p>
           ${allDone
             ? ""
             : `<button class="btn" data-act="open-step" data-step="${cur ? cur.id : "rise"}">${nextCta}</button>`}
@@ -2478,10 +2484,13 @@
           const finished = rows.filter((r) => r.done);
           const later = rows.filter((r) => !r.done && !r.now);
           if (!finished.length && !later.length) return "";
+          if (!finished.length) {
+            return later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : "";
+          }
           return `
         <div class="section-h" style="padding:0 16px"><h4>The path</h4><span>${doneN}/${steps.length}</span></div>
         <div class="morning-progress"><i style="width:${Math.round(doneN/Math.max(1,steps.length)*100)}%"></i></div>
-        ${finished.length ? `<div class="path-done">${finished.map((r) => `<button type="button" data-act="open-step" data-step="${r.s.id}">✓ ${escapeHtml(r.s.title)}</button>`).join("")}</div>` : ""}
+        <div class="path-done">${finished.map((r) => `<button type="button" data-act="open-step" data-step="${r.s.id}">✓ ${escapeHtml(r.s.title)}</button>`).join("")}</div>
         ${later.length ? `<p class="path-rest">Then ${later.map((r) => escapeHtml(r.s.title)).join(" · ")}</p>` : ""}`;
         })()}
         ${evening && dueE.length ? `
@@ -2529,6 +2538,7 @@
               </div>
             </div>
             ${(() => {
+              if (!(pulse.mornings || pulse.sessions || pulse.chapters)) return "";
               const aim = weekAims();
               const mo = monthPulse();
               return `<div class="pulse-stats">
@@ -2749,7 +2759,7 @@
     const rest = week.filter((d) => d.dow !== t.dow);
     return `
       <div class="screen plan">
-        <div class="topbar"><div class="greet">Move<h2>Today’s session.</h2></div>
+        <div class="topbar"><div class="greet">Move<h2>Train today.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="progress">Log</button></div>
         </div>
         <div class="hero p-${todayD.pattern}">
@@ -3525,7 +3535,7 @@
       : "Untimed. Chapters you’ve read. Extra — not a path step.";
     return `
       <div class="screen home">
-        <div class="topbar"><div class="greet">Word<h2>Stay here.</h2></div>${soundLaunch()}</div>
+        <div class="topbar"><div class="greet">Word<h2>Scripture.</h2></div>${soundLaunch()}</div>
         <div class="next-hero word-hero ${n >= target ? "done-hero-card" : ""}">
           <div class="tag">${escapeHtml(heroTag)}</div>
           <h3>${escapeHtml(heroH)}</h3>
@@ -4033,7 +4043,7 @@
         <div class="next-hero">
           <div class="tag">Notepad</div>
           <h3>The page is blank.</h3>
-          <p>Write. Format. Tick a goal when it’s done. + always starts a new page.</p>
+          <p>A notepad — not the devotion. Write, format, tick a goal. + always starts a new page.</p>
           <button type="button" class="btn" data-act="journal-new">Start writing</button>
         </div>`}
       </div>

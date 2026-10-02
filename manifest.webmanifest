@@ -1,7 +1,7 @@
 {
   "name": "ALIGN",
   "short_name": "ALIGN",
-  "description": "The morning operating system. Wake, train, pray, Word, plan, go.",
+  "description": "Walk the morning in order. Rise, train, pray, Word, plan, begin.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
