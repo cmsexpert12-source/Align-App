@@ -1262,7 +1262,8 @@
   let sitUtter = null;
   let sitQueue = [];
   let sitIdx = 0;
-  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1, hold: false };
+  let sitGen = 0;
+  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1, hold: false, chain: false };
   try {
     const savedRate = Number(localStorage.getItem("align-sit-rate"));
     if (Number.isFinite(savedRate)) sitVoice.rate = Math.max(0.8, Math.min(2, savedRate));
@@ -1299,6 +1300,7 @@
     }
   };
   const sitStop = (keep) => {
+    sitGen += 1;
     sitQueue = [];
     sitIdx = 0;
     sitUtter = null;
@@ -1307,6 +1309,7 @@
     if (!keep) {
       sitVoice.kind = "";
       sitVoice.follow = false;
+      sitVoice.chain = false;
     }
     try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch { /* ignore */ }
     try { app.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on")); } catch { /* ignore */ }
@@ -1405,8 +1408,27 @@
   const sitPump = () => {
     if (!sitVoice.on || sitVoice.paused) return;
     if (sitIdx >= sitQueue.length) {
+      if (sitVoice.follow && !sitVoice.paused) {
+        if (sitVoice.kind === "bible") {
+          const n = L().nextRef(state.readBook || "Genesis", state.readCh || 1);
+          if (n && n.book) {
+            sitVoice.chain = true;
+            openBible(n.book, n.chapter);
+            return;
+          }
+        } else if (sitVoice.kind === "pdf") {
+          const max = Number(state.pdfPages) || 1;
+          const next = (Number(state.pdfPage) || 1) + 1;
+          if (next <= max) {
+            sitVoice.chain = true;
+            goPdfPage(next);
+            return;
+          }
+        }
+      }
       sitVoice.on = false;
       sitVoice.paused = false;
+      sitVoice.chain = false;
       try { app.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on")); } catch { /* ignore */ }
       paintSitListen();
       return;
@@ -1416,12 +1438,14 @@
     if (!spoken) { sitIdx += 1; sitPump(); return; }
     const u = new SpeechSynthesisUtterance(spoken);
     sitUtter = u;
+    const gen = sitGen;
     const v = sitPickVoice();
     if (v) { u.voice = v; u.lang = v.lang || "en-GB"; }
     else u.lang = "en-GB";
     u.rate = sitVoice.rate;
     u.pitch = 1;
     u.onend = () => {
+      if (gen !== sitGen) return;
       if (sitVoice.hold) {
         sitVoice.hold = false;
         if (sitVoice.on && !sitVoice.paused) sitPump();
@@ -1431,12 +1455,15 @@
       sitIdx += 1;
       sitPump();
     };
-    u.onerror = () => {
+    u.onerror = (ev) => {
+      if (gen !== sitGen) return;
       if (sitVoice.hold) {
         sitVoice.hold = false;
         if (sitVoice.on && !sitVoice.paused) sitPump();
         return;
       }
+      const err = String((ev && ev.error) || "");
+      if (err === "canceled" || err === "interrupted") return;
       sitVoice.on = false;
       sitVoice.paused = false;
       paintSitListen();
@@ -1470,7 +1497,19 @@
       queue = sitPdfQueue(pdfTextCache);
     }
     if (!queue.length) {
-      toast(kind === "pdf" ? "This page has no text to speak." : "Open a chapter first.");
+      if (kind === "pdf") {
+        const next = (Number(state.pdfPage) || 1) + 1;
+        const max = Number(state.pdfPages) || 1;
+        if (next <= max) {
+          sitVoice.chain = true;
+          sitVoice.follow = true;
+          goPdfPage(next);
+          return;
+        }
+        toast("This page has no text to speak.");
+        return;
+      }
+      toast("Open a chapter first.");
       return;
     }
     try { if (window.ALIGN_SOUND && ALIGN_SOUND.pause) ALIGN_SOUND.pause(); } catch { /* ok */ }
@@ -1588,7 +1627,8 @@
     const max = state.pdfPages || 1;
     const next = Math.max(1, Math.min(max, Number(n) || 1));
     if (next === state.pdfPage) return;
-    const follow = sitVoice.kind === "pdf" && sitVoice.follow && sitVoice.on && !sitVoice.paused;
+    const follow = sitVoice.chain || (sitVoice.kind === "pdf" && sitVoice.follow && sitVoice.on && !sitVoice.paused);
+    sitVoice.chain = false;
     if (sitVoice.kind === "pdf") sitStop(true);
     state.pdfPage = next;
     const row = B().update(state.bookId, { current_page: next });
@@ -1988,7 +2028,8 @@
   };
 
   const openBible = async (book, chapter) => {
-    const follow = sitVoice.kind === "bible" && sitVoice.follow && sitVoice.on && !sitVoice.paused;
+    const follow = sitVoice.chain || (sitVoice.kind === "bible" && sitVoice.follow && sitVoice.on && !sitVoice.paused);
+    sitVoice.chain = false;
     if (sitVoice.kind === "bible") sitStop(true);
     state.readBook = book;
     state.readCh = chapter;
