@@ -1296,6 +1296,14 @@ img { max-width: 100%; display: block; }
   font-family: var(--display); font-size: 26px; letter-spacing: -.03em; margin: 6px 0 14px;
 }
 .verse { font-family: var(--serif); font-size: 19px; line-height: 1.62; color: #ebe6da; margin: 0 0 14px; font-weight: 500; }
+.verse.on {
+  background: var(--lime-dim);
+  border-radius: 12px;
+  margin-left: -8px;
+  margin-right: -8px;
+  padding: 6px 8px;
+  color: var(--text);
+}
 .verse sup { color: var(--lime); font-weight: 700; font-size: 11px; margin-right: 6px; letter-spacing: 0; }
 .votd {
   background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px;

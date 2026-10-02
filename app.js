@@ -1235,8 +1235,24 @@
     try {
       const page = await pdfDoc.getPage(n);
       const tc = await page.getTextContent();
-      const text = (tc.items || []).map((i) => i.str || "").join(" ").replace(/\s+/g, " ").trim();
-      pdfTextCache = { page: n, bookId: state.bookId || "", text: text.slice(0, 16000) };
+      const viewport = page.getViewport({ scale: 1 });
+      const marks = [];
+      let text = "";
+      (tc.items || []).forEach((i) => {
+        const str = String(i.str || "");
+        if (!str.trim()) return;
+        const tr = i.transform || [1, 0, 0, 1, 0, 0];
+        marks.push({ str, x: tr[4], y: tr[5] });
+        text += str + " ";
+      });
+      text = text.replace(/\s+/g, " ").trim();
+      pdfTextCache = {
+        page: n,
+        bookId: state.bookId || "",
+        text: text.slice(0, 16000),
+        marks,
+        pageH: viewport.height || 1
+      };
       return pdfTextCache.text;
     } catch {
       return pdfTextCache.text || "";
@@ -1262,6 +1278,7 @@
       sitVoice.follow = false;
     }
     try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch { /* ignore */ }
+    try { app.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on")); } catch { /* ignore */ }
   };
   const sitPickVoice = () => {
     let voices = [];
@@ -1291,6 +1308,63 @@
     if (buf) out.push(buf);
     return out;
   };
+  const sitPdfQueue = (cache) => {
+    const marks = (cache && cache.marks) || [];
+    if (!marks.length) return sitChunks((cache && cache.text) || "").map((t) => ({ text: t, y: 0 }));
+    const sorted = marks.slice().sort((a, b) => (b.y - a.y) || (a.x - b.x));
+    const lines = [];
+    sorted.forEach((m) => {
+      const last = lines[lines.length - 1];
+      const piece = String(m.str || "").trim();
+      if (!piece) return;
+      if (last && Math.abs(last.y - m.y) < 6) last.str += (/[-\u2010\u2011]$/.test(last.str) ? "" : " ") + piece;
+      else lines.push({ str: piece, y: m.y });
+    });
+    const out = [];
+    let buf = "";
+    let y = lines[0] ? lines[0].y : 0;
+    lines.forEach((ln) => {
+      const piece = String(ln.str || "").trim();
+      if (!piece) return;
+      if ((buf + " " + piece).length > 280) {
+        if (buf) out.push({ text: buf, y });
+        buf = piece;
+        y = ln.y;
+      } else {
+        if (!buf) y = ln.y;
+        buf = buf ? buf + " " + piece : piece;
+      }
+    });
+    if (buf) out.push({ text: buf, y });
+    return out;
+  };
+  const sitFollow = () => {
+    const cur = sitQueue[sitIdx];
+    if (!cur) return;
+    if (sitVoice.kind === "bible" && cur.verse != null) {
+      const box = app.querySelector(".scripture");
+      if (!box) return;
+      box.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on"));
+      const el = box.querySelector('.verse[data-v="' + cur.verse + '"]');
+      if (el) {
+        el.classList.add("on");
+        try { el.scrollIntoView({ block: "center", behavior: "smooth", inline: "nearest" }); } catch {
+          box.scrollTop = Math.max(0, el.offsetTop - box.clientHeight * 0.3);
+        }
+      }
+      return;
+    }
+    if (sitVoice.kind === "pdf" && cur.y != null) {
+      const wrap = document.getElementById("pdf-wrap");
+      const canvas = wrap && (wrap.querySelector("canvas.show") || wrap.querySelector("canvas"));
+      if (!wrap || !canvas) return;
+      const pageH = Number(sitVoice.pageH) || 1;
+      const cssH = canvas.offsetHeight || wrap.scrollHeight || 1;
+      const yTop = (1 - (Number(cur.y) / pageH)) * cssH;
+      const dest = Math.max(0, yTop - wrap.clientHeight * 0.22);
+      try { wrap.scrollTo({ top: dest, behavior: "smooth" }); } catch { wrap.scrollTop = dest; }
+    }
+  };
   const paintSitListen = () => {
     app.querySelectorAll("[data-act='sit-listen']").forEach((b) => {
       const kind = b.dataset.kind || (state.view === "reader" ? "pdf" : "bible");
@@ -1302,10 +1376,14 @@
     if (sitIdx >= sitQueue.length) {
       sitVoice.on = false;
       sitVoice.paused = false;
+      try { app.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on")); } catch { /* ignore */ }
       paintSitListen();
       return;
     }
-    const u = new SpeechSynthesisUtterance(sitQueue[sitIdx]);
+    const cur = sitQueue[sitIdx] || {};
+    const spoken = typeof cur === "string" ? cur : String(cur.text || "");
+    if (!spoken) { sitIdx += 1; sitPump(); return; }
+    const u = new SpeechSynthesisUtterance(spoken);
     sitUtter = u;
     const v = sitPickVoice();
     if (v) { u.voice = v; u.lang = v.lang || "en-GB"; }
@@ -1322,6 +1400,7 @@
       sitVoice.paused = false;
       paintSitListen();
     };
+    sitFollow();
     try { window.speechSynthesis.speak(u); } catch {
       sitVoice.on = false;
       toast("Could not speak this page.");
@@ -1334,24 +1413,28 @@
       return;
     }
     try { speechSynthesis.getVoices(); } catch { /* ok */ }
-    let text = "";
+    let queue = [];
     if (kind === "bible") {
       const data = state.bibleData;
       const verses = (data && data.verses) || [];
-      const body = verses.map((x) => String((x && x.text) || "").trim()).filter(Boolean).join(" ");
       const ref = (data && data.reference) || ((state.readBook || "") + " " + (state.readCh || ""));
-      text = body ? (ref ? ref + ". " + body : body) : "";
+      queue = verses.map((x) => ({
+        text: String((x && x.text) || "").trim(),
+        verse: Number(x && x.verse) || 0
+      })).filter((x) => x.text);
+      if (ref && queue[0]) queue[0].text = ref + ". " + queue[0].text;
     } else {
-      text = await grabPdfText(state.pdfPage);
+      await grabPdfText(state.pdfPage);
+      sitVoice.pageH = (pdfTextCache && pdfTextCache.pageH) || 1;
+      queue = sitPdfQueue(pdfTextCache);
     }
-    text = String(text || "").replace(/\s+/g, " ").trim();
-    if (!text || text.length < 8) {
+    if (!queue.length) {
       toast(kind === "pdf" ? "This page has no text to speak." : "Open a chapter first.");
       return;
     }
     try { if (window.ALIGN_SOUND && ALIGN_SOUND.pause) ALIGN_SOUND.pause(); } catch { /* ok */ }
     sitStop(true);
-    sitQueue = sitChunks(text);
+    sitQueue = queue;
     sitIdx = 0;
     sitVoice.on = true;
     sitVoice.paused = false;
@@ -1380,6 +1463,7 @@
     if (sitVoice.on && sitVoice.kind === kind && sitVoice.paused) {
       try { speechSynthesis.resume(); } catch { /* ok */ }
       sitVoice.paused = false;
+      sitFollow();
       paintSitListen();
       setTimeout(() => {
         if (sitVoice.on && !speechSynthesis.speaking) sitBegin(kind);
@@ -4522,7 +4606,7 @@
         <div class="scripture">
           ${state.bibleLoading ? `<p class="hint">Loading chapter…</p>` : ""}
           ${state.bibleErr ? `<div class="err">${escapeHtml(state.bibleErr)}</div>` : ""}
-          ${data ? verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
+          ${data ? verses.map((v) => `<p class="verse" data-v="${Number(v.verse) || 0}"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
         </div>
         <div class="sticky-cta">
           <button type="button" class="btn ghost" data-act="sit-listen" data-kind="bible">${escapeHtml(sitLabel("bible"))}</button>
