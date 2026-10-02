@@ -4313,6 +4313,8 @@
     const target = L().chapterTarget(iso);
     const verses = (data && data.verses) || [];
     const alreadyToday = (assign.read || []).some((x) => x && x.book === state.readBook && Number(x.chapter) === Number(state.readCh));
+    const sittingReady = readN >= target && !stepIsDone("word");
+    const bibleCta = sittingReady ? "Scripture done" : (alreadyToday ? "In today’s record" : "Mark as read");
     const tr = (L().bibleTr && L().bibleTr()) || "kjv";
     const trShort = (L().trMeta && L().trMeta(tr) && L().trMeta(tr).short) || String(tr).toUpperCase();
     const ref = (data && data.reference) || ((state.readBook || "") + (state.readCh ? " " + state.readCh : "")) || "Scripture";
@@ -4339,7 +4341,7 @@
           ${data ? verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="bible-done">${alreadyToday ? "In today’s record" : "Mark as read"}</button>
+          <button class="btn" data-act="bible-done">${escapeHtml(bibleCta)}</button>
         </div>
       </div>
     `;
@@ -6069,34 +6071,32 @@
       if (!state.readBook) return;
       const verses = (state.bibleData && state.bibleData.verses && state.bibleData.verses.length) || 0;
       const iso = today().iso;
-      const alreadyToday = (L().todayAssignment(iso).read || []).some((x) => x && x.book === state.readBook && Number(x.chapter) === Number(state.readCh));
-      const cur = L().markChapterRead(iso, state.readBook, state.readCh, verses);
-      try { AlignDB.saveBible(cur, { now: true }); } catch { AlignDB.saveBible(cur).catch(() => {}); }
-      const readN = (L().todayAssignment(iso).read || []).length;
+      const assign = L().todayAssignment(iso);
+      const alreadyToday = (assign.read || []).some((x) => x && x.book === state.readBook && Number(x.chapter) === Number(state.readCh));
       const target = L().chapterTarget(iso);
-      try { S().ingestReading(iso, state.readPacks || []); } catch { /* ok */ }
-      S().enrichReading(iso, state.readPacks || []).catch(() => {});
-      toast(state.readBook + " " + state.readCh + (alreadyToday ? " · already in today’s record" : " · saved to this account"));
-      if (alreadyToday) {
-        render();
-        return;
-      }
-      if (readN >= target && stepIsDone("word")) {
-        openBible(cur.book, cur.chapter);
-        return;
-      }
-      if (readN >= target && target >= 3 && verses < 30 && readN < 4) {
-        openBible(cur.book, cur.chapter);
-      } else if (readN >= target) {
+      const readN0 = (assign.read || []).length;
+      if (readN0 >= target && !stepIsDone("word") && alreadyToday) {
         completeStep("word");
+        sfx("done");
+        toast("Scripture done.");
         stopDrillTick();
         state.drill = null;
         state.drillMode = "morning";
         state.view = "drill";
         render();
-      } else {
-        openBible(cur.book, cur.chapter);
+        return;
       }
+      const cur = L().markChapterRead(iso, state.readBook, state.readCh, verses);
+      try { AlignDB.saveBible(cur, { now: true }); } catch { AlignDB.saveBible(cur).catch(() => {}); }
+      const readN = (L().todayAssignment(iso).read || []).length;
+      try { S().ingestReading(iso, state.readPacks || []); } catch { /* ok */ }
+      S().enrichReading(iso, state.readPacks || []).catch(() => {});
+      toast(state.readBook + " " + state.readCh + (alreadyToday ? " · already in today’s record" : " · saved to this account"));
+      if (readN >= target && !stepIsDone("word")) {
+        render();
+        return;
+      }
+      openBible(cur.book, cur.chapter);
     } else if (act === "bible-tr-open") {
       state.view = "bibletr";
       render();
