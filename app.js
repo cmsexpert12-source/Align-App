@@ -2134,29 +2134,35 @@
             <div class="field"><label>Sunday leave (church)</label><input id="ob-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
             <label class="check-row"><input id="ob-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
           </div>`;
+    const obRail = `<div class="path-rail ob-rail" style="--n:6">${[
+      ["Rise", "now"], ["Train", "wait"], ["Pray", "wait"],
+      ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
+    ].map(([n, cls]) => `<div class="pr ${cls}"><span class="pr-dot"></span><span class="pr-n">${n}</span></div>`).join("")}</div>`;
+    const youName = String(state.profile.name || "").trim();
     const bodies = [
       `
         <div class="kicker">ALIGN</div>
         <h1>Walk the morning<br>in order.</h1>
         <p class="lead">One next step. You tap it. When it’s done, the next one opens.</p>
-        <div class="keep-list">
-          <div class="keep"><div class="ic">1</div><div><h4>Today is the path</h4><p>Rise, train, pray, Scripture, plan — then you begin the day.</p></div></div>
-          <div class="keep"><div class="ic">2</div><div><h4>Move and Word</h4><p>Training and Scripture live on that path. Open them here or from Today.</p></div></div>
-          <div class="keep"><div class="ic">3</div><div><h4>Journal is a notepad</h4><p>Free writing and ticked aims. Not the devotion.</p></div></div>
+        <div class="ob-hero">
+          <div class="tag">Up next</div>
+          <h3>Rise</h3>
+          <p>Tap I’m up. That’s the start.</p>
         </div>
+        ${obRail}
       `,
       `
         <div class="kicker">Your hours</div>
         <h1>When do you<br>rise?</h1>
         <p class="lead">Tap I’m up when you stand. That’s the start. Change these clocks if they aren’t yours.</p>
         ${state.obHoursEdit ? hoursForm() : `
-          <div class="hours-confirm">
-            <div class="hours-row">
+          <div class="ob-clocks">
+            <div class="ob-clock">
               <span>Mon–Sat</span>
               <b>${escapeHtml(hm(r.wkWakeH, r.wkWakeM))}</b>
               <em>Lights ${escapeHtml(hm(r.wkLightsH, r.wkLightsM))}</em>
             </div>
-            <div class="hours-row">
+            <div class="ob-clock">
               <span>Sunday</span>
               <b>${escapeHtml(hm(r.sunWakeH, r.sunWakeM))}</b>
               <em>Lights ${escapeHtml(hm(r.sunLightsH, r.sunLightsM))}${r.leaveOn ? " · church " + escapeHtml(hm(r.leaveH, r.leaveM)) : ""}</em>
@@ -2169,13 +2175,17 @@
         <div class="kicker">You</div>
         <h1>What should we<br>call you?</h1>
         <p class="lead">It shows on Today. Skip if you want. After this, one button is waiting.</p>
+        <div class="ob-live">
+          <span>Good morning</span>
+          <b class="ob-live-name">${escapeHtml(youName || "Your name")}</b>
+        </div>
         <div class="name-field">
           <label>Name</label>
-          <input id="name-input" maxlength="24" placeholder="Your name" value="${escapeAttr(state.profile.name)}" />
+          <input id="name-input" maxlength="24" placeholder="Your name" autocomplete="given-name" value="${escapeAttr(state.profile.name)}" />
         </div>
       `
     ];
-    const labels = ["Your hours", "Use these hours", "Start this morning"];
+    const labels = ["Continue", "Use these hours", "Start this morning"];
     return `
       <div class="onboard">
         <div class="onboard-top">
@@ -5031,7 +5041,11 @@
       handle(b.dataset.act, b);
     }));
     const name = $("#name-input");
-    if (name) name.addEventListener("input", e => { state.profile.name = e.target.value; });
+    if (name) name.addEventListener("input", e => {
+      state.profile.name = e.target.value;
+      const live = app.querySelector(".ob-live-name");
+      if (live) live.textContent = String(e.target.value || "").trim() || "Your name";
+    });
     const ae = $("#auth-email");
     if (ae) ae.addEventListener("input", e => { state.authEmail = e.target.value; });
     const an = $("#auth-name");
