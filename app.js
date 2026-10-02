@@ -1094,7 +1094,7 @@
     }
     if (state.view === "reader" || state.view === "book") {
       if (pdfTextCache.text && pdfTextCache.page) {
-        lines.push("Selectable text from PDF page " + pdfTextCache.page + ": " + pdfTextCache.text);
+        lines.push("Selectable text from PDF page " + pdfTextCache.page + ": " + String(pdfTextCache.text).slice(0, 2800));
       } else if (state.view === "reader") {
         lines.push("No selectable text from this page yet (scan or still loading). Do not invent the page. Ask them to type the line they want verified or clarified.");
       }
@@ -1224,7 +1224,9 @@
     if (!root) return;
     root.classList.toggle("chrome-off", !on);
     clearTimeout(pdfChromeTimer);
-    if (on) pdfChromeTimer = setTimeout(() => { if (!state.ai.open) setPdfChrome(false); }, 4200);
+    if (on) pdfChromeTimer = setTimeout(() => {
+      if (!state.ai.open && !(sitVoice.on && sitVoice.kind === "pdf")) setPdfChrome(false);
+    }, 4200);
   };
   const grabPdfText = async (pageNo) => {
     const n = pageNo || state.pdfPage;
@@ -1234,12 +1236,159 @@
       const page = await pdfDoc.getPage(n);
       const tc = await page.getTextContent();
       const text = (tc.items || []).map((i) => i.str || "").join(" ").replace(/\s+/g, " ").trim();
-      pdfTextCache = { page: n, bookId: state.bookId || "", text: text.slice(0, 2800) };
+      pdfTextCache = { page: n, bookId: state.bookId || "", text: text.slice(0, 16000) };
       return pdfTextCache.text;
     } catch {
       return pdfTextCache.text || "";
     }
   };
+
+  let sitUtter = null;
+  let sitQueue = [];
+  let sitIdx = 0;
+  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1 };
+  const sitLabel = (kind) => {
+    if (sitVoice.kind !== kind || !sitVoice.on) return "Listen";
+    return sitVoice.paused ? "Resume" : "Pause";
+  };
+  const sitStop = (keep) => {
+    sitQueue = [];
+    sitIdx = 0;
+    sitUtter = null;
+    sitVoice.on = false;
+    sitVoice.paused = false;
+    if (!keep) {
+      sitVoice.kind = "";
+      sitVoice.follow = false;
+    }
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch { /* ignore */ }
+  };
+  const sitPickVoice = () => {
+    let voices = [];
+    try { voices = (window.speechSynthesis && speechSynthesis.getVoices()) || []; } catch { voices = []; }
+    const en = voices.filter((v) => /^en/i.test(v.lang || "") || /english/i.test(v.name || ""));
+    const gb = en.filter((v) => /GB|UK|British/i.test((v.lang || "") + (v.name || "")));
+    const local = (gb.length ? gb : en).filter((v) => v.localService);
+    return local[0] || gb[0] || en[0] || voices[0] || null;
+  };
+  const sitChunks = (text) => {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    if (!s) return [];
+    const bits = s.match(/[^.?!;:]+[.?!;:]+\s*|[^.?!;:]+$/g) || [s];
+    const out = [];
+    let buf = "";
+    bits.forEach((b) => {
+      const piece = String(b || "").trim();
+      if (!piece) return;
+      if ((buf + " " + piece).length > 320) {
+        if (buf) out.push(buf);
+        if (piece.length > 320) {
+          for (let i = 0; i < piece.length; i += 320) out.push(piece.slice(i, i + 320));
+          buf = "";
+        } else buf = piece;
+      } else buf = buf ? buf + " " + piece : piece;
+    });
+    if (buf) out.push(buf);
+    return out;
+  };
+  const paintSitListen = () => {
+    app.querySelectorAll("[data-act='sit-listen']").forEach((b) => {
+      const kind = b.dataset.kind || (state.view === "reader" ? "pdf" : "bible");
+      b.textContent = sitLabel(kind);
+    });
+  };
+  const sitPump = () => {
+    if (!sitVoice.on || sitVoice.paused) return;
+    if (sitIdx >= sitQueue.length) {
+      sitVoice.on = false;
+      sitVoice.paused = false;
+      paintSitListen();
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(sitQueue[sitIdx]);
+    sitUtter = u;
+    const v = sitPickVoice();
+    if (v) { u.voice = v; u.lang = v.lang || "en-GB"; }
+    else u.lang = "en-GB";
+    u.rate = sitVoice.rate;
+    u.pitch = 1;
+    u.onend = () => {
+      if (!sitVoice.on || sitVoice.paused) return;
+      sitIdx += 1;
+      sitPump();
+    };
+    u.onerror = () => {
+      sitVoice.on = false;
+      sitVoice.paused = false;
+      paintSitListen();
+    };
+    try { window.speechSynthesis.speak(u); } catch {
+      sitVoice.on = false;
+      toast("Could not speak this page.");
+      paintSitListen();
+    }
+  };
+  const sitBegin = async (kind) => {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      toast("This phone can’t speak the text.");
+      return;
+    }
+    try { speechSynthesis.getVoices(); } catch { /* ok */ }
+    let text = "";
+    if (kind === "bible") {
+      const data = state.bibleData;
+      const verses = (data && data.verses) || [];
+      const body = verses.map((x) => String((x && x.text) || "").trim()).filter(Boolean).join(" ");
+      const ref = (data && data.reference) || ((state.readBook || "") + " " + (state.readCh || ""));
+      text = body ? (ref ? ref + ". " + body : body) : "";
+    } else {
+      text = await grabPdfText(state.pdfPage);
+    }
+    text = String(text || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length < 8) {
+      toast(kind === "pdf" ? "This page has no text to speak." : "Open a chapter first.");
+      return;
+    }
+    try { if (window.ALIGN_SOUND && ALIGN_SOUND.pause) ALIGN_SOUND.pause(); } catch { /* ok */ }
+    sitStop(true);
+    sitQueue = sitChunks(text);
+    sitIdx = 0;
+    sitVoice.on = true;
+    sitVoice.paused = false;
+    sitVoice.kind = kind;
+    sitVoice.follow = true;
+    paintSitListen();
+    sitPump();
+  };
+  const sitToggle = async (kind) => {
+    kind = kind || (state.view === "reader" ? "pdf" : "bible");
+    if (sitVoice.on && sitVoice.kind === kind && !sitVoice.paused) {
+      try { speechSynthesis.pause(); } catch { /* ok */ }
+      sitVoice.paused = true;
+      paintSitListen();
+      setTimeout(() => {
+        if (!(sitVoice.paused && sitVoice.on)) return;
+        let paused = false;
+        try { paused = !!speechSynthesis.paused; } catch { /* ok */ }
+        if (!paused && speechSynthesis.speaking) {
+          sitStop();
+          paintSitListen();
+        }
+      }, 250);
+      return;
+    }
+    if (sitVoice.on && sitVoice.kind === kind && sitVoice.paused) {
+      try { speechSynthesis.resume(); } catch { /* ok */ }
+      sitVoice.paused = false;
+      paintSitListen();
+      setTimeout(() => {
+        if (sitVoice.on && !speechSynthesis.speaking) sitBegin(kind);
+      }, 200);
+      return;
+    }
+    await sitBegin(kind);
+  };
+
   const paintPdf = async () => {
     if (!pdfDoc || state.view !== "reader") return;
     const a = document.getElementById("pdf-canvas");
@@ -1314,11 +1463,17 @@
     const max = state.pdfPages || 1;
     const next = Math.max(1, Math.min(max, Number(n) || 1));
     if (next === state.pdfPage) return;
+    const follow = sitVoice.kind === "pdf" && sitVoice.follow && sitVoice.on && !sitVoice.paused;
+    if (sitVoice.kind === "pdf") sitStop(true);
     state.pdfPage = next;
     const row = B().update(state.bookId, { current_page: next });
     if (row && AlignDB.upsertBookMeta) AlignDB.upsertBookMeta(row, { delay: 800 });
     updatePdfChrome();
     paintPdf();
+    if (follow) {
+      sitVoice.follow = true;
+      sitBegin("pdf");
+    }
   };
 
   const closePdf = () => {
@@ -1708,6 +1863,8 @@
   };
 
   const openBible = async (book, chapter) => {
+    const follow = sitVoice.kind === "bible" && sitVoice.follow && sitVoice.on && !sitVoice.paused;
+    if (sitVoice.kind === "bible") sitStop(true);
     state.readBook = book;
     state.readCh = chapter;
     state.bibleLoading = true;
@@ -1742,6 +1899,10 @@
     }
     state.bibleLoading = false;
     render();
+    if (follow && state.bibleData) {
+      sitVoice.follow = true;
+      sitBegin("bible");
+    }
   };
 
   const jumpBible = (book, chapter) => {
@@ -4364,7 +4525,8 @@
           ${data ? verses.map((v) => `<p class="verse"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
         </div>
         <div class="sticky-cta">
-          <button class="btn" data-act="bible-done">${escapeHtml(bibleCta)}</button>
+          <button type="button" class="btn ghost" data-act="sit-listen" data-kind="bible">${escapeHtml(sitLabel("bible"))}</button>
+          <button class="btn" style="margin-top:8px" data-act="bible-done">${escapeHtml(bibleCta)}</button>
         </div>
       </div>
     `;
@@ -4745,6 +4907,7 @@
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
           <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="txt-btn" data-act="sit-listen" data-kind="pdf" title="Listen">${escapeHtml(sitLabel("pdf"))}</button>
             <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
             <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
             <button class="txt-btn" data-act="pdf-smaller" title="Smaller type">A−</button>
@@ -4964,6 +5127,7 @@
     }
     bind();
     paintNow();
+    if (state.view !== "bible" && state.view !== "reader" && sitVoice.kind) sitStop();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
 
@@ -6408,6 +6572,7 @@
       AI().save({ prefer: el.dataset.p });
       render();
     } else if (act === "sound-toggle") {
+      sitStop();
       if (window.ALIGN_SOUND) {
         const snap = ALIGN_SOUND.snapshot();
         if (snap.playing) ALIGN_SOUND.pause();
@@ -6415,13 +6580,18 @@
         else ALIGN_SOUND.playStation("rise");
       }
       if (state.view === "sound") render(); else paintNow();
+    } else if (act === "sit-listen") {
+      sitToggle((el && el.dataset.kind) || (state.view === "reader" ? "pdf" : "bible"));
     } else if (act === "sound-station") {
+      sitStop();
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
       if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-library") {
+      sitStop();
       if (window.ALIGN_SOUND) ALIGN_SOUND.playLibrary(el.dataset.id);
       if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-track") {
+      sitStop();
       if (window.ALIGN_SOUND) ALIGN_SOUND.playTrack(el.dataset.id);
       if (state.view === "sound") render(); else paintNow();
     } else if (act === "sound-pause") {
