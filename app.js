@@ -873,14 +873,18 @@
       return themePaper();
     }
   };
-  const pdfPrefs = { theme: "paper", fit: "page" };
+  const pdfPrefs = { theme: "paper", fit: "width", zoom: 1 };
   try {
     const pr = JSON.parse(localStorage.getItem("align-reader") || "null") || {};
     if (pr.theme === "night" || pr.theme === "sepia" || pr.theme === "paper") pdfPrefs.theme = pr.theme;
-    if (pr.fit === "width") pdfPrefs.fit = "width";
-    else pdfPrefs.fit = "page";
+    if (pr.fit === "page") pdfPrefs.fit = "page";
+    else pdfPrefs.fit = "width";
+    const z = Number(pr.zoom);
+    if (Number.isFinite(z)) pdfPrefs.zoom = Math.max(1, Math.min(2.8, z));
   } catch { /* paper */ }
+  pdfZoom = pdfPrefs.zoom || 1;
   const savePdfPrefs = () => {
+    pdfPrefs.zoom = pdfZoom;
     try { localStorage.setItem("align-reader", JSON.stringify(pdfPrefs)); } catch { /* ignore */ }
   };
 
@@ -1262,22 +1266,32 @@
     const unscaled = page.getViewport({ scale: 1 });
     const byW = maxW / unscaled.width;
     const byH = maxH / unscaled.height;
-    const zoom = Math.max(1, pdfZoom || 1);
-    let scale = Math.min(byW, byH);
-    if (zoom > 1.05) scale = Math.min(byW, byH) * zoom;
-    else if (pdfPrefs.fit === "width") scale = Math.min(byW, byH * 8);
-    if (zoom <= 1.05) scale = Math.min(scale, byW, byH);
-    scale = Math.max(0.2, Math.min(3, scale));
+    const zoom = Math.max(1, Math.min(2.8, pdfZoom || 1));
+    const wide = pdfPrefs.fit === "width" || zoom > 1.05;
+    let scale = wide ? (byW * zoom) : (Math.min(byW, byH) * zoom);
+    scale = Math.max(0.35, Math.min(4, scale));
     const vp = page.getViewport({ scale: scale * dpr });
-    const cssW = Math.min(maxW, Math.round(vp.width / dpr));
-    const cssH = Math.min(maxH, Math.round(vp.height / dpr));
     dest.width = vp.width;
     dest.height = vp.height;
+    const cssW = wide ? maxW : Math.min(maxW, Math.round(unscaled.width * Math.min(byW, byH) * zoom));
+    const cssH = Math.round(cssW * (unscaled.height / unscaled.width));
     dest.style.width = cssW + "px";
     dest.style.height = cssH + "px";
-    dest.style.maxWidth = maxW + "px";
-    dest.style.maxHeight = maxH + "px";
-    dest.style.transform = "translate(-50%, -50%)";
+    if (wide) {
+      dest.style.maxWidth = "100%";
+      dest.style.maxHeight = "none";
+      dest.style.position = "relative";
+      dest.style.left = "0";
+      dest.style.top = "0";
+      dest.style.transform = "none";
+    } else {
+      dest.style.maxWidth = maxW + "px";
+      dest.style.maxHeight = maxH + "px";
+      dest.style.position = "absolute";
+      dest.style.left = "50%";
+      dest.style.top = "50%";
+      dest.style.transform = "translate(-50%, -50%)";
+    }
     const ctx = dest.getContext("2d", { alpha: false });
     ctx.fillStyle = pdfPaper || themePaper();
     ctx.fillRect(0, 0, dest.width, dest.height);
@@ -1312,7 +1326,6 @@
     dropPdfWake();
     try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
     pdfRenderTask = null;
-    pdfZoom = 1;
     pdfTextCache = { page: 0, bookId: "", text: "" };
     if (pdfDoc) {
       try { pdfDoc.destroy(); } catch { /* ignore */ }
@@ -1391,7 +1404,7 @@
       const cur = B().byId(id);
       state.pdfPage = Math.min(Math.max(1, cur.current_page || 1), state.pdfPages || 1);
       if (cur && !cur.pages && state.pdfPages) B().update(id, { pages: state.pdfPages });
-      pdfZoom = 1;
+      pdfZoom = Math.max(1, Math.min(2.8, Number(pdfPrefs.zoom) || 1));
       state.pdfBusy = false;
       render();
       armPdfResize();
@@ -4713,7 +4726,7 @@
     const pages = Math.max(1, state.pdfPages || b.pages || 1);
     const pct = Math.max(2, 100 * (state.pdfPage || 1) / pages);
     return `
-      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""}${pdfPrefs.fit === "width" ? " fit-width" : ""}">
+      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""} ${pdfPrefs.fit === "width" ? "fit-width" : "fit-page"}">
         <div class="pdf-progress"><i style="width:${pct}%"></i></div>
         <div class="pdf-chrome pdf-top">
           <button class="icon-btn" data-act="close-reader" title="Close">${chev()}</button>
@@ -4734,6 +4747,8 @@
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
             <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
+            <button class="txt-btn" data-act="pdf-smaller" title="Smaller type">A−</button>
+            <button class="txt-btn" data-act="pdf-bigger" title="Larger type">A+</button>
           </div>
           <div class="pdf-tools">
             <button class="btn ghost" data-act="pdf-prev">Prev</button>
@@ -5289,8 +5304,10 @@
         pinching = true;
         pinchStart = dist() || 1;
         pinchZoom = pdfZoom;
+        try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      } else if (pdfPrefs.fit === "page" && pdfZoom <= 1.05) {
+        try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       }
-      try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     });
     wrap.addEventListener("pointermove", (e) => {
       if (!pointers.has(e.pointerId)) return;
@@ -5300,7 +5317,12 @@
         if (d && pinchStart) {
           const live = Math.max(1, Math.min(2.8, pinchZoom * (d / pinchStart)));
           const canvas = wrap.querySelector("canvas.show") || document.getElementById("pdf-canvas");
-          if (canvas) canvas.style.transform = "translate(-50%, -50%) scale(" + (live / Math.max(1, pdfZoom)) + ")";
+          if (canvas) {
+            const k = live / Math.max(1, pdfZoom);
+            const page = pdfPrefs.fit === "page" && pdfZoom <= 1.05;
+            canvas.style.transform = page ? ("translate(-50%, -50%) scale(" + k + ")") : ("scale(" + k + ")");
+            canvas.style.transformOrigin = page ? "center center" : "top center";
+          }
         }
         moved = true;
         return;
@@ -5320,8 +5342,13 @@
           canvas.style.transform = "translate(-50%, -50%)";
         }
         pdfZoom = Math.max(1, Math.min(2.8, live));
+        savePdfPrefs();
         const root = app.querySelector(".reader");
-        if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
+        if (root) {
+          root.classList.toggle("zoomed", pdfZoom > 1.05);
+          root.classList.toggle("fit-width", pdfPrefs.fit === "width" || pdfZoom > 1.05);
+          root.classList.toggle("fit-page", pdfPrefs.fit === "page" && pdfZoom <= 1.05);
+        }
         paintPdf();
         return;
       }
@@ -5331,9 +5358,14 @@
         const now = Date.now();
         if (now - lastTap < 280) {
           lastTap = 0;
-          pdfZoom = pdfZoom > 1.2 ? 1 : 1.8;
+          pdfZoom = pdfZoom > 1.2 ? 1 : 1.6;
+          savePdfPrefs();
           const root = app.querySelector(".reader");
-          if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
+          if (root) {
+            root.classList.toggle("zoomed", pdfZoom > 1.05);
+            root.classList.toggle("fit-width", pdfPrefs.fit === "width" || pdfZoom > 1.05);
+            root.classList.toggle("fit-page", pdfPrefs.fit === "page" && pdfZoom <= 1.05);
+          }
           paintPdf();
           return;
         }
@@ -6266,15 +6298,41 @@
       setPdfChrome(true);
     } else if (act === "pdf-fit") {
       pdfPrefs.fit = pdfPrefs.fit === "width" ? "page" : "width";
-      savePdfPrefs();
       pdfZoom = 1;
+      savePdfPrefs();
       const root = app.querySelector(".reader");
       if (root) {
         root.classList.remove("zoomed");
         root.classList.toggle("fit-width", pdfPrefs.fit === "width");
+        root.classList.toggle("fit-page", pdfPrefs.fit === "page");
         const lab = root.querySelector("[data-act='pdf-fit']");
         if (lab) lab.textContent = pdfPrefs.fit === "width" ? "Width" : "Page";
       }
+      paintPdf();
+      setPdfChrome(true);
+    } else if (act === "pdf-bigger") {
+      if (pdfPrefs.fit !== "width") {
+        pdfPrefs.fit = "width";
+        pdfZoom = 1.2;
+      } else {
+        pdfZoom = Math.min(2.8, Math.round((pdfZoom + 0.2) * 10) / 10);
+      }
+      savePdfPrefs();
+      const root = app.querySelector(".reader");
+      if (root) {
+        root.classList.toggle("zoomed", pdfZoom > 1.05);
+        root.classList.add("fit-width");
+        root.classList.remove("fit-page");
+        const lab = root.querySelector("[data-act='pdf-fit']");
+        if (lab) lab.textContent = "Width";
+      }
+      paintPdf();
+      setPdfChrome(true);
+    } else if (act === "pdf-smaller") {
+      pdfZoom = Math.max(1, Math.round((pdfZoom - 0.2) * 10) / 10);
+      savePdfPrefs();
+      const root = app.querySelector(".reader");
+      if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
       paintPdf();
       setPdfChrome(true);
     } else if (act === "reading-done") {
