@@ -689,6 +689,33 @@ img { max-width: 100%; display: block; }
   padding: 12px 0 calc(16px + var(--safe-b));
   background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
+.sit-rate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 0;
+}
+.sit-rate button {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-size: 18px; font-weight: 800; color: inherit;
+}
+.sit-rate b {
+  min-width: 44px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.reader .sit-rate { margin: 0; gap: 6px; }
+.reader .sit-rate button {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,.1);
+  border: 0;
+  color: #f4f1ea;
+}
+.reader .sit-rate b { color: #f4f1ea; font-size: 12px; min-width: 36px; }
 
 /* ---------- PLAYER ---------- */
 .player { min-height: 100%; display: flex; flex-direction: column; }

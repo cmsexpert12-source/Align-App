@@ -1262,10 +1262,41 @@
   let sitUtter = null;
   let sitQueue = [];
   let sitIdx = 0;
-  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1 };
+  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1, hold: false };
+  try {
+    const savedRate = Number(localStorage.getItem("align-sit-rate"));
+    if (Number.isFinite(savedRate)) sitVoice.rate = Math.max(0.8, Math.min(2, savedRate));
+  } catch { /* default */ }
   const sitLabel = (kind) => {
     if (sitVoice.kind !== kind || !sitVoice.on) return "Listen";
     return sitVoice.paused ? "Resume" : "Pause";
+  };
+  const sitFmtRate = () => {
+    const n = Math.max(0.8, Math.min(2, Number(sitVoice.rate) || 1.1));
+    return (Math.round(n * 10) / 10).toFixed(1).replace(/0$/, "").replace(/\.$/, "") + "×";
+  };
+  const paintSitRate = () => {
+    app.querySelectorAll("[data-sit-rate]").forEach((el) => { el.textContent = sitFmtRate(); });
+  };
+  const sitRateHtml = () => `<div class="sit-rate">
+    <button type="button" data-act="sit-slower" title="Slower">−</button>
+    <b data-sit-rate>${sitFmtRate()}</b>
+    <button type="button" data-act="sit-faster" title="Faster">+</button>
+  </div>`;
+  const sitSetRate = (next) => {
+    sitVoice.rate = Math.max(0.8, Math.min(2, Math.round(Number(next) * 10) / 10));
+    try { localStorage.setItem("align-sit-rate", String(sitVoice.rate)); } catch { /* ignore */ }
+    paintSitRate();
+    if (sitVoice.on && !sitVoice.paused) {
+      sitVoice.hold = true;
+      try { speechSynthesis.cancel(); } catch { /* ignore */ }
+      setTimeout(() => {
+        if (sitVoice.hold && sitVoice.on && !sitVoice.paused) {
+          sitVoice.hold = false;
+          sitPump();
+        }
+      }, 180);
+    }
   };
   const sitStop = (keep) => {
     sitQueue = [];
@@ -1391,11 +1422,21 @@
     u.rate = sitVoice.rate;
     u.pitch = 1;
     u.onend = () => {
+      if (sitVoice.hold) {
+        sitVoice.hold = false;
+        if (sitVoice.on && !sitVoice.paused) sitPump();
+        return;
+      }
       if (!sitVoice.on || sitVoice.paused) return;
       sitIdx += 1;
       sitPump();
     };
     u.onerror = () => {
+      if (sitVoice.hold) {
+        sitVoice.hold = false;
+        if (sitVoice.on && !sitVoice.paused) sitPump();
+        return;
+      }
       sitVoice.on = false;
       sitVoice.paused = false;
       paintSitListen();
@@ -4610,6 +4651,7 @@
         </div>
         <div class="sticky-cta">
           <button type="button" class="btn ghost" data-act="sit-listen" data-kind="bible">${escapeHtml(sitLabel("bible"))}</button>
+          ${sitRateHtml()}
           <button class="btn" style="margin-top:8px" data-act="bible-done">${escapeHtml(bibleCta)}</button>
         </div>
       </div>
@@ -4990,8 +5032,9 @@
         </div>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
-          <div style="display:flex;gap:8px;justify-content:flex-end">
+          <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
             <button class="txt-btn" data-act="sit-listen" data-kind="pdf" title="Listen">${escapeHtml(sitLabel("pdf"))}</button>
+            ${sitRateHtml()}
             <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
             <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
             <button class="txt-btn" data-act="pdf-smaller" title="Smaller type">A−</button>
@@ -6666,6 +6709,10 @@
       if (state.view === "sound") render(); else paintNow();
     } else if (act === "sit-listen") {
       sitToggle((el && el.dataset.kind) || (state.view === "reader" ? "pdf" : "bible"));
+    } else if (act === "sit-slower") {
+      sitSetRate((Number(sitVoice.rate) || 1.1) - 0.1);
+    } else if (act === "sit-faster") {
+      sitSetRate((Number(sitVoice.rate) || 1.1) + 0.1);
     } else if (act === "sound-station") {
       sitStop();
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);
