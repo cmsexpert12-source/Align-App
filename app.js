@@ -4939,11 +4939,14 @@
       ? ("p. " + (b.current_page || 1) + " of " + b.pages)
       : "Title on this account";
     return `
-      <button class="book-card" data-act="open-book-meta" data-id="${escapeAttr(b.id)}">
-        <h3>${escapeHtml(b.title || "Untitled")}</h3>
-        <p>${escapeHtml(page)}${due ? " · due today" : ""}</p>
-        <div class="book-prog"><i style="width:${pct}%"></i></div>
-      </button>`;
+      <div class="book-card">
+        <button type="button" class="book-open" data-act="open-book" data-id="${escapeAttr(b.id)}">
+          <h3>${escapeHtml(b.title || "Untitled")}</h3>
+          <p>${escapeHtml(page)}${due ? " · due today" : ""}</p>
+          <div class="book-prog"><i style="width:${pct}%"></i></div>
+        </button>
+        <button type="button" class="book-sched" data-act="open-book-meta" data-id="${escapeAttr(b.id)}">Schedule</button>
+      </div>`;
   };
 
   const viewLibrary = () => {
@@ -4999,7 +5002,7 @@
       <div class="screen full has-cta">
         <div class="back-row"><button class="icon-btn" data-go="library">${chev()}</button></div>
         <div class="page-title">
-          <div class="tag">${B().fmtSize(b.bytes) ? B().fmtSize(b.bytes) + " · " : ""}${b.pages ? b.pages + " pages" : "On this account"}</div>
+          <div class="tag">${state.bookFresh ? "New on the shelf" : "Schedule"}${B().fmtSize(b.bytes) ? " · " + B().fmtSize(b.bytes) : ""}${b.pages ? " · " + b.pages + " pages" : ""}</div>
           <h1>${escapeHtml(b.title)}</h1>
         </div>
         <div class="scroll-body" style="padding:0 16px 20px">
@@ -5523,6 +5526,7 @@
         const book = await B().addFromFile(file);
         const cloud = await syncBook(book);
         state.bookId = book.id;
+        state.bookFresh = true;
         state.view = "book";
         toast(state.session
           ? (cloud && cloud.ok !== false ? "Saved on this phone and your account" : "Saved on this phone. Cloud can retry when you’re online.")
@@ -6597,9 +6601,11 @@
       pullBooksCloud().then(() => { if (state.view === "library") render(); }).catch(() => {});
     } else if (act === "open-book-meta") {
       state.bookId = el.dataset.id;
+      state.bookFresh = false;
       state.view = "book";
       render();
     } else if (act === "open-book") {
+      state.bookFresh = false;
       openReader(el.dataset.id || state.bookId);
     } else if (act === "close-reader") {
       const id = state.bookId;
