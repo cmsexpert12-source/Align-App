@@ -842,6 +842,12 @@
   let pdfRenderTask = null;
   let pdfPaintGen = 0;
   let pdfZoom = 1;
+  let pdfReflow = false;
+  let pdfType = 20;
+  try {
+    const savedType = Number(localStorage.getItem("align-pdf-type"));
+    if (Number.isFinite(savedType)) pdfType = Math.max(16, Math.min(34, savedType));
+  } catch { /* default */ }
   let pdfWake = null;
   let pdfChromeTimer = 0;
   let pdfResizeOn = false;
@@ -1258,6 +1264,57 @@
       return pdfTextCache.text || "";
     }
   };
+  const pdfTypePx = () => Math.max(16, Math.min(34, Number(pdfType) || 20));
+  const pdfReflowHtml = (cache) => {
+    const marks = (cache && cache.marks) || [];
+    if (!marks.length) {
+      const t = String((cache && cache.text) || "").trim();
+      return t ? `<p>${escapeHtml(t)}</p>` : "";
+    }
+    const sorted = marks.slice().sort((a, b) => (b.y - a.y) || (a.x - b.x));
+    const lines = [];
+    sorted.forEach((m) => {
+      const last = lines[lines.length - 1];
+      const piece = String(m.str || "").trim();
+      if (!piece) return;
+      if (last && Math.abs(last.y - m.y) < 6) last.str += (/[-\u2010\u2011]$/.test(last.str) ? "" : " ") + piece;
+      else lines.push({ str: piece, y: m.y });
+    });
+    const paras = [];
+    let buf = "";
+    let prevY = null;
+    lines.forEach((ln) => {
+      const gap = prevY == null ? 0 : (prevY - ln.y);
+      prevY = ln.y;
+      if (buf && gap > 16) {
+        paras.push(buf);
+        buf = ln.str;
+      } else buf = buf ? buf + " " + ln.str : ln.str;
+    });
+    if (buf) paras.push(buf);
+    return paras.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+  };
+  const paintPdfReflow = async () => {
+    const el = document.getElementById("pdf-reflow");
+    if (!el || !pdfReflow) return;
+    await grabPdfText(state.pdfPage);
+    const html = pdfReflowHtml(pdfTextCache);
+    if (!html) {
+      pdfReflow = false;
+      el.hidden = true;
+      el.innerHTML = "";
+      const root = app.querySelector(".reader");
+      if (root) root.classList.remove("reflow");
+      toast("This page has no text to resize.");
+      return;
+    }
+    el.innerHTML = html;
+    el.style.fontSize = pdfTypePx() + "px";
+    el.hidden = false;
+    el.scrollTop = 0;
+    const root = app.querySelector(".reader");
+    if (root) root.classList.add("reflow");
+  };
 
   let sitUtter = null;
   let sitQueue = [];
@@ -1579,16 +1636,18 @@
     const unscaled = page.getViewport({ scale: 1 });
     const byW = maxW / unscaled.width;
     const byH = maxH / unscaled.height;
-    const zoom = Math.max(1, Math.min(2.8, pdfZoom || 1));
-    const wide = pdfPrefs.fit === "width" || zoom > 1.05;
-    let scale = wide ? (byW * zoom) : (Math.min(byW, byH) * zoom);
+    const wide = pdfPrefs.fit === "width" || pdfReflow;
+    let scale = wide ? byW : Math.min(byW, byH);
     scale = Math.max(0.35, Math.min(4, scale));
     const vp = page.getViewport({ scale: scale * dpr });
     dest.width = vp.width;
     dest.height = vp.height;
-    const cssW = wide ? maxW : Math.min(maxW, Math.round(unscaled.width * Math.min(byW, byH) * zoom));
+    let cssW = wide ? maxW : Math.min(maxW, Math.round(unscaled.width * Math.min(byW, byH)));
+    cssW = Math.max(1, Math.min(maxW, cssW));
     const cssH = Math.round(cssW * (unscaled.height / unscaled.width));
     dest.style.width = cssW + "px";
+    dest.style.maxWidth = "100%";
+    dest.style.minWidth = "0";
     dest.style.height = cssH + "px";
     if (wide) {
       dest.style.maxWidth = "100%";
@@ -1620,7 +1679,7 @@
     dest.classList.add("show");
     if (shown !== dest) shown.classList.remove("show");
     updatePdfChrome();
-    grabPdfText(state.pdfPage).catch(() => {});
+    grabPdfText(state.pdfPage).then(() => { if (pdfReflow) return paintPdfReflow(); }).catch(() => {});
   };
   const goPdfPage = (n) => {
     if (!pdfDoc) return;
@@ -1647,6 +1706,7 @@
     try { if (pdfRenderTask) pdfRenderTask.cancel(); } catch { /* ignore */ }
     pdfRenderTask = null;
     pdfTextCache = { page: 0, bookId: "", text: "" };
+    pdfReflow = false;
     if (pdfDoc) {
       try { pdfDoc.destroy(); } catch { /* ignore */ }
       pdfDoc = null;
@@ -1702,6 +1762,7 @@
     state.pdfErr = "";
     state.pdfPage = 1;
     state.pdfPages = 0;
+    pdfReflow = false;
     state.view = "reader";
     closePdf();
     render();
@@ -5058,7 +5119,7 @@
     const pages = Math.max(1, state.pdfPages || b.pages || 1);
     const pct = Math.max(2, 100 * (state.pdfPage || 1) / pages);
     return `
-      <div class="screen full has-cta reader theme-${theme}${pdfZoom > 1.05 ? " zoomed" : ""} ${pdfPrefs.fit === "width" ? "fit-width" : "fit-page"}">
+      <div class="screen full has-cta reader theme-${theme}${pdfReflow ? " reflow" : ""}${pdfZoom > 1.05 ? " zoomed" : ""} ${pdfPrefs.fit === "width" ? "fit-width" : "fit-page"}">
         <div class="pdf-progress"><i style="width:${pct}%"></i></div>
         <div class="pdf-chrome pdf-top">
           <button class="icon-btn" data-act="close-reader" title="Close">${chev()}</button>
@@ -5073,6 +5134,7 @@
           ${state.pdfErr ? `<div class="pdf-err err">${escapeHtml(state.pdfErr)}</div>` : ""}
           <canvas id="pdf-canvas" class="show"></canvas>
           <canvas id="pdf-canvas-b"></canvas>
+          <article id="pdf-reflow" class="pdf-reflow" hidden></article>
         </div>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
@@ -6649,29 +6711,37 @@
       paintPdf();
       setPdfChrome(true);
     } else if (act === "pdf-bigger") {
-      if (pdfPrefs.fit !== "width") {
-        pdfPrefs.fit = "width";
-        pdfZoom = 1.2;
-      } else {
-        pdfZoom = Math.min(2.8, Math.round((pdfZoom + 0.2) * 10) / 10);
-      }
-      savePdfPrefs();
+      if (pdfReflow) pdfType = Math.min(34, pdfTypePx() + 2);
+      pdfReflow = true;
+      try { localStorage.setItem("align-pdf-type", String(pdfType)); } catch { /* ignore */ }
       const root = app.querySelector(".reader");
-      if (root) {
-        root.classList.toggle("zoomed", pdfZoom > 1.05);
-        root.classList.add("fit-width");
-        root.classList.remove("fit-page");
-        const lab = root.querySelector("[data-act='pdf-fit']");
-        if (lab) lab.textContent = "Width";
+      if (root) root.classList.add("reflow");
+      const box = document.getElementById("pdf-reflow");
+      if (box) {
+        box.hidden = false;
+        box.style.fontSize = pdfTypePx() + "px";
       }
-      paintPdf();
+      paintPdfReflow();
       setPdfChrome(true);
     } else if (act === "pdf-smaller") {
-      pdfZoom = Math.max(1, Math.round((pdfZoom - 0.2) * 10) / 10);
-      savePdfPrefs();
-      const root = app.querySelector(".reader");
-      if (root) root.classList.toggle("zoomed", pdfZoom > 1.05);
-      paintPdf();
+      if (!pdfReflow) {
+        setPdfChrome(true);
+        return;
+      }
+      const next = pdfTypePx() - 2;
+      if (next < 16) {
+        pdfReflow = false;
+        const root = app.querySelector(".reader");
+        if (root) root.classList.remove("reflow");
+        const box = document.getElementById("pdf-reflow");
+        if (box) { box.hidden = true; box.innerHTML = ""; }
+        setPdfChrome(true);
+        return;
+      }
+      pdfType = next;
+      try { localStorage.setItem("align-pdf-type", String(pdfType)); } catch { /* ignore */ }
+      const box = document.getElementById("pdf-reflow");
+      if (box) box.style.fontSize = pdfTypePx() + "px";
       setPdfChrome(true);
     } else if (act === "reading-done") {
       const b = B().byId(state.bookId);

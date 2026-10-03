@@ -1495,6 +1495,7 @@ img { max-width: 100%; display: block; }
   display: block;
   overflow: hidden;
   height: 100%;
+  max-width: 100%;
   background: #f3ead7;
 }
 .reader.theme-paper,
@@ -1530,13 +1531,41 @@ img { max-width: 100%; display: block; }
   transform: none;
   display: block;
   margin: 0 auto;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
+  height: auto;
   max-height: none;
   opacity: 0;
   pointer-events: none;
   box-shadow: none;
   background: transparent;
+  box-sizing: border-box;
 }
+.reader .pdf-reflow {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 72px 22px 168px;
+  box-sizing: border-box;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 20px;
+  line-height: 1.5;
+  color: #1c140c;
+  background: #f6f1e4;
+}
+.reader.reflow .pdf-reflow { display: block; }
+.reader.reflow .pdf-wrap canvas { visibility: hidden; }
+.reader.theme-night .pdf-reflow { background: #0b0c10; color: #f4f1ea; }
+.reader.theme-sepia .pdf-reflow { background: #e8d5b0; color: #2a2010; }
+.reader .pdf-reflow p { margin: 0 0 0.9em; max-width: 100%; }
 .reader.fit-page .pdf-wrap canvas {
   position: absolute;
   left: 50%; top: 50%;
