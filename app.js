@@ -295,32 +295,53 @@
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       return { ok: false, error: "This browser does not support push." };
     }
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") return { ok: false, error: "Notifications were blocked." };
-    const reg = await navigator.serviceWorker.ready;
-    const key = (window.ALIGN_CONFIG && window.ALIGN_CONFIG.vapidPublicKey) || "";
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key)
-      });
+    if (isIos() && !isStandalone()) {
+      return { ok: false, error: "On iPhone, add ALIGN to the Home Screen first. Then turn reminders on." };
     }
-    if (window.AlignDB && AlignDB.configured() && state.session) {
-      const savedSub = await AlignDB.savePushSub(sub);
-      if (!savedSub.ok) return { ok: false, error: savedSub.error };
-    }
-    state.pushReady = true;
-    state.prefs.enabled = true;
-    state.prefs.timezone = phoneTz();
     try {
-      const clk = L().clocksFor(new Date());
-      state.prefs.hour = clk.wakeH;
-      state.prefs.minute = clk.wakeM || 0;
-    } catch { /* hours optional */ }
-    await AlignDB.savePrefs(state.prefs);
-    armLocalAlarms();
-    return { ok: true };
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return { ok: false, error: "Notifications were blocked." };
+      const reg = await navigator.serviceWorker.ready;
+      const key = (window.ALIGN_CONFIG && window.ALIGN_CONFIG.vapidPublicKey) || "";
+      if (!key) return { ok: false, error: "Push key missing." };
+      const want = urlBase64ToUint8Array(key);
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && sub.options && sub.options.applicationServerKey) {
+        const have = new Uint8Array(sub.options.applicationServerKey);
+        const same = have.length === want.length && have.every((b, i) => b === want[i]);
+        if (!same) {
+          try { await sub.unsubscribe(); } catch { /* ok */ }
+          sub = null;
+        }
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: want
+        });
+      }
+      if (window.AlignDB && AlignDB.configured() && state.session) {
+        const savedSub = await AlignDB.savePushSub(sub);
+        if (!savedSub.ok) return { ok: false, error: savedSub.error };
+      }
+      state.pushReady = true;
+      state.prefs.enabled = true;
+      state.prefs.timezone = phoneTz();
+      try {
+        const clk = L().clocksFor(new Date());
+        state.prefs.hour = clk.wakeH;
+        state.prefs.minute = clk.wakeM || 0;
+      } catch { /* hours optional */ }
+      await AlignDB.savePrefs(state.prefs);
+      armLocalAlarms();
+      return { ok: true };
+    } catch (e) {
+      const msg = String((e && e.message) || e || "");
+      if (isIos() && !isStandalone()) {
+        return { ok: false, error: "On iPhone, add ALIGN to the Home Screen first. Then turn reminders on." };
+      }
+      return { ok: false, error: /denied|blocked/i.test(msg) ? "Notifications were blocked." : "Could not subscribe on this phone." };
+    }
   };
 
   const refreshPushSub = async () => {
@@ -358,10 +379,6 @@
   };
 
   const sendTestPush = async () => {
-    const Life = L();
-    const note = Life.preWakeNote ? Life.preWakeNote(today().date) : Life.wakeNote(today().date);
-    const title = note.title;
-    const body = note.body;
     if (state.session && AlignDB.configured()) {
       try {
         const sb = AlignDB.client && AlignDB.client();
@@ -376,21 +393,18 @@
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
             body: JSON.stringify({ mode: "test" })
           });
-          if (vercel.ok) {
-            const j = await vercel.json().catch(() => ({}));
-            if (j && j.sent > 0) return { ok: true, via: "vercel" };
-          }
-          const url = AlignDB.readCfg().url.replace(/\/$/, "") + "/functions/v1/send-push";
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
-            body: JSON.stringify({ mode: "test" })
-          });
-          if (res.ok) return { ok: true, via: "edge" };
+          const j = await vercel.json().catch(() => ({}));
+          if (j && j.sent > 0) return { ok: true, via: "push" };
+          if (j && j.error) return { ok: false, error: j.error };
+          if (!vercel.ok) return { ok: false, error: (j && j.error) || "Sender did not answer." };
+        } else {
+          return { ok: false, error: "Sign in so reminders still arrive when ALIGN is closed." };
         }
-      } catch { /* fall through to local */ }
+      } catch {
+        return { ok: false, error: "Could not reach the sender." };
+      }
     }
-    await localNotify(title, body, "align-test");
+    await localNotify("ALIGN ·", "Five minutes.", "align-test");
     return { ok: true, via: "local" };
   };
 
@@ -3613,6 +3627,7 @@
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
+          ${state.prefs.enabled ? `<button class="setting" data-act="test-push"><div class="grow"><h4>Send one now</h4><p>You should see ALIGN · / Five minutes. If this phone is quiet, the morning ones will be too.</p></div></button>` : ""}
 
           <div class="set-label">Together</div>
           <button class="setting" data-go="circle">
@@ -6449,7 +6464,13 @@
         state.prefs.minute = clk.wakeM || 0;
         const res = await enablePush();
         if (!res.ok) toast(res.error);
-        else toast(state.session ? "Reminders on · 5 min before rise, 10 min before lights" : "On while ALIGN is open. Sign in so they still arrive when it is closed.");
+        else if (!state.session) toast("On while ALIGN is open. Sign in so they still arrive when it is closed.");
+        else {
+          const ping = await sendTestPush();
+          toast(ping.ok && ping.via === "push"
+            ? "Reminders on. You should see one now."
+            : (ping.error || "Reminders on this phone. Stay signed in from the Home Screen."));
+        }
       }
       render();
     } else if (act === "toggle-pass") {
@@ -6462,12 +6483,12 @@
       const p2 = document.getElementById("auth-pass");
       if (p2 && state.authPassword) p2.value = state.authPassword;
     } else if (act === "test-push") {
-      if (!window.Notification || Notification.permission !== "granted") {
+      if (!window.Notification || Notification.permission !== "granted" || !state.prefs.enabled) {
         const res = await enablePush();
         if (!res.ok) { toast(res.error); return; }
       }
-      await sendTestPush();
-      toast("Reminder sent");
+      const ping = await sendTestPush();
+      toast(ping.ok ? (ping.via === "local" ? "On this phone while ALIGN is open. Sign in from the Home Screen for closed-app reminders." : "Sent. Title ALIGN ·") : (ping.error || "Did not send."));
     } else if (act === "install-pwa") {
       if (!state.installPrompt) return;
       state.installPrompt.prompt();

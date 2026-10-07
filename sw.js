@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v168";
+const CACHE = "align-v169";
 const ASSETS = [
   "./",
   "./index.html",
@@ -81,7 +81,7 @@ self.addEventListener("sync", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  let payload = { title: "ALIGN", body: "Rise. The morning is a gift. Walk the path.", url: "./index.html" };
+  let payload = { title: "ALIGN ·", body: "Five minutes.", url: "./index.html" };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
   } catch {

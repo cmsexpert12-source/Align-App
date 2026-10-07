@@ -346,28 +346,24 @@ window.ALIGN_LIFE = (() => {
     const wakeAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.wakeH, clk.wakeM || 0, 0, 0);
     const preWake = new Date(wakeAt.getTime() - 5 * 60 * 1000);
     if (hit(preWake)) {
-      const n = preWakeNote(d);
-      return { kind: "wake", iso: isoOfDate(d), title: n.title, body: n.body };
+      return { kind: "wake", iso: isoOfDate(d), title: "ALIGN ·", body: "Five minutes." };
     }
     const tom = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
     const clkT = clocksFor(tom);
     const wakeT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.wakeH, clkT.wakeM || 0, 0, 0);
     const preWT = new Date(wakeT.getTime() - 5 * 60 * 1000);
     if (hit(preWT)) {
-      const n = preWakeNote(tom);
-      return { kind: "wake", iso: isoOfDate(tom), title: n.title, body: n.body };
+      return { kind: "wake", iso: isoOfDate(tom), title: "ALIGN ·", body: "Five minutes." };
     }
     const lightsAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.tonightH, clk.tonightM || 0, 0, 0);
     const preL = new Date(lightsAt.getTime() - 10 * 60 * 1000);
     if (hit(preL)) {
-      const n = lightsNote(d);
-      return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
+      return { kind: "lights", iso: isoOfDate(d), title: "ALIGN ·", body: "Ten minutes." };
     }
     const lightsT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.tonightH, clkT.tonightM || 0, 0, 0);
     const preLT = new Date(lightsT.getTime() - 10 * 60 * 1000);
     if (hit(preLT)) {
-      const n = lightsNote(tom);
-      return { kind: "lights", iso: isoOfDate(tom), title: n.title, body: n.body };
+      return { kind: "lights", iso: isoOfDate(tom), title: "ALIGN ·", body: "Ten minutes." };
     }
     return null;
   };

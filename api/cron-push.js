@@ -113,14 +113,11 @@ function pick(bank, iso) {
   return { title: pair[0], body: pair[1] };
 }
 
-function payloadFor(kind, morning) {
+function payloadFor(kind) {
   if (kind === "lights") {
-    const n = pick(LIGHTS_NOTES, morning);
-    return { title: n.title, body: n.body, tag: "align-lights", url: "./index.html" };
+    return { title: "ALIGN ·", body: "Ten minutes.", tag: "align-lights", url: "./index.html" };
   }
-  const n = pick(WAKE_NOTES, morning);
-  const body = /^Five minutes/i.test(n.body) ? n.body : "Five minutes. " + n.body;
-  return { title: n.title, body, tag: "align-wake", url: "./index.html" };
+  return { title: "ALIGN ·", body: "Five minutes.", tag: "align-wake", url: "./index.html" };
 }
 
 function todayInTz(tz) {
@@ -158,24 +155,53 @@ async function rest(path, { method = "GET", token, body } = {}) {
   return { ok: r.ok, status: r.status, json };
 }
 
+async function dropSubs(endpoints) {
+  for (const endpoint of endpoints || []) {
+    if (!endpoint) continue;
+    await rest("/rest/v1/push_subscriptions?endpoint=eq." + encodeURIComponent(endpoint), {
+      method: "DELETE",
+      token: SERVICE
+    });
+  }
+}
+
+async function unmark(userId, kind) {
+  if (!userId || !SERVICE) return;
+  const patch = kind === "lights" ? { last_lights_sent: null } : { last_wake_sent: null };
+  await rest("/rest/v1/notification_prefs?user_id=eq." + encodeURIComponent(userId), {
+    method: "PATCH",
+    token: SERVICE,
+    body: patch
+  });
+}
+
 async function sendAll(subs, payload) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
   const data = JSON.stringify(payload);
+  const opts = { TTL: 60 * 60, urgency: "high" };
   let sent = 0;
   let failed = 0;
+  const gone = [];
+  const errors = [];
   for (const s of subs || []) {
     if (!s || !s.endpoint || !s.p256dh || !s.auth) { failed++; continue; }
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        data
+        data,
+        opts
       );
       sent++;
-    } catch {
+    } catch (e) {
       failed++;
+      const code = e && (e.statusCode || e.status);
+      if (code === 404 || code === 410) gone.push(s.endpoint);
+      if (errors.length < 4) {
+        errors.push({ code: code || 0, msg: String((e && e.body) || (e && e.message) || "fail").slice(0, 160) });
+      }
     }
   }
-  return { sent, failed };
+  return { sent, failed, gone, errors };
 }
 
 export default async function handler(req, res) {
@@ -200,11 +226,22 @@ export default async function handler(req, res) {
     const uid = user.json.id;
     const subs = await rest("/rest/v1/push_subscriptions?select=endpoint,p256dh,auth&user_id=eq." + encodeURIComponent(uid), { token: jwt });
     if (!subs.ok) return send(res, 500, { error: "Could not read subscriptions" });
-    const morning = todayInTz("Africa/Lagos");
-    const payload = payloadFor("wake", morning);
+    const list = Array.isArray(subs.json) ? subs.json : [];
+    if (!list.length) {
+      return send(res, 200, { ok: false, sent: 0, n: 0, error: "No push subscription saved. Turn reminders on from the Home Screen." });
+    }
+    const payload = payloadFor("wake");
     payload.tag = "align-test";
-    const results = await sendAll(subs.json || [], payload);
-    return send(res, 200, { ok: true, ...results, title: payload.title });
+    const results = await sendAll(list, payload);
+    if (results.gone && results.gone.length) await dropSubs(results.gone);
+    return send(res, 200, {
+      ok: results.sent > 0,
+      sent: results.sent,
+      failed: results.failed,
+      n: list.length,
+      title: payload.title,
+      errors: results.errors
+    });
   }
 
   if (req.method !== "POST" && req.method !== "GET") return send(res, 405, { error: "GET or POST" });
@@ -232,14 +269,18 @@ export default async function handler(req, res) {
   let sent = 0;
   let failed = 0;
   const titles = [];
+  const errors = [];
   for (const row of rows) {
     const payload = payloadFor(row.kind, row.morning);
     titles.push(payload.title);
     const r = await sendAll([row], payload);
     sent += r.sent;
     failed += r.failed;
+    if (r.gone && r.gone.length) await dropSubs(r.gone);
+    if (r.sent === 0 && row.user_id) await unmark(row.user_id, row.kind);
+    if (r.errors && r.errors.length && errors.length < 6) errors.push(...r.errors);
   }
-  return send(res, 200, { ok: true, sent, failed, n: rows.length, titles: titles.slice(0, 4) });
+  return send(res, 200, { ok: true, sent, failed, n: rows.length, titles: titles.slice(0, 4), errors });
 }
 
 export const config = { maxDuration: 30 };

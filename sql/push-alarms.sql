@@ -96,34 +96,34 @@ begin
       s.last_wake_sent,
       s.last_lights_sent,
       case
-        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 12
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 20
           then 'wake'
         when s.pre_wake_tom < 0
           and s.local_mins >= (1440 + s.pre_wake_tom)
-          and s.local_mins < (1440 + s.pre_wake_tom + 12)
+          and s.local_mins < (1440 + s.pre_wake_tom + 20)
           then 'wake'
         when s.pre_lights >= 0
-          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 12
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 20
           then 'lights'
         when s.pre_lights_tom < 0
           and s.local_mins >= (1440 + s.pre_lights_tom)
-          and s.local_mins < (1440 + s.pre_lights_tom + 12)
+          and s.local_mins < (1440 + s.pre_lights_tom + 20)
           then 'lights'
         else null
       end as knd,
       case
-        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 12
+        when s.local_mins >= s.pre_wake and s.local_mins < s.pre_wake + 20
           then s.local_date
         when s.pre_wake_tom < 0
           and s.local_mins >= (1440 + s.pre_wake_tom)
-          and s.local_mins < (1440 + s.pre_wake_tom + 12)
+          and s.local_mins < (1440 + s.pre_wake_tom + 20)
           then s.next_date
         when s.pre_lights >= 0
-          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 12
+          and s.local_mins >= s.pre_lights and s.local_mins < s.pre_lights + 20
           then s.local_date
         when s.pre_lights_tom < 0
           and s.local_mins >= (1440 + s.pre_lights_tom)
-          and s.local_mins < (1440 + s.pre_lights_tom + 12)
+          and s.local_mins < (1440 + s.pre_lights_tom + 20)
           then s.next_date
         else s.local_date
       end as morn
@@ -179,3 +179,81 @@ revoke all on function public.align_due_push() from public, anon, authenticated;
 grant execute on function public.align_due_push() to service_role;
 
 grant execute on function public.align_safe_local(text) to anon, authenticated, service_role;
+
+-- Postgres must ping Vercel every 5 minutes. Enable pg_cron + pg_net in
+-- Dashboard → Database → Extensions if the notices below say they are missing.
+-- Then insert the same CRON_SECRET as Vercel (do not commit it):
+--   insert into public.align_cron_secret (id, secret)
+--   values (1, 'paste-vercel-CRON_SECRET')
+--   on conflict (id) do update set secret = excluded.secret, updated_at = now();
+
+do $ext$
+begin
+  begin
+    execute 'create extension if not exists pg_cron';
+  exception when others then
+    raise notice 'pg_cron: %', sqlerrm;
+  end;
+  begin
+    execute 'create extension if not exists pg_net';
+  exception when others then
+    raise notice 'pg_net: %', sqlerrm;
+  end;
+end
+$ext$;
+
+create table if not exists public.align_cron_secret (
+  id int primary key default 1 check (id = 1),
+  secret text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.align_cron_secret enable row level security;
+revoke all on table public.align_cron_secret from public, anon, authenticated;
+
+create or replace function public.align_fire_push()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s text;
+begin
+  select btrim(secret) into s from public.align_cron_secret where id = 1;
+  if s is null or s = '' or s = 'align-cron-v1-sqwwjrdd' then
+    return;
+  end if;
+  perform net.http_post(
+    url := 'https://align-app-brown.vercel.app/api/cron-push',
+    headers := jsonb_build_object('Content-Type','application/json','x-cron-secret', s),
+    body := '{"mode":"tick"}'::jsonb
+  );
+end;
+$$;
+
+revoke all on function public.align_fire_push() from public, anon, authenticated;
+
+do $cron$
+declare
+  j bigint;
+begin
+  begin
+    for j in select jobid from cron.job where jobname = 'align-push' loop
+      perform cron.unschedule(j);
+    end loop;
+  exception when undefined_table then
+    raise notice 'pg_cron is not enabled.';
+    return;
+  when others then
+    null;
+  end;
+
+  perform cron.schedule(
+    'align-push',
+    '*/5 * * * *',
+    $job$select public.align_fire_push();$job$
+  );
+exception when others then
+  raise notice 'ALIGN push cron not scheduled: %', sqlerrm;
+end
+$cron$;
