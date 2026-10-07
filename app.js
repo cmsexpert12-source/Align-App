@@ -12,7 +12,7 @@
     try { return JSON.parse(localStorage.getItem("align-v1")) || null; } catch { return null; }
   };
   const save = () => localStorage.setItem("align-v1", JSON.stringify({
-    profile: state.profile, history: state.history, onboardingDone: state.onboardingDone
+    profile: state.profile, history: state.history, onboardingDone: state.onboardingDone, walkDone: state.walkDone
   }));
 
   const localIso = (d) => {
@@ -41,9 +41,11 @@
   const state = {
     view: "splash",
     onboard: 0,
+    walk: 0,
     profile: saved?.profile || { name: "" },
     history: saved?.history || [],
     onboardingDone: !!saved?.onboardingDone,
+    walkDone: saved?.walkDone != null ? !!saved.walkDone : !!saved?.onboardingDone,
     selectedDay: null,
     workout: null,
     tick: null,
@@ -589,7 +591,7 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || snd.id));
-    return !live || ["splash", "onboard", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
+    return !live || ["splash", "onboard", "walk", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
   };
 
   const fmtSound = (sec) => {
@@ -727,7 +729,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -771,6 +773,15 @@
   };
 
   const L = () => window.ALIGN_LIFE;
+  const trainOn = () => {
+    try {
+      const r = L().loadRoutine() || {};
+      if (r.on && r.on.move === false) return false;
+      if (r.on && r.on.move === true) return true;
+    } catch { /* default off */ }
+    const em = String((state.session && state.session.user && state.session.user.email) || "").toLowerCase();
+    return em === "realoneade8@gmail.com";
+  };
   const B = () => window.ALIGN_BOOKS || {
     dueToday: () => [],
     loggedToday: () => false,
@@ -2491,9 +2502,9 @@
   };
 
   const nav = (active) => `
-    <nav class="nav">
+    <nav class="nav${trainOn() ? "" : " n4"}">
       <button data-go="home" class="${active==="home"?"on":""}">${iconNav.home}Today</button>
-      <button data-go="plan" class="${active==="plan"?"on":""}">${iconNav.move}Move</button>
+      ${trainOn() ? `<button data-go="plan" class="${active==="plan"?"on":""}">${iconNav.move}Move</button>` : ""}
       <button data-go="word" class="${active==="word"?"on":""}">${iconNav.word}Word</button>
       <button data-go="journal" class="${active==="journal"?"on":""}">${iconNav.journal}Journal</button>
       <button data-go="profile" class="${active==="profile"?"on":""}">${iconNav.you}You</button>
@@ -2535,9 +2546,8 @@
             <div class="field"><label>Sunday leave (church)</label><input id="ob-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
             <label class="check-row"><input id="ob-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
           </div>`;
-    const obRail = `<div class="path-rail ob-rail" style="--n:6">${[
-      ["Rise", "now"], ["Train", "wait"], ["Pray", "wait"],
-      ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
+    const obRail = `<div class="path-rail ob-rail" style="--n:5">${[
+      ["Rise", "now"], ["Pray", "wait"], ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
     ].map(([n, cls]) => `<div class="pr ${cls}"><span class="pr-dot"></span><span class="pr-n">${n}</span></div>`).join("")}</div>`;
     const youName = String(state.profile.name || "").trim();
     const bodies = [
@@ -2598,6 +2608,74 @@
         <div class="dots">${[0, 1, 2].map((i) => `<i class="${i === step ? "on" : ""}"></i>`).join("")}</div>
         <div class="onboard-body">${bodies[step]}</div>
         <button class="btn" data-act="next-onboard">${labels[step]}</button>
+      </div>
+    `;
+  };
+
+  const viewWalk = () => {
+    const step = Math.max(0, Math.min(4, Number(state.walk) || 0));
+    const bodies = [
+      `
+        <div class="kicker">Today</div>
+        <h1>One next step.<br>Then the next.</h1>
+        <p class="lead">You don’t pick from a menu. You do the thing that’s next. When it’s done, the next one opens.</p>
+        <div class="walk-shot">
+          <div class="tag">Up next</div>
+          <h3>I’m up</h3>
+          <p>Tap it when you stand. That’s the start of the morning.</p>
+        </div>
+      `,
+      `
+        <div class="kicker">The path</div>
+        <h1>A rail, not a pile.</h1>
+        <p class="lead">Done. Now. Later. You can reopen what you finished. You cannot skip ahead and tick the future.</p>
+        <div class="path-rail ob-rail" style="--n:5">${[
+          ["Rise", "done"], ["Pray", "now"], ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
+        ].map(([n, cls]) => `<div class="pr ${cls}"><span class="pr-dot"></span><span class="pr-n">${n}</span></div>`).join("")}</div>
+      `,
+      `
+        <div class="kicker">Word</div>
+        <h1>Stay with<br>the text.</h1>
+        <p class="lead">Devotion is in the app. Scripture is next. Listen if you want — the page follows the voice.</p>
+        <div class="walk-shot">
+          <div class="tag">Scripture</div>
+          <h3>Three chapters is the aim.</h3>
+          <p>Sunday can be one. Mark a chapter done, then it counts.</p>
+        </div>
+      `,
+      `
+        <div class="kicker">Notepad</div>
+        <h1>Write it.<br>Tick it.</h1>
+        <p class="lead">Journal is a notepad, not a feed. Week and month aims live there. They do not sit on Today.</p>
+        <div class="walk-shot">
+          <div class="tag">Off Today</div>
+          <h3>Your words stay yours.</h3>
+          <p>Circle never sees the notepad. Or the affirmation.</p>
+        </div>
+      `,
+      `
+        <div class="kicker">Together</div>
+        <h1>One other person.</h1>
+        <p class="lead">You start a circle. You get a join code. You approve who comes in. They see the path, not the private pages.</p>
+        <div class="walk-shot">
+          <div class="tag">Your path</div>
+          <h3>Train is later, if you want it.</h3>
+          <p>The morning is rise, Word, plan, begin. Add a session from Your path when you’re ready.</p>
+        </div>
+      `
+    ];
+    const labels = ["Continue", "Continue", "Continue", "Continue", "Go to Today"];
+    return `
+      <div class="onboard">
+        <div class="onboard-top">
+          ${step > 0
+            ? `<button type="button" class="skip" data-act="back-walk">Back</button>`
+            : `<div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>`}
+          <button class="skip" data-act="skip-walk">Skip</button>
+        </div>
+        <div class="dots">${[0, 1, 2, 3, 4].map((i) => `<i class="${i === step ? "on" : ""}"></i>`).join("")}</div>
+        <div class="onboard-body">${bodies[step]}</div>
+        <button class="btn" data-act="next-walk">${labels[step]}</button>
       </div>
     `;
   };
@@ -2976,12 +3054,12 @@
               const mo = monthPulse();
               return `<div class="pulse-stats">
               <div><b>${pulse.mornings}/${aim.mornings}</b><span>Mornings</span></div>
-              <div><b>${pulse.sessions}/${aim.sessions}</b><span>Sessions</span></div>
+              ${trainOn() ? `<div><b>${pulse.sessions}/${aim.sessions}</b><span>Sessions</span></div>` : ""}
               <div><b>${pulse.chapters}/${aim.chapters}</b><span>Chapters</span></div>
             </div>
             <div class="pulse-stats">
               <div><b>${mo.mornings}/${mo.aimMornings}</b><span>Month · path</span></div>
-              <div><b>${mo.sessions}/${mo.aimSessions}</b><span>Month · move</span></div>
+              ${trainOn() ? `<div><b>${mo.sessions}/${mo.aimSessions}</b><span>Month · move</span></div>` : ""}
               <div><b>${mo.chapters}/${mo.aimChapters}</b><span>Month · Word</span></div>
             </div>`;
             })()}
@@ -3190,6 +3268,20 @@
     const packs = (window.ALIGN_DATA && ALIGN_DATA.plans) || [];
     const week = weekDays();
     const rest = week.filter((d) => d.dow !== t.dow);
+    if (!trainOn()) {
+      return `
+      <div class="screen plan">
+        <div class="topbar"><div class="greet">Move<h2>Later.</h2></div>
+          <div class="topbar-actions">${soundLaunch()}</div>
+        </div>
+        <div class="next-hero">
+          <div class="tag">Not on the path</div>
+          <h3>Train is something you add.</h3>
+          <p>The morning is rise, Word, plan, begin. Add a session from Your path when you want it.</p>
+          <button type="button" class="btn" data-go="routine">Your path</button>
+        </div>
+      </div>`;
+    }
     return `
       <div class="screen plan">
         <div class="topbar"><div class="greet">Move<h2>Train today.</h2></div>
@@ -3653,7 +3745,7 @@
           <div class="hours-grid">
             <div class="field"><label>Mornings</label><input id="rt-aim-morn" type="number" min="1" max="7" inputmode="numeric" value="${r.aimMornings || 6}" /></div>
             <div class="field"><label>Chapters</label><input id="rt-aim-ch" type="number" min="1" max="84" inputmode="numeric" value="${r.aimChapters || 19}" /></div>
-            <div class="field"><label>Sessions</label><input id="rt-aim-sess" type="number" min="1" max="7" inputmode="numeric" value="${r.aimSessions || 6}" /></div>
+            ${r.on && r.on.move !== false ? `<div class="field"><label>Sessions</label><input id="rt-aim-sess" type="number" min="1" max="7" inputmode="numeric" value="${r.aimSessions || 6}" /></div>` : ""}
           </div>
           <div class="set-label">Tonight · fixed</div>
           <div class="routine-step pinned path-night">
@@ -3663,10 +3755,10 @@
             </div>
             <span class="path-lock">Stays</span>
           </div>
-          <div class="set-label">Train</div>
+          ${r.on && r.on.move !== false ? `<div class="set-label">Train</div>
           <div class="shelf-chips" style="padding:0 0 12px">
             ${packs.map((p) => `<button type="button" class="${p.id===r.trainPlan?"on":""}" data-act="train-plan" data-id="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
-          </div>
+          </div>` : ""}
         </div>
         <div class="sticky-cta"><button class="btn" data-act="save-routine">Save path</button></div>
       </div>
@@ -5279,6 +5371,7 @@
     const map = {
       splash: viewSplash,
       onboard: viewOnboard,
+      walk: viewWalk,
       home: viewHome,
       time: viewTime,
       plan: viewPlan,
@@ -6011,7 +6104,7 @@
       else {
         state.onboardingDone = true;
         save();
-        state.view = "home";
+        state.view = state.walkDone ? "home" : "walk";
         render();
       }
     } else if (act === "back-onboard") {
@@ -6021,6 +6114,20 @@
       render();
     } else if (act === "skip-onboard") {
       state.onboardingDone = true; save();
+      state.view = state.walkDone ? "home" : "walk";
+      render();
+    } else if (act === "next-walk") {
+      if (state.walk < 4) { state.walk++; render(); }
+      else {
+        state.walkDone = true;
+        save();
+        state.view = "home";
+        render();
+      }
+    } else if (act === "back-walk") {
+      if (state.walk > 0) { state.walk--; render(); }
+    } else if (act === "skip-walk") {
+      state.walkDone = true; save();
       state.view = "home";
       render();
     } else if (act === "start-today") {
@@ -7061,6 +7168,11 @@
       try { render(); } catch (err) { console.warn(err); }
       return;
     }
+    if (!state.walkDone) {
+      state.view = "walk";
+      try { render(); } catch (err) { console.warn(err); }
+      return;
+    }
     try {
       const iso = today().iso;
       const cur = currentStep();
@@ -7080,7 +7192,7 @@
   const boot = async () => {
     registerSW();
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
-      if (["splash", "onboard"].includes(state.view)) return;
+      if (["splash", "onboard", "walk"].includes(state.view)) return;
       try { paintNow(); } catch { /* keep UI */ }
     });
     window.addEventListener("online", () => {

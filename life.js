@@ -89,7 +89,7 @@ window.ALIGN_LIFE = (() => {
     leaveOn: true,
     chaptersWk: 3,
     chaptersSun: 1,
-    on: Object.fromEntries(STEP_IDS.map((id) => [id, true])),
+    on: Object.fromEntries(STEP_IDS.map((id) => [id, id !== "move"])),
     order: STEP_IDS.slice(),
     trainPlan: "energy",
     biblePlan: "cover",
@@ -124,7 +124,9 @@ window.ALIGN_LIFE = (() => {
     d.aimChapters = Math.max(1, Math.min(84, Number(raw.aimChapters) || derivedCh));
     STEP_IDS.forEach((id) => {
       const locked = id === "rise" || id === "go";
-      d.on[id] = locked ? true : !(raw.on && raw.on[id] === false);
+      if (locked) d.on[id] = true;
+      else if (raw.on && Object.prototype.hasOwnProperty.call(raw.on, id)) d.on[id] = raw.on[id] !== false;
+      else d.on[id] = id !== "move";
       d.min[id] = clampMin(raw.min && raw.min[id], d.min[id]);
       d.minSun[id] = clampMin(raw.minSun && raw.minSun[id], d.minSun[id]);
     });

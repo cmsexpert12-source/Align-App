@@ -245,6 +245,17 @@ img { max-width: 100%; display: block; }
   flex-shrink: 0;
   margin: 0 0 calc(16px + var(--safe-b));
 }
+.walk-shot {
+  margin-top: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: var(--highlight);
+}
+.walk-shot .tag { margin-bottom: 8px; }
+.walk-shot h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.walk-shot p { font-size: 14px; color: var(--muted); line-height: 1.45; }
 .onboard-path {
   margin: 22px 0 0;
   font-size: 13px;
@@ -860,6 +871,7 @@ img { max-width: 100%; display: block; }
   z-index: 20;
   pointer-events: auto;
 }
+.nav.n4 { grid-template-columns: repeat(4, 1fr); }
 .nav button {
   position: relative;
   isolation: isolate;
