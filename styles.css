@@ -1043,6 +1043,7 @@ img { max-width: 100%; display: block; }
     margin: 0;
     max-width: 220px;
   }
+  .app { pointer-events: auto; }
 }
 
 /* ---------- PRODUCT LAYER ---------- */
@@ -1058,6 +1059,14 @@ img { max-width: 100%; display: block; }
   0% { transform: scale(.92); opacity: .55; }
   70% { transform: scale(1.12); opacity: 0; }
   100% { opacity: 0; }
+}
+@keyframes pip-on {
+  from { transform: scale(.45); }
+  to { transform: scale(1); }
+}
+@keyframes now-lift {
+  from { transform: translateY(6px); opacity: .72; }
+  to { transform: none; opacity: 1; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes toast-in {
@@ -1259,7 +1268,8 @@ img { max-width: 100%; display: block; }
   background: var(--line-2);
   flex: none;
 }
-.pr.done .pr-dot { background: var(--lime); }
+.pr.done .pr-dot { background: var(--lime); animation: pip-on .28s ease both; }
+.pr.now { animation: now-lift .4s cubic-bezier(.2,.8,.2,1) both; }
 .pr.now .pr-dot {
   width: 10px;
   height: 10px;
@@ -1306,7 +1316,7 @@ img { max-width: 100%; display: block; }
   padding: 10px 12px; width: 100%; text-align: left; color: inherit;
   min-height: 0;
 }
-.path-step.now { border-color: color-mix(in srgb, var(--lime) 45%, transparent); background: color-mix(in srgb, var(--lime) 8%, var(--surface)); }
+.path-step.now { border-color: color-mix(in srgb, var(--lime) 45%, transparent); background: color-mix(in srgb, var(--lime) 8%, var(--surface)); animation: now-lift .4s cubic-bezier(.2,.8,.2,1) both; }
 .path-step.lock { opacity: .48; }
 .path-step.lock .path-ico { color: var(--faint); }
 .path:empty, .path-done:empty { display: none !important; }

@@ -1909,7 +1909,7 @@
       }
       completeStep("rise");
       const up = L().clockAt && L().clockAt(iso, "rise");
-      toast(up && up.label ? ("Good morning · " + up.label) : "Good morning.");
+      toast(up && up.label ? ("I’m up · " + up.label) : "I’m up.");
       goNext();
       return;
     }
@@ -2048,6 +2048,7 @@
       if (cur && cur.id !== id) toast(cur.title + " is next.");
       return L().morningOf(iso);
     }
+    try { navigator.vibrate && navigator.vibrate(id === "rise" || id === "lights" ? 24 : 14); } catch { /* no haptic */ }
     const steps = L().setStep(iso, id, true);
     let extra = 0;
     if (id === "pray") extra = (state.praySec || 0) * 1000;
@@ -3038,7 +3039,7 @@
         })()}
         ${planNow}
         ${wordToday}
-        <div class="home-week">
+        ${((!mStreak && !pulse.mornings && !pulse.chapters && !trainOn()) ? "" : `<div class="home-week">
           <div class="week-strip">${weekDots}</div>
           <div class="pulse">
             <div class="pulse-top">
@@ -3073,7 +3074,7 @@
               return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Pace</span></button>`;
             })()}
           </div>
-        </div>
+        </div>`)}
       </div>
     `;
   };
@@ -3825,7 +3826,7 @@
         ? (sched.length
           ? `<div class="circle-sec"><h4>Today <span>${schedDone} of ${schedTotal}</span></h4>
               <ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}"><span class="circle-mark">${it.done ? "✓" : ""}</span><span>${escapeHtml(it.text || "")}</span></li>`).join("")}</ul></div>`
-          : `<div class="circle-sec"><h4>Today</h4><p class="circle-empty">No schedule yet.</p></div>`)
+          : `<div class="circle-sec"><h4>Today</h4><p class="circle-empty">They haven’t written today’s three. That’s theirs.</p></div>`)
         : "";
       const mins = Math.round((Number(todayRow && todayRow.read_ms) || 0) / 60000);
       const timeLine = mins >= 60
@@ -3903,6 +3904,7 @@
     const body = !signed
       ? `<div class="room">
            <h3>Walk with someone.</h3>
+           <p class="circle-empty">One other person. They see the path, I’m up, Goodnight. Not the notepad.</p>
            <button class="btn" data-act="open-auth" data-tab="signup">Create account</button>
          </div>`
       : ((c && c.pending) || /cancel your request/i.test(state.circleErr || ""))
@@ -3913,6 +3915,7 @@
       : !c
         ? `<div class="room">
            ${showErr ? `<p class="hint" style="color:#ff8a7a">${escapeHtml(showErr)}</p>` : ""}
+           <p class="circle-empty">Start a circle. You get a join code. You approve who comes in.</p>
            <div class="field"><label>Join with a code</label>
              <input id="circle-code" maxlength="8" placeholder="ABC123" autocomplete="off" autocapitalize="characters" />
            </div>
@@ -4581,7 +4584,7 @@
         <div class="next-hero">
           <div class="tag">Notepad</div>
           <h3>The page is blank.</h3>
-          <p>A notepad — not the devotion. Write, format, tick a goal. + always starts a new page.</p>
+          <p>A notepad — not the devotion. Write, format, tick week and month aims. Circle never sees this.</p>
           <button type="button" class="btn" data-act="journal-new">Start writing</button>
         </div>`}
       </div>
@@ -5141,6 +5144,7 @@
         <div class="next-hero">
           <div class="tag">Books</div>
           <h3>Your shelf is empty.</h3>
+          <p>Titles even before the file is on this phone. Upload when you’re ready.</p>
           <button type="button" class="btn" data-act="pick-pdf">${state.uploadBusy ? "Saving…" : "Upload a PDF"}</button>
         </div>`}
       </div>
