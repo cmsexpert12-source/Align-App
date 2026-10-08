@@ -383,10 +383,15 @@
       try {
         const sb = AlignDB.client && AlignDB.client();
         let jwt = "";
-        if (sb) {
+        if (sb && sb.auth) {
           const { data: sess } = await sb.auth.getSession();
-          jwt = sess.session && sess.session.access_token;
+          jwt = sess && sess.session && sess.session.access_token;
+          if (!jwt) {
+            const { data: ref } = await sb.auth.refreshSession();
+            jwt = ref && ref.session && ref.session.access_token;
+          }
         }
+        if (!jwt && state.session && state.session.access_token) jwt = state.session.access_token;
         if (jwt) {
           const vercel = await fetch("/api/cron-push", {
             method: "POST",
@@ -3067,16 +3072,23 @@
               if (!(pulse.mornings || pulse.sessions || pulse.chapters)) return "";
               const aim = weekAims();
               const mo = monthPulse();
-              return `<div class="pulse-stats">
-              <div><b>${pulse.mornings}/${aim.mornings}</b><span>Mornings</span></div>
-              ${trainOn() ? `<div><b>${pulse.sessions}/${aim.sessions}</b><span>Sessions</span></div>` : ""}
-              <div><b>${pulse.chapters}/${aim.chapters}</b><span>Chapters</span></div>
+              const pct = (n, a) => {
+                const d = Number(a) || 0;
+                if (d <= 0) return 0;
+                return Math.max(0, Math.min(100, Math.round((Number(n) || 0) * 100 / d)));
+              };
+              const bar = (label, n, a) => `<div class="pulse-bar"><div class="pulse-bar-h"><span>${label}</span><b>${n}/${a}</b></div><div class="pulse-bar-track" aria-hidden="true"><i style="width:${pct(n, a)}%"></i></div></div>`;
+              const monthBits = [
+                mo.mornings + " of " + mo.aimMornings + " mornings",
+                trainOn() ? (mo.sessions + " of " + mo.aimSessions + " sessions") : "",
+                mo.chapters + " of " + mo.aimChapters + " chapters"
+              ].filter(Boolean);
+              return `<div class="pulse-bars">
+              ${bar("Path", pulse.mornings, aim.mornings)}
+              ${bar("Word", pulse.chapters, aim.chapters)}
+              ${trainOn() ? bar("Move", pulse.sessions, aim.sessions) : ""}
             </div>
-            <div class="pulse-stats">
-              <div><b>${mo.mornings}/${mo.aimMornings}</b><span>Month · path</span></div>
-              ${trainOn() ? `<div><b>${mo.sessions}/${mo.aimSessions}</b><span>Month · move</span></div>` : ""}
-              <div><b>${mo.chapters}/${mo.aimChapters}</b><span>Month · Word</span></div>
-            </div>`;
+            <button type="button" class="pulse-month" data-go="time">This month · ${escapeHtml(monthBits.join(" · "))}</button>`;
             })()}
             ${(() => {
               if (!morningDone(t.iso)) return "";

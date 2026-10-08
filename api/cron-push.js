@@ -137,10 +137,11 @@ function todayInTz(tz) {
 }
 
 async function rest(path, { method = "GET", token, body } = {}) {
-  const key = token || ANON;
+  const auth = token || ANON;
+  const apiKey = (SERVICE && token === SERVICE) ? SERVICE : (ANON || auth);
   const headers = {
-    apikey: key,
-    Authorization: "Bearer " + key,
+    apikey: apiKey,
+    Authorization: "Bearer " + auth,
     "Content-Type": "application/json",
     Accept: "application/json"
   };

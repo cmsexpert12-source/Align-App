@@ -2022,6 +2022,51 @@ img { max-width: 100%; display: block; }
 .pulse-stats div { text-align: left; }
 .pulse-stats b { display: block; font-size: 16px; font-weight: 800; }
 .pulse-stats span { font-size: 11px; color: var(--muted); }
+.pulse-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.pulse-bar-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.pulse-bar-h span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.pulse-bar-h b { font-size: 12px; font-weight: 800; letter-spacing: -.02em; }
+.pulse-bar-track {
+  height: 6px;
+  border-radius: 99px;
+  background: #1c1f28;
+  overflow: hidden;
+}
+.pulse-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--lime);
+  min-width: 0;
+}
+.pulse-month {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.4;
+  cursor: pointer;
+}
 .time-link {
   display: flex;
   justify-content: space-between;
