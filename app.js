@@ -621,7 +621,7 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || snd.id));
-    return !live || ["splash", "onboard", "walk", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
+    return !live || ["splash", "onboard", "walk", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "odb", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
   };
 
   const fmtSound = (sec) => {
@@ -759,7 +759,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "odb", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -4680,6 +4680,7 @@
             <cite>Our Daily Bread</cite>
             <q>${escapeHtml(odb.title)}</q>
             ${odb.excerpt ? `<p class="hint" style="margin:8px 0 0">${escapeHtml(clipText(odb.excerpt, 180))}</p>` : ""}
+            <button type="button" class="linkish" style="margin-top:10px" data-act="open-odb">Read</button>
           </div>` : ""}
           <div class="field"><label>What remained</label>
             <textarea class="note-box" id="devotion-note" placeholder="A sentence is enough.">${escapeHtml(j.devotion || "")}</textarea>
@@ -4692,6 +4693,30 @@
     `;
   };
 
+  const viewOdb = () => {
+    const odb = state.odb || {};
+    const body = odb.body || odb.excerpt || "";
+    return `
+      <div class="screen full">
+        <div class="back-row"><button class="icon-btn" data-go="devotion">${chev()}</button></div>
+        <div class="page-title">
+          <div class="tag">Our Daily Bread</div>
+          <h1>${escapeHtml(odb.title || "Today")}</h1>
+        </div>
+        <div class="scripture" style="padding-bottom:calc(28px + var(--safe-b))">
+          ${odb.author ? `<p class="hint">${escapeHtml(odb.author)}</p>` : ""}
+          ${odb.verse ? `<div class="devotion-verse">${escapeHtml(odb.verse)}</div>` : ""}
+          ${odb.passage ? `<p class="hint">${escapeHtml(odb.passage)}</p>` : ""}
+          <div class="devotion-body">${escapeHtml(body)}</div>
+          ${odb.insights ? `<p class="field-label" style="margin:18px 0 8px">Insight</p><div class="devotion-body">${escapeHtml(odb.insights)}</div>` : ""}
+          ${odb.prayer ? `<p class="field-label" style="margin:18px 0 8px">Pray</p><div class="devotion-body">${escapeHtml(odb.prayer)}</div>` : ""}
+          ${odb.reflect ? `<p class="field-label" style="margin:18px 0 8px">Reflect</p><div class="devotion-body">${escapeHtml(odb.reflect)}</div>` : ""}
+          ${odb.bibleYear ? `<p class="hint" style="margin-top:18px">Bible in a year · ${escapeHtml(odb.bibleYear)}</p>` : ""}
+          <p class="hint" style="margin-top:18px">Our Daily Bread Ministries</p>
+        </div>
+      </div>
+    `;
+  };
 
   const viewAffirm = () => {
     let custom = "";
@@ -5407,6 +5432,7 @@
       word: viewWord,
       pray: viewPray,
       devotion: viewDevotion,
+      odb: viewOdb,
       bible: viewBible,
       dayplan: viewDayPlan,
       getready: viewGetReady,
@@ -6625,6 +6651,15 @@
         kind: "journal-delete"
       };
       render();
+    } else if (act === "open-odb") {
+      const goRead = () => { state.view = "odb"; render(); };
+      if (state.odb && (state.odb.body || state.odb.excerpt)) goRead();
+      else if (L().fetchODB) {
+        L().fetchODB().then((row) => {
+          if (row && row.title) state.odb = row;
+          goRead();
+        }).catch(() => goRead());
+      } else goRead();
     } else if (act === "save-devotion") {
       const iso = today().iso;
       const j = L().journalOf(iso);

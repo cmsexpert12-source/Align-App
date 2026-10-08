@@ -1286,21 +1286,32 @@ window.ALIGN_LIFE = (() => {
     };
     const title = grab("title");
     if (!title) return null;
-    return { title, excerpt: grab("description"), url: grab("link") };
+    const excerpt = grab("description");
+    return { title, excerpt, body: excerpt, url: grab("link") };
   };
   const fetchODB = async () => {
     const iso = isoLocal();
     try {
       const cached = JSON.parse(localStorage.getItem(LS_ODB) || "null");
-      if (cached && cached.iso === iso && cached.title) return cached;
+      if (cached && cached.iso === iso && cached.title && cached.v === 2) return cached;
     } catch { /* ignore */ }
     const take = (row) => {
       if (!row || !row.title) return null;
+      const excerpt = String(row.excerpt || "").trim();
       const out = {
         title: String(row.title || "").trim(),
-        excerpt: String(row.excerpt || "").trim(),
+        excerpt,
+        body: String(row.body || excerpt).trim(),
         url: String(row.url || "").trim(),
-        iso
+        verse: String(row.verse || "").trim(),
+        passage: String(row.passage || "").trim(),
+        insights: String(row.insights || "").trim(),
+        prayer: String(row.prayer || "").trim(),
+        reflect: String(row.reflect || "").trim(),
+        bibleYear: String(row.bibleYear || "").trim(),
+        author: String(row.author || "").trim(),
+        iso,
+        v: 2
       };
       try { localStorage.setItem(LS_ODB, JSON.stringify(out)); } catch { /* quota */ }
       return out;
