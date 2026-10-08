@@ -3169,7 +3169,7 @@
               return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Pace</span></button>`;
             })()}
           </div>
-        </div>`)}}
+        </div>`)}
       </div>
     `;
   };
