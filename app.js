@@ -3638,7 +3638,6 @@
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>
-          ${state.prefs.enabled ? `<button class="setting" data-act="test-push"><div class="grow"><h4>Send one now</h4><p>You should see ALIGN · / Five minutes. If this phone is quiet, the morning ones will be too.</p></div></button>` : ""}
 
           <div class="set-label">Together</div>
           <button class="setting" data-go="circle">
@@ -6493,13 +6492,6 @@
       render();
       const p2 = document.getElementById("auth-pass");
       if (p2 && state.authPassword) p2.value = state.authPassword;
-    } else if (act === "test-push") {
-      if (!window.Notification || Notification.permission !== "granted" || !state.prefs.enabled) {
-        const res = await enablePush();
-        if (!res.ok) { toast(res.error); return; }
-      }
-      const ping = await sendTestPush();
-      toast(ping.ok ? (ping.via === "local" ? "On this phone while ALIGN is open. Sign in from the Home Screen for closed-app reminders." : "Sent. Title ALIGN ·") : (ping.error || "Did not send."));
     } else if (act === "install-pwa") {
       if (!state.installPrompt) return;
       state.installPrompt.prompt();

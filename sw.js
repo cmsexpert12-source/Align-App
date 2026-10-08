@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v173";
+const CACHE = "align-v174";
 const ASSETS = [
   "./",
   "./index.html",
