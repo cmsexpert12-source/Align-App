@@ -95,6 +95,7 @@
     drill: null,
     drillMode: "morning",
     affirmEdit: false,
+    affirmDraft: null,
     readPacks: [],
     planJustSaved: false,
     journalIso: "",
@@ -2011,6 +2012,7 @@
     }
     if (step === "affirm") {
       state.affirmEdit = false;
+      state.affirmDraft = null;
       state.view = "affirm";
       render();
       return;
@@ -2244,6 +2246,7 @@
 
   const goAffirm = () => {
     state.affirmEdit = false;
+    state.affirmDraft = null;
     state.view = "affirm";
     render();
   };
@@ -4715,6 +4718,7 @@
   const viewAffirm = () => {
     let custom = "";
     try { custom = (L().affirmationPref && L().affirmationPref()) || ""; } catch { custom = ""; }
+    if (state.affirmDraft != null) custom = state.affirmDraft;
     const editing = !custom || state.affirmEdit;
     return `
       <div class="screen full has-cta affirm">
@@ -5617,6 +5621,8 @@
       j.devotion = e.target.value;
       L().saveJournal(iso, j);
     });
+    const af = $("#affirm-text");
+    if (af) af.addEventListener("input", (e) => { state.affirmDraft = e.target.value; });
     const pnote = $("#plan-note");
     if (pnote) pnote.addEventListener("input", e => {
       const iso = today().iso;
@@ -7155,6 +7161,7 @@
       const row = L().saveAffirmationPref(box.value);
       if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
       state.affirmEdit = false;
+      state.affirmDraft = null;
       toast(state.session ? "Saved to your account" : "Saved on this device");
       render();
     } else if (act === "affirm-done") {
@@ -7164,6 +7171,7 @@
         if (AlignDB.saveAffirmation) AlignDB.saveAffirmation(row).catch(() => {});
       }
       state.affirmEdit = false;
+      state.affirmDraft = null;
       completeStep("affirm");
       sfx("done");
       toast("Amen.");
