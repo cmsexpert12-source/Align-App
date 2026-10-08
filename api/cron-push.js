@@ -9,13 +9,20 @@ const webpush = (webPushPkg && webPushPkg.sendNotification)
   : ((webPushPkg && webPushPkg.default) || webPushPkg);
 
 const cleanEnv = (s) => String(s || "").trim().replace(/^["']|["']$/g, "");
+const asMailto = (s) => {
+  const v = cleanEnv(s);
+  if (!v) return "mailto:realoneade8@gmail.com";
+  if (/^mailto:/i.test(v) || /^https?:\/\//i.test(v)) return v;
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return "mailto:" + v;
+  return "mailto:realoneade8@gmail.com";
+};
 const SUPABASE_URL = cleanEnv(process.env.SUPABASE_URL || "https://sqwwjrddpjkenkhpyntg.supabase.co").replace(/\/$/, "");
 const ANON = cleanEnv(process.env.SUPABASE_ANON_KEY);
 const SERVICE = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const CRON = cleanEnv(process.env.CRON_SECRET);
 const VAPID_PUBLIC = cleanEnv(process.env.VAPID_PUBLIC_KEY);
 const VAPID_PRIVATE = cleanEnv(process.env.VAPID_PRIVATE_KEY);
-const VAPID_SUBJECT = cleanEnv(process.env.VAPID_SUBJECT) || "mailto:realoneade8@gmail.com";
+const VAPID_SUBJECT = asMailto(process.env.VAPID_SUBJECT);
 
 const WAKE_NOTES = [
   [
