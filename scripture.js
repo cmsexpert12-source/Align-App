@@ -4,7 +4,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const LS = "align-scripture";
   const DAY_MS = 86400000;
   const SPRINT_SEC = 120;
-  const SPRINT_N = 30;
+  const SPRINT_N = 20;
   const CHAMP_N = 12;
 
   const V = (id, book, chapter, verse, thru, text, theme, why, score) =>
@@ -767,28 +767,13 @@ window.ALIGN_SCRIPTURE = (() => {
       const claim = restatement(v.text);
       const others = claims.filter((c) => c.toLowerCase() !== claim.toLowerCase());
       if (others.length < 2) return;
-      const quote = shortQuote(v.text);
-      const more = quote.length < cleanText(v.text).length ? "…" : "";
-      pushQ(
-        v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":sense",
-        "“" + quote + more + "” — what is this saying?",
-        claim,
-        others
-      );
+      const key = v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse;
       if (looksCommand(v.text)) {
-        pushQ(
-          v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":do",
-          "In " + ref + ", what are you told to do or not do?",
-          claim,
-          others
-        );
+        pushQ(key + ":do", "In " + ref + ", what are you told to do or not do?", claim, others);
       } else if (looksPromise(v.text)) {
-        pushQ(
-          v.book.replace(/\s+/g, "") + ":" + v.chapter + ":" + v.verse + ":promise",
-          "What does " + ref + " promise or declare?",
-          claim,
-          others
-        );
+        pushQ(key + ":promise", "What does " + ref + " promise or declare?", claim, others);
+      } else {
+        pushQ(key + ":mean", "What does " + ref + " require the reader to see?", claim, others);
       }
     });
     const seen = new Set();
@@ -809,7 +794,14 @@ window.ALIGN_SCRIPTURE = (() => {
     const stem = String((q && q.q) || "");
     return /:cloze/.test(id) || /_{3,}/.test(stem) || /fill in/i.test(stem) || /missing word/i.test(stem);
   };
-  const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q) && !isCloze(q));
+  const isQuoteLift = (q) => {
+    const id = String((q && q.id) || "");
+    const stem = String((q && q.q) || "");
+    if (/:sense$/.test(id) || /what is this saying/i.test(stem)) return true;
+    const quoted = stem.match(/[“"]([^”"]+)[”"]/);
+    return !!(quoted && quoted[1] && quoted[1].trim().split(/\s+/).length > 4);
+  };
+  const readingQs = (iso) => (((load().daily[iso] || {}).readingQs) || []).filter((q) => !isIdQuiz(q) && !isCloze(q) && !isQuoteLift(q));
 
   const ingestReading = (iso, packs) => {
     const built = fromPacks(packs, iso);
@@ -817,7 +809,7 @@ window.ALIGN_SCRIPTURE = (() => {
     const row = data.daily[iso] || {};
     const have = {};
     (row.readingQs || []).forEach((q) => {
-      if (q && q.tag === "read-ai" && !isIdQuiz(q) && !isCloze(q)) have[q.id] = q;
+      if (q && q.tag === "read-ai" && !isIdQuiz(q) && !isCloze(q) && !isQuoteLift(q)) have[q.id] = q;
     });
     built.forEach((q) => { if (q && q.id && !have[q.id]) have[q.id] = q; });
     row.readingQs = Object.values(have);
@@ -841,6 +833,8 @@ window.ALIGN_SCRIPTURE = (() => {
         if (!q || !a || !d1 || !d2) return null;
         if (/_{3,}/.test(q) || /fill in/i.test(q) || /missing word/i.test(q)) return null;
         if (/which verse|what verse|verse numbers?|chapter numbers?/i.test(q)) return null;
+        const quoted = q.match(/[“"]([^”"]+)[”"]/);
+        if (quoted && quoted[1] && quoted[1].trim().split(/\s+/).length > 4) return null;
         const why = cleanText(row.why || row.reason || "");
         return { q, a, d: [d1, d2], why, i };
       }).filter(Boolean);
@@ -852,7 +846,7 @@ window.ALIGN_SCRIPTURE = (() => {
   const enrichReading = async (iso, packs) => {
     const data0 = load();
     const row0 = data0.daily[iso] || {};
-    if (row0.aiQuizDone) return readingQs(iso);
+    if (row0.aiQuizDone && row0.aiQuizKind === "champ20") return readingQs(iso);
     const body = (packs || []).map((p) => {
       const vs = (p.verses || []).slice(0, 40).map((v) => (v.verse || "") + ". " + cleanText(v.text || v)).join(" ");
       return (p.book || "") + " " + (p.chapter || "") + "\n" + vs;
@@ -866,8 +860,8 @@ window.ALIGN_SCRIPTURE = (() => {
         method: "POST",
         headers,
         body: JSON.stringify({
-          kind: "quiz",
-          prompt: "Write 12 multiple-choice questions that test understanding of this reading only. Meaning, motive, command, promise — not fill-in-the-blank, not which-verse. Wrong answers must be plausible, not obvious rejects.\n\n" + body
+          kind: "champ",
+          prompt: "Write 20 sprint questions that test deep understanding of this reading only. Meaning, motive, command, promise, character of God, what the text requires — not fill-in-the-blank, not which-verse. Do not quote more than four words of the text in the question. Wrong answers must be plausible misreadings of this text.\n\n" + body
         })
       });
       const js = await res.json().catch(() => ({}));
@@ -876,6 +870,7 @@ window.ALIGN_SCRIPTURE = (() => {
         const data = load();
         const row = data.daily[iso] || {};
         row.aiQuizDone = true;
+        row.aiQuizKind = "champ20";
         data.daily[iso] = row;
         save(data);
         return readingQs(iso);
@@ -886,10 +881,11 @@ window.ALIGN_SCRIPTURE = (() => {
       (row.readingQs || []).forEach((q) => { have[q.id] = q; });
       made.forEach((q, i) => {
         const id = "rd:" + iso + ":ai:" + i;
-        if (!have[id]) have[id] = { id, q: q.q, a: q.a, d: q.d, why: q.why || "", tag: "read-ai", ref: (row.readRefs || []).join(", ") };
+        have[id] = { id, q: q.q, a: q.a, d: q.d, why: q.why || "", tag: "read-ai", ref: (row.readRefs || []).join(", ") };
       });
       row.readingQs = Object.values(have);
       row.aiQuizDone = true;
+      row.aiQuizKind = "champ20";
       data.daily[iso] = row;
       save(data);
     } catch {

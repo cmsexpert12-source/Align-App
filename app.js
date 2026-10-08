@@ -1049,7 +1049,7 @@
       devotion: "Morning devotion (Spurgeon)",
       bible: "Scripture reader",
       verse: "Memory — devotion verse, then hide the words",
-      drill: "Sprint — 30 questions on today's text",
+      drill: "Sprint — 20 questions on today's text",
       affirm: "Affirm — user-written line",
       dayplan: "Plan the day — Top 3 and Also",
       getready: "Get ready",
@@ -2376,6 +2376,7 @@
     }
     if ((state.readPacks || []).length) {
       try { S().ingestReading(iso, state.readPacks); } catch { /* ok */ }
+      try { await S().enrichReading(iso, state.readPacks); } catch { /* local questions still stand */ }
     }
     const have = (S().readingQs(iso) || []).length;
     if (!have && !(L().todayAssignment(iso).read || []).length) {
@@ -3681,7 +3682,7 @@
     devotion: { why: "One reading. One line that stays. Capture it before the day talks over you.", keep: "Devotion is how truth gets into the day, not just onto the page. Losing it empties Memory and Recite." },
     verse: { why: "Two minutes on the line. Hide it. It will meet you when you need it.", keep: "Memory is how the devotion verse becomes yours. Without it the Word stays on the screen." },
     word: { why: "Stay in Scripture. Not a verse snack — a sitting. This is food.", keep: "Scripture is the spine of ALIGN. Cut it and the morning is only motion." },
-    drill: { why: "Thirty questions on what you just read. Meaning, not trivia. It proves you were there.", keep: "Sprint tests the sitting. Without it, reading can become skimming." },
+    drill: { why: "Twenty questions on what you just read. Meaning, not a verse repeated in the stem. It proves you were there.", keep: "Sprint tests the sitting. Without it, reading can become skimming." },
     affirm: { why: "Speak the line you wrote. The mouth trains the heart.", keep: "Affirm is your word over yourself. Silence here is how the day writes you instead." },
     plan: { why: "Three true priorities. Decide once, then walk. The day does not get to invent itself.", keep: "Plan is how the morning becomes a day. Skip it and you will be pulled." },
     ready: { why: "Bath, dress, leave the room in order. The body follows the soul out the door.", keep: "Get ready is the bridge into the world. Without it the path stops in the room." },
@@ -4067,7 +4068,7 @@
       : (n ? "A verse from what you just read" : "Read first. Then hide one line.");
     const sprintSub = sprint && sprint.answered
       ? sprint.answered + " in 2 min · " + (sprint.correct || 0) + " right"
-      : "2 minutes · " + S().SPRINT_N + " questions · meaning, not verse trivia";
+      : "2 minutes · " + S().SPRINT_N + " questions · meaning, not a quoted verse";
     const wordCta = n >= target ? "Scripture done" : (n ? "Continue Scripture" : "Open Scripture");
     const morn = L().morningOf(iso);
     const cur = currentStep();
