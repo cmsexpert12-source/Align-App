@@ -46,6 +46,7 @@
     history: saved?.history || [],
     onboardingDone: !!saved?.onboardingDone,
     walkDone: saved?.walkDone != null ? !!saved.walkDone : !!saved?.onboardingDone,
+    walkSeen: (() => { try { return JSON.parse(localStorage.getItem("align-walk-seen")) || {}; } catch { return {}; } })(),
     selectedDay: null,
     workout: null,
     tick: null,
@@ -763,10 +764,61 @@
     { sel: "nav [data-go='word']", title: "Word", body: "Devotion, Scripture, the verse. Stay with the day’s text.", radius: 14 },
     { sel: "nav [data-go='journal']", title: "Journal", body: "A notepad. Week and month aims live here — not on Today. Circle never sees it.", radius: 14 }
   ];
+  const youWalkTip = () => {
+    if (!state.session) {
+      return { sel: "[data-act='open-auth']", title: "Create account", body: "Same phone or another. The morning, the shelf, and the circle stay with this account.", radius: 16, kicker: "You" };
+    }
+    if (!isStandalone()) {
+      return { sel: "[data-act='ios-install'], [data-act='install-pwa']", title: "Home Screen", body: "ALIGN is the icon. On iPhone: Share, then Add to Home Screen. Pings only work from there.", radius: 16, kicker: "You" };
+    }
+    if (!state.prefs.enabled) {
+      return { sel: "[data-act='toggle-push']", title: "Reminders", body: "Four times. Rise, the plan at 2, books at 7, night devotion. Turn it on here.", radius: 18, kicker: "You" };
+    }
+    return { sel: "[data-go='routine']", title: "You", body: "Your path, the circle, sound, books. This page is the person — not the plumbing.", radius: 16, kicker: "You" };
+  };
+  const circleWalkTip = () => {
+    if (!state.session) {
+      return { sel: "[data-act='open-auth']", title: "Circle", body: "An account first. Then you start a circle and get a join code.", radius: 16, kicker: "Together" };
+    }
+    if (!state.circle) {
+      return { sel: "[data-act='create-circle']", alt: "[data-act='join-circle']", title: "Start a circle", body: "You get a join code. You approve who comes in. They see the path, not the notepad.", radius: 16, kicker: "Together" };
+    }
+    return { sel: ".circle-code", alt: "[data-act='copy-code']", title: "The join code", body: "This is how someone asks in. You still have to let them in.", radius: 16, kicker: "Together" };
+  };
+  const currentWalk = () => {
+    if (!state.onboardingDone) return null;
+    if (!state.walkDone) {
+      if (state.view !== "home") return null;
+      const tips = walkTips();
+      const i = Math.max(0, Math.min(tips.length - 1, Number(state.walk) || 0));
+      return { id: "today", tips, i };
+    }
+    const seen = state.walkSeen || {};
+    if (state.view === "profile" && !seen.you) return { id: "you", tips: [youWalkTip()], i: 0 };
+    if (state.view === "routine" && !seen.path) {
+      return { id: "path", tips: [{ sel: ".path-handle", alt: ".path-edit-list", title: "Your path", body: "Hold the grip to reorder. Remove a step only after you hear why it matters. Rise stays first. Begin stays last.", radius: 16, kicker: "Morning" }], i: 0 };
+    }
+    if (state.view === "circle" && !seen.circle) return { id: "circle", tips: [circleWalkTip()], i: 0 };
+    if (state.view === "sound" && !seen.sound) {
+      return { id: "sound", tips: [{ sel: ".station", alt: ".next-hero", title: "Sound", body: "Tap a station. It keeps playing under the morning. One player — pause from here or the bar on Today.", radius: 16, kicker: "Sound" }], i: 0 };
+    }
+    if (state.view === "library" && !seen.books) {
+      return { id: "books", tips: [{ sel: "[data-act='pick-pdf']", alt: ".next-hero .btn", title: "Books", body: "Tap a title to read. Upload when you’re ready. The file loads when you open it, not at boot.", radius: 16, kicker: "Books" }], i: 0 };
+    }
+    return null;
+  };
+  const markWalkSeen = (id) => {
+    if (!id || id === "today") return;
+    state.walkSeen = Object.assign({}, state.walkSeen || {}, { [id]: true });
+    try { localStorage.setItem("align-walk-seen", JSON.stringify(state.walkSeen)); } catch { /* ok */ }
+  };
   const walkGuideHtml = () => {
-    const tips = walkTips();
-    const i = Math.max(0, Math.min(tips.length - 1, Number(state.walk) || 0));
+    const cur = currentWalk();
+    if (!cur) return "";
+    const tips = cur.tips || [];
+    const i = Math.max(0, Math.min(tips.length - 1, Number(cur.i) || 0));
     const tip = tips[i];
+    if (!tip) return "";
     const last = i >= tips.length - 1;
     return `
     <div class="walk-guide">
@@ -776,7 +828,7 @@
       <div class="walk-pad" data-pad="b" data-act="walk-stay"></div>
       <div class="walk-hole" data-act="walk-stay"></div>
       <div class="walk-card">
-        <p class="walk-k">${i + 1} of ${tips.length}</p>
+        <p class="walk-k">${escapeHtml(tip.kicker || ((i + 1) + " of " + tips.length))}</p>
         <h3>${escapeHtml(tip.title)}</h3>
         <p>${escapeHtml(tip.body)}</p>
         <div class="walk-row">
@@ -787,13 +839,27 @@
     </div>`;
   };
   const paintWalk = () => {
-    if (state.walkDone || state.view !== "home") return;
+    const cur = currentWalk();
+    if (!cur) return;
     const guide = app.querySelector(".walk-guide");
     if (!guide) return;
-    const tips = walkTips();
-    const i = Math.max(0, Math.min(tips.length - 1, Number(state.walk) || 0));
+    const tips = cur.tips || [];
+    const i = Math.max(0, Math.min(tips.length - 1, Number(cur.i) || 0));
     const tip = tips[i];
+    if (!tip) return;
     const target = app.querySelector(tip.sel) || (tip.alt ? app.querySelector(tip.alt) : null);
+    if (target && !guide.dataset.scrolled) {
+      try {
+        const r0 = target.getBoundingClientRect();
+        const ar0 = app.getBoundingClientRect();
+        if (r0.bottom > ar0.bottom - 28 || r0.top < ar0.top + 28) {
+          target.scrollIntoView({ block: "center", inline: "nearest" });
+          guide.dataset.scrolled = "1";
+          requestAnimationFrame(() => { try { paintWalk(); } catch { /* ok */ } });
+          return;
+        }
+      } catch { /* measure anyway */ }
+    }
     const hole = guide.querySelector(".walk-hole");
     const card = guide.querySelector(".walk-card");
     const ar = app.getBoundingClientRect();
@@ -828,7 +894,7 @@
   };
 
   const overlays = () => {
-    const walkLive = !state.walkDone && state.view === "home";
+    const walkLive = !!currentWalk();
     const hideFab = walkLive || ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
@@ -6191,19 +6257,31 @@
     } else if (act === "walk-stay") {
       return;
     } else if (act === "next-walk") {
-      const n = walkTips().length;
-      if (state.walk < n - 1) { state.walk++; render(); }
-      else {
-        state.walkDone = true;
-        save();
-        state.view = "home";
+      const cur = currentWalk();
+      if (!cur) return;
+      if (cur.id === "today") {
+        const n = (cur.tips || []).length;
+        if (state.walk < n - 1) { state.walk++; render(); }
+        else {
+          state.walkDone = true;
+          save();
+          state.view = "home";
+          render();
+        }
+      } else {
+        markWalkSeen(cur.id);
         render();
       }
     } else if (act === "back-walk") {
       if (state.walk > 0) { state.walk--; render(); }
     } else if (act === "skip-walk") {
-      state.walkDone = true; save();
-      state.view = "home";
+      const cur = currentWalk();
+      if (!cur || cur.id === "today") {
+        state.walkDone = true; save();
+        state.view = "home";
+      } else {
+        markWalkSeen(cur.id);
+      }
       render();
     } else if (act === "start-today") {
       if (!gateStep("move")) return;
