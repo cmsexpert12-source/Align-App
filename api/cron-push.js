@@ -2,15 +2,20 @@
    Called every 5 minutes from pg_cron (sql/push-alarms.sql).
    Test from the phone: POST { mode: "test" } with the user JWT. */
 
-import webpush from "web-push";
+import webPushPkg from "web-push";
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || "https://sqwwjrddpjkenkhpyntg.supabase.co").replace(/\/$/, "");
-const ANON = process.env.SUPABASE_ANON_KEY || "";
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const CRON = process.env.CRON_SECRET || "";
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:realoneade8@gmail.com";
+const webpush = (webPushPkg && webPushPkg.sendNotification)
+  ? webPushPkg
+  : ((webPushPkg && webPushPkg.default) || webPushPkg);
+
+const cleanEnv = (s) => String(s || "").trim().replace(/^["']|["']$/g, "");
+const SUPABASE_URL = cleanEnv(process.env.SUPABASE_URL || "https://sqwwjrddpjkenkhpyntg.supabase.co").replace(/\/$/, "");
+const ANON = cleanEnv(process.env.SUPABASE_ANON_KEY);
+const SERVICE = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+const CRON = cleanEnv(process.env.CRON_SECRET);
+const VAPID_PUBLIC = cleanEnv(process.env.VAPID_PUBLIC_KEY);
+const VAPID_PRIVATE = cleanEnv(process.env.VAPID_PRIVATE_KEY);
+const VAPID_SUBJECT = cleanEnv(process.env.VAPID_SUBJECT) || "mailto:realoneade8@gmail.com";
 
 const WAKE_NOTES = [
   [
@@ -176,10 +181,36 @@ async function unmark(userId, kind) {
   });
 }
 
+function readBody(req) {
+  const b = req.body;
+  if (b == null || b === "") return {};
+  if (typeof b === "string") {
+    try { return JSON.parse(b); } catch { return {}; }
+  }
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(b)) {
+    try { return JSON.parse(b.toString("utf8") || "{}"); } catch { return {}; }
+  }
+  if (typeof b === "object") return b;
+  return {};
+}
+
+function errText(e) {
+  if (!e) return "fail";
+  const body = e.body;
+  if (body == null) return String(e.message || e).slice(0, 160);
+  if (typeof body === "string") return body.slice(0, 160);
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(body)) return body.toString("utf8").slice(0, 160);
+  try { return JSON.stringify(body).slice(0, 160); } catch { return String(e.message || "fail").slice(0, 160); }
+}
+
 async function sendAll(subs, payload) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+  } catch (e) {
+    return { sent: 0, failed: (subs || []).length || 1, gone: [], errors: [{ code: 0, msg: "VAPID: " + errText(e) }] };
+  }
   const data = JSON.stringify(payload);
-  const opts = { TTL: 60 * 60, urgency: "high" };
+  const opts = { TTL: 60 * 60 };
   let sent = 0;
   let failed = 0;
   const gone = [];
@@ -197,15 +228,21 @@ async function sendAll(subs, payload) {
       failed++;
       const code = e && (e.statusCode || e.status);
       if (code === 404 || code === 410) gone.push(s.endpoint);
-      if (errors.length < 4) {
-        errors.push({ code: code || 0, msg: String((e && e.body) || (e && e.message) || "fail").slice(0, 160) });
-      }
+      if (errors.length < 4) errors.push({ code: code || 0, msg: errText(e) });
     }
   }
   return { sent, failed, gone, errors };
 }
 
 export default async function handler(req, res) {
+  try {
+    return await handle(req, res);
+  } catch (e) {
+    return send(res, 500, { error: String((e && e.message) || e || "sender failed").slice(0, 200) });
+  }
+}
+
+async function handle(req, res) {
   if (req.method === "OPTIONS") {
     res.statusCode = 200;
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
@@ -213,7 +250,7 @@ export default async function handler(req, res) {
   }
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return send(res, 500, { error: "VAPID keys missing. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on Vercel." });
 
-  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const body = readBody(req);
   const mode = body.mode === "test" ? "test" : "tick";
 
   if (mode === "test") {
@@ -241,7 +278,8 @@ export default async function handler(req, res) {
       failed: results.failed,
       n: list.length,
       title: payload.title,
-      errors: results.errors
+      errors: results.errors,
+      error: results.sent > 0 ? undefined : ((results.errors && results.errors[0] && results.errors[0].msg) || "Push did not reach this phone. Turn reminders off and on from the Home Screen.")
     });
   }
 

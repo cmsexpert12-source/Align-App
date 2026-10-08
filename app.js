@@ -392,19 +392,29 @@
           }
         }
         if (!jwt && state.session && state.session.access_token) jwt = state.session.access_token;
-        if (jwt) {
+        if (!jwt) return { ok: false, error: "Sign in so reminders still arrive when ALIGN is closed." };
+        const ping = async () => {
           const vercel = await fetch("/api/cron-push", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
             body: JSON.stringify({ mode: "test" })
           });
-          const j = await vercel.json().catch(() => ({}));
-          if (j && j.sent > 0) return { ok: true, via: "push" };
-          if (j && j.error) return { ok: false, error: j.error };
-          if (!vercel.ok) return { ok: false, error: (j && j.error) || "Sender did not answer." };
-        } else {
-          return { ok: false, error: "Sign in so reminders still arrive when ALIGN is closed." };
+          const raw = await vercel.text();
+          let j = {};
+          try { j = raw ? JSON.parse(raw) : {}; } catch { j = { error: raw ? String(raw).slice(0, 120) : "" }; }
+          const hint = j.error || j.message || (j.errors && j.errors[0] && (j.errors[0].msg || j.errors[0].message)) || "";
+          return { status: vercel.status, okHttp: vercel.ok, sent: Number(j.sent) || 0, error: hint, raw: j };
+        };
+        let r = await ping();
+        if (r.sent > 0) return { ok: true, via: "push" };
+        if (r.status !== 401 && r.status !== 403) {
+          try { await refreshPushSub(); } catch { /* ok */ }
+          r = await ping();
+          if (r.sent > 0) return { ok: true, via: "push" };
         }
+        if (r.error) return { ok: false, error: r.error };
+        if (!r.okHttp) return { ok: false, error: "Sender failed (" + r.status + ")." };
+        return { ok: false, error: "Push did not reach this phone. Turn reminders off and on from the Home Screen." };
       } catch {
         return { ok: false, error: "Could not reach the sender." };
       }
