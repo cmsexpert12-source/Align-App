@@ -757,8 +757,79 @@
     armNowTick();
   };
 
+  const walkTips = () => [
+    { sel: ".next-hero .btn", alt: ".next-hero", title: "I’m up", body: "Tap it when you stand. That’s the start. The next step opens when this one is done.", radius: 16 },
+    { sel: ".path-rest", alt: ".path-rail", title: "The path", body: "Done, now, later. You can reopen what you finished. You cannot skip ahead.", radius: 16 },
+    { sel: "nav [data-go='word']", title: "Word", body: "Devotion, Scripture, the verse. Stay with the day’s text.", radius: 14 },
+    { sel: "nav [data-go='journal']", title: "Journal", body: "A notepad. Week and month aims live here — not on Today. Circle never sees it.", radius: 14 }
+  ];
+  const walkGuideHtml = () => {
+    const tips = walkTips();
+    const i = Math.max(0, Math.min(tips.length - 1, Number(state.walk) || 0));
+    const tip = tips[i];
+    const last = i >= tips.length - 1;
+    return `
+    <div class="walk-guide">
+      <div class="walk-pad" data-pad="t" data-act="walk-stay"></div>
+      <div class="walk-pad" data-pad="l" data-act="walk-stay"></div>
+      <div class="walk-pad" data-pad="r" data-act="walk-stay"></div>
+      <div class="walk-pad" data-pad="b" data-act="walk-stay"></div>
+      <div class="walk-hole" data-act="walk-stay"></div>
+      <div class="walk-card">
+        <p class="walk-k">${i + 1} of ${tips.length}</p>
+        <h3>${escapeHtml(tip.title)}</h3>
+        <p>${escapeHtml(tip.body)}</p>
+        <div class="walk-row">
+          <button type="button" class="skip" data-act="skip-walk">Skip</button>
+          <button type="button" class="btn" data-act="next-walk">${last ? "Got it" : "Next"}</button>
+        </div>
+      </div>
+    </div>`;
+  };
+  const paintWalk = () => {
+    if (state.walkDone || state.view !== "home") return;
+    const guide = app.querySelector(".walk-guide");
+    if (!guide) return;
+    const tips = walkTips();
+    const i = Math.max(0, Math.min(tips.length - 1, Number(state.walk) || 0));
+    const tip = tips[i];
+    const target = app.querySelector(tip.sel) || (tip.alt ? app.querySelector(tip.alt) : null);
+    const hole = guide.querySelector(".walk-hole");
+    const card = guide.querySelector(".walk-card");
+    const ar = app.getBoundingClientRect();
+    const padN = (side) => guide.querySelector(`[data-pad="${side}"]`);
+    let x = 12, y = 24, w = Math.max(80, ar.width - 24), h = 88;
+    if (target) {
+      const r = target.getBoundingClientRect();
+      const g = 8;
+      x = Math.max(6, r.left - ar.left - g);
+      y = Math.max(6, r.top - ar.top - g);
+      w = Math.min(ar.width - x - 6, r.width + g * 2);
+      h = Math.min(ar.height - y - 6, r.height + g * 2);
+    }
+    const rad = tip.radius || 16;
+    if (hole) hole.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${rad}px`;
+    const tEl = padN("t"), lEl = padN("l"), rEl = padN("r"), bEl = padN("b");
+    if (tEl) tEl.style.cssText = `left:0;top:0;width:100%;height:${y}px`;
+    if (lEl) lEl.style.cssText = `left:0;top:${y}px;width:${x}px;height:${h}px`;
+    if (rEl) rEl.style.cssText = `left:${x + w}px;top:${y}px;right:0;height:${h}px`;
+    if (bEl) bEl.style.cssText = `left:0;top:${y + h}px;right:0;bottom:0`;
+    if (card) {
+      const ch = card.offsetHeight || 168;
+      const below = ar.height - (y + h);
+      if (below > ch + 24) {
+        card.style.top = (y + h + 12) + "px";
+        card.style.bottom = "auto";
+      } else {
+        card.style.top = Math.max(10, y - ch - 12) + "px";
+        card.style.bottom = "auto";
+      }
+    }
+  };
+
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const walkLive = !state.walkDone && state.view === "home";
+    const hideFab = walkLive || ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -798,6 +869,7 @@
           </div>
         </div>
       </div>` : ""}
+    ${walkLive ? walkGuideHtml() : ""}
   `;
   };
 
@@ -2617,26 +2689,23 @@
             <div class="field"><label>Sunday leave (church)</label><input id="ob-leave" type="time" value="${timeVal(r.leaveH, r.leaveM)}" /></div>
             <label class="check-row"><input id="ob-leave-on" type="checkbox" ${r.leaveOn ? "checked" : ""} /> Sunday leave is on my path</label>
           </div>`;
-    const obRail = `<div class="path-rail ob-rail" style="--n:5">${[
-      ["Rise", "now"], ["Pray", "wait"], ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
-    ].map(([n, cls]) => `<div class="pr ${cls}"><span class="pr-dot"></span><span class="pr-n">${n}</span></div>`).join("")}</div>`;
     const youName = String(state.profile.name || "").trim();
     const bodies = [
       `
+        <div class="ob-mark">${markSvg()}</div>
         <div class="kicker">ALIGN</div>
-        <h1>Walk the morning<br>in order.</h1>
-        <p class="lead">One next step. You tap it. When it’s done, the next one opens.</p>
-        <div class="ob-hero">
-          <div class="tag">Up next</div>
-          <h3>Rise</h3>
-          <p>Tap I’m up. That’s the start.</p>
-        </div>
-        ${obRail}
+        <h1>The morning,<br>in one place.</h1>
+        <p class="lead">Rise. Pray. Word. Plan. Begin. One next step — you tap it when it’s time.</p>
+        <ol class="ob-order">
+          <li><i>1</i><div><b>Rise</b><span>I’m up starts the morning</span></div></li>
+          <li><i>2</i><div><b>Word</b><span>Prayer, devotion, Scripture</span></div></li>
+          <li><i>3</i><div><b>Plan</b><span>Then begin the day</span></div></li>
+        </ol>
       `,
       `
         <div class="kicker">Your hours</div>
         <h1>When do you<br>rise?</h1>
-        <p class="lead">Tap I’m up when you stand. That’s the start. Change these clocks if they aren’t yours.</p>
+        <p class="lead">These clocks stand until you change them. Tap I’m up when you stand — that’s the start.</p>
         ${state.obHoursEdit ? hoursForm() : `
           <div class="ob-clocks">
             <div class="ob-clock">
@@ -2656,7 +2725,7 @@
       `
         <div class="kicker">You</div>
         <h1>What should we<br>call you?</h1>
-        <p class="lead">It shows on Today. Skip if you want. After this, one button is waiting.</p>
+        <p class="lead">It shows on Today. Leave it blank if you want.</p>
         <div class="ob-live">
           <span>Good morning</span>
           <b class="ob-live-name">${escapeHtml(youName || "Your name")}</b>
@@ -2667,86 +2736,19 @@
         </div>
       `
     ];
-    const labels = ["Continue", "Use these hours", "Start this morning"];
+    const labels = ["Continue", "These hours", "Start this morning"];
     return `
       <div class="onboard">
         <div class="onboard-top">
-          ${step > 0
-            ? `<button type="button" class="skip" data-act="back-onboard">Back</button>`
-            : `<div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>`}
-          <button class="skip" data-act="skip-onboard">Skip</button>
+          <div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>
+          <div class="onboard-nav">
+            ${step > 0 ? `<button type="button" class="skip" data-act="back-onboard">Back</button>` : ""}
+            <button type="button" class="skip" data-act="skip-onboard">Skip</button>
+          </div>
         </div>
         <div class="dots">${[0, 1, 2].map((i) => `<i class="${i === step ? "on" : ""}"></i>`).join("")}</div>
         <div class="onboard-body">${bodies[step]}</div>
         <button class="btn" data-act="next-onboard">${labels[step]}</button>
-      </div>
-    `;
-  };
-
-  const viewWalk = () => {
-    const step = Math.max(0, Math.min(4, Number(state.walk) || 0));
-    const bodies = [
-      `
-        <div class="kicker">Today</div>
-        <h1>One next step.<br>Then the next.</h1>
-        <p class="lead">You don’t pick from a menu. You do the thing that’s next. When it’s done, the next one opens.</p>
-        <div class="walk-shot">
-          <div class="tag">Up next</div>
-          <h3>I’m up</h3>
-          <p>Tap it when you stand. That’s the start of the morning.</p>
-        </div>
-      `,
-      `
-        <div class="kicker">The path</div>
-        <h1>A rail, not a pile.</h1>
-        <p class="lead">Done. Now. Later. You can reopen what you finished. You cannot skip ahead and tick the future.</p>
-        <div class="path-rail ob-rail" style="--n:5">${[
-          ["Rise", "done"], ["Pray", "now"], ["Word", "wait"], ["Plan", "wait"], ["Begin", "wait"]
-        ].map(([n, cls]) => `<div class="pr ${cls}"><span class="pr-dot"></span><span class="pr-n">${n}</span></div>`).join("")}</div>
-      `,
-      `
-        <div class="kicker">Word</div>
-        <h1>Stay with<br>the text.</h1>
-        <p class="lead">Devotion is in the app. Scripture is next. Listen if you want — the page follows the voice.</p>
-        <div class="walk-shot">
-          <div class="tag">Scripture</div>
-          <h3>Three chapters is the aim.</h3>
-          <p>Sunday can be one. Mark a chapter done, then it counts.</p>
-        </div>
-      `,
-      `
-        <div class="kicker">Notepad</div>
-        <h1>Write it.<br>Tick it.</h1>
-        <p class="lead">Journal is a notepad, not a feed. Week and month aims live there. They do not sit on Today.</p>
-        <div class="walk-shot">
-          <div class="tag">Off Today</div>
-          <h3>Your words stay yours.</h3>
-          <p>Circle never sees the notepad. Or the affirmation.</p>
-        </div>
-      `,
-      `
-        <div class="kicker">Together</div>
-        <h1>One other person.</h1>
-        <p class="lead">You start a circle. You get a join code. You approve who comes in. They see the path, not the private pages.</p>
-        <div class="walk-shot">
-          <div class="tag">Your path</div>
-          <h3>Train is later, if you want it.</h3>
-          <p>The morning is rise, Word, plan, begin. Add a session from Your path when you’re ready.</p>
-        </div>
-      `
-    ];
-    const labels = ["Continue", "Continue", "Continue", "Continue", "Go to Today"];
-    return `
-      <div class="onboard">
-        <div class="onboard-top">
-          ${step > 0
-            ? `<button type="button" class="skip" data-act="back-walk">Back</button>`
-            : `<div class="brand"><div class="mark">${markSvg()}</div>ALIGN</div>`}
-          <button class="skip" data-act="skip-walk">Skip</button>
-        </div>
-        <div class="dots">${[0, 1, 2, 3, 4].map((i) => `<i class="${i === step ? "on" : ""}"></i>`).join("")}</div>
-        <div class="onboard-body">${bodies[step]}</div>
-        <button class="btn" data-act="next-walk">${labels[step]}</button>
       </div>
     `;
   };
@@ -5427,7 +5429,6 @@
     const map = {
       splash: viewSplash,
       onboard: viewOnboard,
-      walk: viewWalk,
       home: viewHome,
       time: viewTime,
       plan: viewPlan,
@@ -5470,6 +5471,7 @@
       journal: viewJournal,
       journalwrite: viewJournalWrite
     };
+    if (state.view === "walk") state.view = "home";
     const tab = tabFor(state.view);
     let main = "";
     try {
@@ -5509,6 +5511,7 @@
     }
     bind();
     paintNow();
+    try { requestAnimationFrame(() => { try { paintWalk(); } catch { /* ok */ } }); } catch { try { paintWalk(); } catch { /* ok */ } }
     if (state.view !== "bible" && state.view !== "reader" && sitVoice.kind) sitStop();
     if (state.view === "reader" && pdfDoc && !state.pdfBusy) paintPdf();
   };
@@ -6173,7 +6176,7 @@
       else {
         state.onboardingDone = true;
         save();
-        state.view = state.walkDone ? "home" : "walk";
+        state.view = "home";
         render();
       }
     } else if (act === "back-onboard") {
@@ -6183,10 +6186,13 @@
       render();
     } else if (act === "skip-onboard") {
       state.onboardingDone = true; save();
-      state.view = state.walkDone ? "home" : "walk";
+      state.view = "home";
       render();
+    } else if (act === "walk-stay") {
+      return;
     } else if (act === "next-walk") {
-      if (state.walk < 4) { state.walk++; render(); }
+      const n = walkTips().length;
+      if (state.walk < n - 1) { state.walk++; render(); }
       else {
         state.walkDone = true;
         save();
@@ -7258,7 +7264,7 @@
       return;
     }
     if (!state.walkDone) {
-      state.view = "walk";
+      state.view = "home";
       try { render(); } catch (err) { console.warn(err); }
       return;
     }
