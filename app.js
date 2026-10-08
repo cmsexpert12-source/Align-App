@@ -82,7 +82,6 @@
     readySec: 0,
     spurgeonAm: null,
     spurgeonPm: null,
-    odb: null,
     bookId: null,
     bookShelf: "all",
     pdfErr: "",
@@ -621,7 +620,7 @@
   const nowHidden = () => {
     const snd = window.ALIGN_SOUND && ALIGN_SOUND.snapshot();
     const live = !!(snd && (snd.playing || snd.id));
-    return !live || ["splash", "onboard", "walk", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "odb", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
+    return !live || ["splash", "onboard", "walk", "auth", "setup", "sound", "journalwrite", "affirm", "devotionlog", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "verse", "lights", "evening", "nightverse", "reader", "circle", "routine", "ready", "player", "rest", "exercise", "done", "swap", "book"].includes(state.view);
   };
 
   const fmtSound = (sec) => {
@@ -759,7 +758,7 @@
   };
 
   const overlays = () => {
-    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "odb", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
+    const hideFab = ["splash", "onboard", "walk", "player", "rest", "auth", "setup", "drill", "journalwrite", "affirm", "verse", "go", "recite", "getready", "dayplan", "pray", "devotion", "bible", "biblepick", "bibletr", "wordplan", "readlog", "lights", "evening", "nightverse", "reader", "circle", "routine", "devotionlog", "ready", "exercise", "done", "swap", "book"].includes(state.view);
     const withNav = ["home", "plan", "progress", "balance", "profile", "word", "library", "sound", "journal", "time"].includes(state.view);
     const chips = (typeof aiChips === "function") ? aiChips() : [];
     return `
@@ -1361,10 +1360,12 @@
   let sitQueue = [];
   let sitIdx = 0;
   let sitGen = 0;
-  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1, hold: false, chain: false };
+  const sitVoice = { on: false, paused: false, kind: "", follow: false, rate: 1.1, hold: false, chain: false, gender: "feminine" };
   try {
     const savedRate = Number(localStorage.getItem("align-sit-rate"));
     if (Number.isFinite(savedRate)) sitVoice.rate = Math.max(0.8, Math.min(2, savedRate));
+    const savedG = String(localStorage.getItem("align-sit-gender") || "");
+    if (savedG === "masculine" || savedG === "feminine") sitVoice.gender = savedG;
   } catch { /* default */ }
   const sitLabel = (kind) => {
     if (sitVoice.kind !== kind || !sitVoice.on) return "Listen";
@@ -1377,10 +1378,16 @@
   const paintSitRate = () => {
     app.querySelectorAll("[data-sit-rate]").forEach((el) => { el.textContent = sitFmtRate(); });
   };
-  const sitRateHtml = () => `<div class="sit-rate">
-    <button type="button" data-act="sit-slower" title="Slower">−</button>
-    <b data-sit-rate>${sitFmtRate()}</b>
-    <button type="button" data-act="sit-faster" title="Faster">+</button>
+  const sitRateHtml = () => `<div class="sit-tools">
+    <div class="sit-voice">
+      <button type="button" data-act="sit-voice" data-g="feminine" class="${sitVoice.gender === "feminine" ? "on" : ""}">Female</button>
+      <button type="button" data-act="sit-voice" data-g="masculine" class="${sitVoice.gender === "masculine" ? "on" : ""}">Male</button>
+    </div>
+    <div class="sit-rate">
+      <button type="button" data-act="sit-slower" title="Slower">−</button>
+      <b data-sit-rate>${sitFmtRate()}</b>
+      <button type="button" data-act="sit-faster" title="Faster">+</button>
+    </div>
   </div>`;
   const sitSetRate = (next) => {
     sitVoice.rate = Math.max(0.8, Math.min(2, Math.round(Number(next) * 10) / 10));
@@ -1415,10 +1422,55 @@
   const sitPickVoice = () => {
     let voices = [];
     try { voices = (window.speechSynthesis && speechSynthesis.getVoices()) || []; } catch { voices = []; }
-    const en = voices.filter((v) => /^en/i.test(v.lang || "") || /english/i.test(v.name || ""));
-    const gb = en.filter((v) => /GB|UK|British/i.test((v.lang || "") + (v.name || "")));
-    const local = (gb.length ? gb : en).filter((v) => v.localService);
-    return local[0] || gb[0] || en[0] || voices[0] || null;
+    const pool = voices.filter((v) => /^en/i.test(v.lang || "") || /english/i.test(v.name || ""));
+    const list = pool.length ? pool : voices;
+    if (!list.length) return null;
+    const want = sitVoice.gender === "masculine" ? "masculine" : "feminine";
+    const fem = /female|woman|samantha|karen|moira|victoria|kate|serena|nicky|fiona|tessa|zira|hazel|susan|martha|ava|emma|joanna|salli|ivy|kendra|allison|catherine|siri.*female|uk english female|us english female/;
+    const mas = /male|man\b|daniel|alex|tom|fred|david|james|rishi|aaron|gordon|bruce|nathan|matthew|justin|joey|oliver|thomas|\bmark\b|guy|siri.*male|uk english male|us english male/;
+    const junk = /compact|eloquence|espeak|robot|novelty|bells|boing|bubbles|cellos|zarvox|trinoids|whisper|bad news|good news|deranged|hysterical|princess|superstar|wobble|albert|ralph|kathy|agnes|junior/;
+    const score = (v) => {
+      const n = String((v && v.name) || "") + " " + String((v && v.lang) || "");
+      const low = n.toLowerCase();
+      let s = 0;
+      if (v && v.localService) s += 6;
+      if (/premium|enhanced|neural|natural|siri|google|microsoft|samsung/i.test(n)) s += 14;
+      if (junk.test(low)) s -= 40;
+      if (/en-GB|en_GB|British|Daniel/i.test(n)) s += 4;
+      if (/en-US|en_US/i.test(n)) s += 2;
+      const isF = fem.test(low);
+      const isM = mas.test(low);
+      if (want === "feminine") s += isF ? 24 : (isM ? -18 : 0);
+      else s += isM ? 24 : (isF ? -18 : 0);
+      return s;
+    };
+    return list.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  };
+  const sitVoicesReady = () => new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try { speechSynthesis.removeEventListener("voiceschanged", finish); } catch { /* ok */ }
+      try { resolve(speechSynthesis.getVoices() || []); } catch { resolve([]); }
+    };
+    try {
+      const have = speechSynthesis.getVoices();
+      if (have && have.length) { resolve(have); return; }
+      speechSynthesis.addEventListener("voiceschanged", finish);
+    } catch { resolve([]); return; }
+    setTimeout(finish, 500);
+  });
+  const sitRestartTalk = () => {
+    if (!(sitVoice.on && !sitVoice.paused)) return;
+    sitVoice.hold = true;
+    try { speechSynthesis.cancel(); } catch { /* ignore */ }
+    setTimeout(() => {
+      if (sitVoice.hold && sitVoice.on && !sitVoice.paused) {
+        sitVoice.hold = false;
+        sitPump();
+      }
+    }, 180);
   };
   const sitChunks = (text) => {
     const s = String(text || "").replace(/\s+/g, " ").trim();
@@ -1578,7 +1630,7 @@
       toast("This phone can’t speak the text.");
       return;
     }
-    try { speechSynthesis.getVoices(); } catch { /* ok */ }
+    try { await sitVoicesReady(); } catch { /* ok */ }
     let queue = [];
     if (kind === "bible") {
       const data = state.bibleData;
@@ -1949,16 +2001,9 @@
     if (step === "devotion") {
       state.view = "devotion";
       render();
-      Promise.allSettled([
-        state.spurgeonAm ? Promise.resolve(state.spurgeonAm) : L().todaySpurgeon("am"),
-        state.odb ? Promise.resolve(state.odb) : L().fetchODB()
-      ]).then((vals) => {
-        const sp = vals[0] && vals[0].status === "fulfilled" ? vals[0].value : null;
-        const odb = vals[1] && vals[1].status === "fulfilled" ? vals[1].value : null;
-        if (sp) state.spurgeonAm = sp;
-        if (odb && odb.title) state.odb = odb;
-        if (state.view === "devotion") render();
-      });
+      (state.spurgeonAm ? Promise.resolve(state.spurgeonAm) : L().todaySpurgeon("am"))
+        .then((sp) => { state.spurgeonAm = sp; if (state.view === "devotion") render(); })
+        .catch(() => {});
       return;
     }
     if (step === "evening") {
@@ -4659,7 +4704,6 @@
   const viewDevotion = () => {
     const j = L().journalOf(today().iso);
     const sp = state.spurgeonAm;
-    const odb = state.odb;
     return `
       <div class="screen full has-cta">
         <div class="back-row">
@@ -4676,43 +4720,12 @@
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
             <div class="devotion-body">${escapeHtml(sp.b)}</div>
           ` : `<p class="hint">Loading today’s reading…</p>`}
-          ${odb && odb.title ? `<div class="votd votd-extra">
-            <cite>Our Daily Bread</cite>
-            <q>${escapeHtml(odb.title)}</q>
-            ${odb.excerpt ? `<p class="hint" style="margin:8px 0 0">${escapeHtml(clipText(odb.excerpt, 180))}</p>` : ""}
-            <button type="button" class="linkish" style="margin-top:10px" data-act="open-odb">Read</button>
-          </div>` : ""}
           <div class="field"><label>What remained</label>
             <textarea class="note-box" id="devotion-note" placeholder="A sentence is enough.">${escapeHtml(j.devotion || "")}</textarea>
           </div>
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="save-devotion">Save & continue</button>
-        </div>
-      </div>
-    `;
-  };
-
-  const viewOdb = () => {
-    const odb = state.odb || {};
-    const body = odb.body || odb.excerpt || "";
-    return `
-      <div class="screen full">
-        <div class="back-row"><button class="icon-btn" data-go="devotion">${chev()}</button></div>
-        <div class="page-title">
-          <div class="tag">Our Daily Bread</div>
-          <h1>${escapeHtml(odb.title || "Today")}</h1>
-        </div>
-        <div class="scripture" style="padding-bottom:calc(28px + var(--safe-b))">
-          ${odb.author ? `<p class="hint">${escapeHtml(odb.author)}</p>` : ""}
-          ${odb.verse ? `<div class="devotion-verse">${escapeHtml(odb.verse)}</div>` : ""}
-          ${odb.passage ? `<p class="hint">${escapeHtml(odb.passage)}</p>` : ""}
-          <div class="devotion-body">${escapeHtml(body)}</div>
-          ${odb.insights ? `<p class="field-label" style="margin:18px 0 8px">Insight</p><div class="devotion-body">${escapeHtml(odb.insights)}</div>` : ""}
-          ${odb.prayer ? `<p class="field-label" style="margin:18px 0 8px">Pray</p><div class="devotion-body">${escapeHtml(odb.prayer)}</div>` : ""}
-          ${odb.reflect ? `<p class="field-label" style="margin:18px 0 8px">Reflect</p><div class="devotion-body">${escapeHtml(odb.reflect)}</div>` : ""}
-          ${odb.bibleYear ? `<p class="hint" style="margin-top:18px">Bible in a year · ${escapeHtml(odb.bibleYear)}</p>` : ""}
-          <p class="hint" style="margin-top:18px">Our Daily Bread Ministries</p>
         </div>
       </div>
     `;
@@ -5432,7 +5445,6 @@
       word: viewWord,
       pray: viewPray,
       devotion: viewDevotion,
-      odb: viewOdb,
       bible: viewBible,
       dayplan: viewDayPlan,
       getready: viewGetReady,
@@ -6651,15 +6663,6 @@
         kind: "journal-delete"
       };
       render();
-    } else if (act === "open-odb") {
-      const goRead = () => { state.view = "odb"; render(); };
-      if (state.odb && (state.odb.body || state.odb.excerpt)) goRead();
-      else if (L().fetchODB) {
-        L().fetchODB().then((row) => {
-          if (row && row.title) state.odb = row;
-          goRead();
-        }).catch(() => goRead());
-      } else goRead();
     } else if (act === "save-devotion") {
       const iso = today().iso;
       const j = L().journalOf(iso);
@@ -7010,6 +7013,16 @@
       sitSetRate((Number(sitVoice.rate) || 1.1) - 0.1);
     } else if (act === "sit-faster") {
       sitSetRate((Number(sitVoice.rate) || 1.1) + 0.1);
+    } else if (act === "sit-voice") {
+      const g = el && el.dataset.g;
+      if (g !== "feminine" && g !== "masculine") return;
+      if (sitVoice.gender === g) return;
+      sitVoice.gender = g;
+      try { localStorage.setItem("align-sit-gender", g); } catch { /* ignore */ }
+      app.querySelectorAll("[data-act='sit-voice']").forEach((b) => {
+        b.classList.toggle("on", b.dataset.g === g);
+      });
+      sitRestartTalk();
     } else if (act === "sound-station") {
       sitStop();
       if (window.ALIGN_SOUND) ALIGN_SOUND.playStation(el.dataset.id);

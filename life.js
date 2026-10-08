@@ -1269,69 +1269,6 @@ window.ALIGN_LIFE = (() => {
     return t === "pm" ? pm : am;
   };
 
-  const LS_ODB = "align-odb-day";
-  const isoLocal = () => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + day;
-  };
-  const parseOdbRss = (xml) => {
-    const item = String(xml || "").split("<item>")[1];
-    if (!item) return null;
-    const grab = (tag) => {
-      const m = item.match(new RegExp("<" + tag + "[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</" + tag + ">", "i"));
-      return m ? m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
-    };
-    const title = grab("title");
-    if (!title) return null;
-    const excerpt = grab("description");
-    return { title, excerpt, body: excerpt, url: grab("link") };
-  };
-  const fetchODB = async () => {
-    const iso = isoLocal();
-    try {
-      const cached = JSON.parse(localStorage.getItem(LS_ODB) || "null");
-      if (cached && cached.iso === iso && cached.title && cached.v === 2) return cached;
-    } catch { /* ignore */ }
-    const take = (row) => {
-      if (!row || !row.title) return null;
-      const excerpt = String(row.excerpt || "").trim();
-      const out = {
-        title: String(row.title || "").trim(),
-        excerpt,
-        body: String(row.body || excerpt).trim(),
-        url: String(row.url || "").trim(),
-        verse: String(row.verse || "").trim(),
-        passage: String(row.passage || "").trim(),
-        insights: String(row.insights || "").trim(),
-        prayer: String(row.prayer || "").trim(),
-        reflect: String(row.reflect || "").trim(),
-        bibleYear: String(row.bibleYear || "").trim(),
-        author: String(row.author || "").trim(),
-        iso,
-        v: 2
-      };
-      try { localStorage.setItem(LS_ODB, JSON.stringify(out)); } catch { /* quota */ }
-      return out;
-    };
-    try {
-      const res = await fetch("./api/odb");
-      if (res.ok) {
-        const row = take(await res.json());
-        if (row) return row;
-      }
-    } catch { /* API cold or offline */ }
-    try {
-      const res = await fetch("https://odb.org/feed/");
-      if (!res.ok) return null;
-      return take(parseOdbRss(await res.text()));
-    } catch {
-      return null;
-    }
-  };
-
   const ACTS = [
     { k: "Adoration", d: "Tell Him who He is. Start with God, not the day." },
     { k: "Confession", d: "Name what’s off. Receive mercy. Don’t rush this." },
@@ -1443,7 +1380,7 @@ window.ALIGN_LIFE = (() => {
     BOOKS, STEPS, EVENING, ACTS, STEP_IDS,
     loadRoutine, saveRoutine, mergeRoutineRemote, coerceRoutine, fmtHM,
     clocksFor, isEvening, chapterTarget, isShort, setShort, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
-    todaySpurgeon, fetchODB,
+    todaySpurgeon,
     morningOf, setStep, emptyMorning,
     timesOf, markOpen, markClose, stampClock, clockAt, fmtClockAt, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,
     idealMinFor, idealMsFor, pathIdealMs, pathWindowMs, paceKind,

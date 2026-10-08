@@ -700,12 +700,34 @@ img { max-width: 100%; display: block; }
   padding: 12px 0 calc(16px + var(--safe-b));
   background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
+.sit-tools { margin: 8px 0 0; }
+.sit-voice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.sit-voice button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
+}
+.sit-voice button.on {
+  border-color: var(--lime);
+  color: var(--lime);
+}
 .sit-rate {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin: 8px 0 0;
+  margin: 0;
 }
 .sit-rate button {
   width: 40px; height: 40px; border-radius: 12px;
@@ -718,6 +740,18 @@ img { max-width: 100%; display: block; }
   font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+.reader .sit-tools { margin: 0; }
+.reader .sit-voice { margin: 0; }
+.reader .sit-voice button {
+  height: 36px;
+  background: rgba(255,255,255,.1);
+  border: 0;
+  color: #f4f1ea;
+}
+.reader .sit-voice button.on {
+  background: rgba(214,255,63,.22);
+  color: var(--lime);
 }
 .reader .sit-rate { margin: 0; gap: 6px; }
 .reader .sit-rate button {
