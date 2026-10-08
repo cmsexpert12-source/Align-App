@@ -501,19 +501,22 @@ window.AlignDB = (() => {
     return y + "-" + m + "-" + day;
   };
 
-  const summarizeSchedule = (plan) => {
-    const items = [];
-    ((plan && plan.priorities) || []).forEach((p, i) => {
+  const countSchedule = (plan) => {
+    let total = 0;
+    let done = 0;
+    ((plan && plan.priorities) || []).forEach((p) => {
       const text = p && typeof p === "object" ? String(p.text || "").trim() : String(p || "").trim();
       if (!text) return;
-      items.push({ text: text.slice(0, 80), done: !!(p && p.done) });
+      total += 1;
+      if (p && typeof p === "object" && p.done) done += 1;
     });
     ((plan && plan.tasks) || []).forEach((t) => {
       const text = String((t && t.text) || "").trim();
       if (!text) return;
-      items.push({ text: text.slice(0, 80), done: !!(t && t.done) });
+      total += 1;
+      if (t && t.done) done += 1;
     });
-    return items;
+    return { done, total };
   };
 
   const bookSnap = () => {
@@ -567,7 +570,7 @@ window.AlignDB = (() => {
       total: Number(prev.total) || 12,
       go: !!prev.go,
       path_done: !!prev.path_done,
-      sched: Array.isArray(prev.sched) ? prev.sched : [],
+      sched: [],
       sched_done: Number(prev.sched_done) || 0,
       sched_total: Number(prev.sched_total) || 0,
       book_title: prev.book_title || "",
@@ -578,6 +581,7 @@ window.AlignDB = (() => {
       lights_at: prev.lights_at || null,
       updated_at: now
     }, extra || {});
+    row.sched = [];
     if (prev.wake_at) row.wake_at = prev.wake_at;
     if (prev.lights_at) row.lights_at = prev.lights_at;
     if (!row.wake_at) delete row.wake_at;
@@ -650,7 +654,7 @@ window.AlignDB = (() => {
         ids.forEach((id) => { if (merged[id]) doneN += 1; });
         const go = !!merged.go;
         const snap = bookSnap();
-        const items = summarizeSchedule((readJSON("align-plans", {}) || {})[p.iso] || {});
+        const tally = countSchedule((readJSON("align-plans", {}) || {})[p.iso] || {});
         const clocks = {};
         const wakeIso = clockIsoOf(p.iso, "rise", merged._times);
         const bedIso = clockIsoOf(p.iso, "lights", merged._times);
@@ -661,9 +665,9 @@ window.AlignDB = (() => {
           total: ids.length,
           go,
           path_done: go,
-          sched: items,
-          sched_done: items.filter((x) => x.done).length,
-          sched_total: items.length,
+          sched: [],
+          sched_done: tally.done,
+          sched_total: tally.total,
           book_title: snap.title,
           book_page: snap.page,
           book_pages: snap.pages,
@@ -675,11 +679,11 @@ window.AlignDB = (() => {
         user_id: userId, date: p.iso, payload: p.plan || {}, updated_at: now
       }, "user_id,date");
       if (!err) {
-        const items = summarizeSchedule(p.plan || {});
+        const tally = countSchedule(p.plan || {});
         await patchPathDay(userId, p.iso, {
-          sched: items,
-          sched_done: items.filter((x) => x.done).length,
-          sched_total: items.length
+          sched: [],
+          sched_done: tally.done,
+          sched_total: tally.total
         });
       }
     } else if (item.kind === "journal") {
@@ -1512,6 +1516,8 @@ window.AlignDB = (() => {
     const byUser = {};
     ids.forEach((id) => { byUser[id] = []; });
     (days || []).forEach((r) => {
+      if (!r) return;
+      r.sched = [];
       if (!byUser[r.user_id]) byUser[r.user_id] = [];
       byUser[r.user_id].push(r);
     });

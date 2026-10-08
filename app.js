@@ -3858,18 +3858,12 @@
         return `<span class="circle-dot ${cls}${isToday ? " today" : ""}" title="${escapeAttr(iso)}"><i></i><b>${lab}</b></span>`;
       }).join("");
       const label = mine ? ((m.name || "You") + " · you") : (m.name || "ALIGN");
-      let sched = todayRow && todayRow.sched;
-      if (typeof sched === "string") {
-        try { sched = JSON.parse(sched); } catch { sched = []; }
-      }
-      if (!Array.isArray(sched)) sched = [];
-      const schedDone = Number(todayRow && todayRow.sched_done) || sched.filter((x) => x && x.done).length;
-      const schedTotal = Number(todayRow && todayRow.sched_total) || sched.length;
+      const schedDone = Number(todayRow && todayRow.sched_done) || 0;
+      const schedTotal = Number(todayRow && todayRow.sched_total) || 0;
       const schedBlock = !mine
-        ? (sched.length
-          ? `<div class="circle-sec"><h4>Today <span>${schedDone} of ${schedTotal}</span></h4>
-              <ul class="circle-sched">${sched.map((it) => `<li class="${it.done ? "done" : ""}"><span class="circle-mark">${it.done ? "✓" : ""}</span><span>${escapeHtml(it.text || "")}</span></li>`).join("")}</ul></div>`
-          : `<div class="circle-sec"><h4>Today</h4><p class="circle-empty">They haven’t written today’s three. That’s theirs.</p></div>`)
+        ? `<div class="circle-sec"><h4>Today</h4>${schedTotal
+          ? `<p class="circle-empty">${schedTotal} scheduled · ${schedDone} done.</p>`
+          : `<p class="circle-empty">No schedule yet.</p>`}</div>`
         : "";
       const mins = Math.round((Number(todayRow && todayRow.read_ms) || 0) / 60000);
       const timeLine = mins >= 60
