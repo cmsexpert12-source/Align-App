@@ -2270,14 +2270,36 @@ img { max-width: 100%; display: block; }
 }
 .plan-pri:last-of-type { border-bottom: 0; }
 .plan-pri.done p { text-decoration: line-through; opacity: .7; }
+.plan-pri.now {
+  background: color-mix(in srgb, var(--lime) 8%, transparent);
+  margin: 0 -6px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  border-bottom-color: transparent;
+}
+.plan-pri.later p { color: var(--muted); font-weight: 500; }
 .plan-pri span {
   width: 22px; height: 22px; border-radius: 7px;
   background: rgba(214,255,63,.14); color: var(--lime);
   display: grid; place-items: center;
   font-size: 11px; font-weight: 800;
 }
+.plan-pri.now span { background: var(--lime); color: #111; }
+.plan-pri.later span {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line-2);
+}
 .plan-pri.done span { background: var(--lime); color: #111; }
 .plan-pri p { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.plan-also-h {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 10px 0 0;
+}
 .plan-task {
   display: block; width: 100%; text-align: left;
   font-size: 13px; color: var(--muted); padding: 8px 0 4px; line-height: 1.4;

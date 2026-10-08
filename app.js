@@ -2903,11 +2903,19 @@
         <button type="button" class="linkish" data-act="ios-install">How</button>
       </div>` : "")) : "";
 
-    const plan = (L().peekPlan ? L().peekPlan(t.iso) : L().planOf(t.iso));
+    const plan = L().planOf(t.iso);
     const prioRows = (plan.priorities || []).map(prioOf);
     const prios = prioRows.map((x) => x.text).filter(Boolean);
     const planTasks = (plan.tasks || []).filter((x) => x && String(x.text || "").trim());
     const planNote = String(plan.note || "").trim();
+    if (plan._needsSync) {
+      plan._needsSync = false;
+      try {
+        L().savePlan(t.iso, plan);
+        if (AlignDB.saveDayPlan) AlignDB.saveDayPlan(t.iso, plan);
+      } catch { /* local is the plan */ }
+    }
+    const nowI = prioRows.findIndex((pr) => pr.text && !pr.done);
     const jn = L().journalOf(t.iso);
     if (morn.devotion) {
       try { lockDevotionVerse(); } catch { /* ok */ }
@@ -2926,8 +2934,13 @@
         <div class="plan-now">
           ${state.planJustSaved ? `<div class="saved-banner">Saved. This is today’s plan.</div>` : ""}
           <div class="section-h"><h4>Today’s plan</h4><button class="linkish" data-act="open-step" data-step="plan">Edit</button></div>
-          ${prioRows.some((x) => x.text) ? prioRows.map((pr, i) => pr.text ? `<button type="button" class="plan-pri ${pr.done ? "done" : ""}" data-act="toggle-prio" data-i="${i}"><span>${pr.done ? "✓" : (i + 1)}</span><p>${escapeHtml(pr.text)}</p></button>` : "").join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
-          ${planTasks.map((tk, i) => `<button type="button" class="plan-task ${tk.done ? "done" : ""}" data-act="toggle-task" data-i="${i}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</button>`).join("")}
+          ${prioRows.some((x) => x.text) ? prioRows.map((pr, i) => {
+            if (!pr.text) return "";
+            const kind = pr.done ? "done" : (i === nowI ? "now" : "later");
+            return `<button type="button" class="plan-pri ${kind}" data-act="toggle-prio" data-i="${i}"><span>${pr.done ? "✓" : (i + 1)}</span><p>${escapeHtml(pr.text)}</p></button>`;
+          }).join("") : (morn.plan ? `<p class="plan-note-preview">No priorities written — tap Edit.</p>` : "")}
+          ${planTasks.length ? `<p class="plan-also-h">Also</p>` : ""}
+          ${(plan.tasks || []).map((tk, i) => (tk && String(tk.text || "").trim()) ? `<button type="button" class="plan-task ${tk.done ? "done" : ""}" data-act="toggle-task" data-i="${i}">${tk.done ? "✓" : "○"} ${escapeHtml(tk.text)}</button>` : "").join("")}
           ${planNote ? `<p class="plan-note-preview">${escapeHtml(planNote)}</p>` : ""}
           ${(prios.length || planTasks.length) ? `<button type="button" class="linkish plan-mark" data-act="schedule-done">${(prioRows.every((x) => !x.text || x.done) && planTasks.every((x) => x.done)) ? "Schedule complete" : "Mark all done"}</button>` : ""}
         </div>` : "";
@@ -4909,6 +4922,7 @@
               </div>
             </div>
           `).join("")}
+          <p class="field-label" style="margin:14px 0 8px">Also</p>
           ${(p.tasks || []).map((tk, i) => `
             <div class="task-row ${tk.done?"done":""}">
               <button class="check ${tk.done?"done":""}" data-act="toggle-task" data-i="${i}" style="${tk.done?"background:var(--lime);border-color:var(--lime)":""}">${tk.done?"✓":""}</button>
@@ -5691,6 +5705,10 @@
         const p = L().planOf(iso);
         const cur = prioOf(p.priorities[i]);
         p.priorities[i] = { text: el.value, done: cur.done, id: (p.priorities[i] && p.priorities[i].id) || ("p" + (i + 1)) };
+        if (p._rolled) {
+          if (!p._rolled.p) p._rolled.p = [null, null, null];
+          p._rolled.p[i] = null;
+        }
         L().savePlan(iso, p);
         AlignDB.saveDayPlan(iso, p);
       });
@@ -5700,7 +5718,14 @@
         const iso = today().iso;
         const p = L().planOf(iso);
         const i = Number(el.dataset.task);
-        if (p.tasks[i]) p.tasks[i].text = el.value;
+        if (p.tasks[i]) {
+          const was = p.tasks[i].text;
+          p.tasks[i].text = el.value;
+          if (p._rolled && Array.isArray(p._rolled.t) && String(was || "").trim() !== String(el.value || "").trim()) {
+            const key = String(was || "").trim().toLowerCase();
+            p._rolled.t = p._rolled.t.filter((x) => String(x || "").trim().toLowerCase() !== key);
+          }
+        }
         L().savePlan(iso, p);
         AlignDB.saveDayPlan(iso, p);
       });
@@ -6758,9 +6783,12 @@
       const p = L().planOf(iso);
       p.priorities = [0,1,2].map((i) => {
         const cur = prioOf(p.priorities[i]);
-        return { text: ((document.getElementById("prio-" + i) || {}).value || ""), done: cur.done, id: cur.id || ("p" + (i + 1)) };
+        const text = ((document.getElementById("prio-" + i) || {}).value || "");
+        if (p._rolled && p._rolled.p && String(cur.text || "") !== String(text || "")) p._rolled.p[i] = null;
+        return { text, done: cur.done, id: cur.id || ("p" + (i + 1)) };
       });
       p.note = (document.getElementById("plan-note") || {}).value || "";
+      p.tasks = (p.tasks || []).filter((tk) => tk && String(tk.text || "").trim());
       L().savePlan(iso, p);
       const res = await AlignDB.saveDayPlan(iso, p, { now: true });
       completeStep("plan");

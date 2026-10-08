@@ -893,32 +893,144 @@ window.ALIGN_LIFE = (() => {
     return Object.assign({}, src, { priorities, tasks, note: src.note || "" });
   };
 
+  const textKey = (s) => String(s || "").trim().toLowerCase();
+
+  const previousPlan = (iso, all) => {
+    for (let n = 1; n <= 14; n++) {
+      const prev = all[shiftIso(iso, -n)];
+      if (!prev) continue;
+      return normalizePlan(prev);
+    }
+    return null;
+  };
+
+  const emptyRolled = () => ({ p: [null, null, null], t: [] });
+
+  const readRolled = (row) => {
+    const src = row && row._rolled;
+    if (!src || typeof src !== "object") return emptyRolled();
+    return {
+      p: [src.p && src.p[0] || null, src.p && src.p[1] || null, src.p && src.p[2] || null],
+      t: Array.isArray(src.t) ? src.t.slice() : []
+    };
+  };
+
   const carryInto = (iso, plan) => {
     const all = loadJSON(LS_P, {});
     const today = normalizePlan(plan);
     if (today._carried) return today;
-    const seen = new Set(today.tasks.map((t) => String(t.text || "").toLowerCase()).filter(Boolean));
-    for (let n = 1; n <= 7; n++) {
+    const src = previousPlan(iso, all);
+    const rolled = readRolled(today);
+    if (src) {
+      [0, 1, 2].forEach((i) => {
+        const y = src.priorities[i];
+        const t = today.priorities[i];
+        if (y.text && !y.done && !t.text) {
+          today.priorities[i] = { text: y.text, done: false, id: y.id || ("p" + (i + 1)) };
+          rolled.p[i] = y.text;
+        }
+      });
+      const seen = new Set(today.tasks.map((t) => textKey(t.text)).filter(Boolean));
+      src.tasks.forEach((tk) => {
+        if (!tk.text || tk.done) return;
+        const key = textKey(tk.text);
+        if (seen.has(key)) return;
+        today.tasks.push({ id: tk.id || planTaskId(), text: tk.text, done: false });
+        seen.add(key);
+        rolled.t.push(tk.text);
+      });
+    }
+    today._rolled = rolled;
+    today._carried = true;
+    return today;
+  };
+
+  const markZombies = (iso, row, all) => {
+    const src = previousPlan(iso, all);
+    const rolled = readRolled(row);
+    const olderP = [[], [], []];
+    const olderT = new Set();
+    for (let n = 2; n <= 14; n++) {
       const prev = all[shiftIso(iso, -n)];
       if (!prev) continue;
       const yp = normalizePlan(prev);
       [0, 1, 2].forEach((i) => {
-        const y = yp.priorities[i];
-        const t = today.priorities[i];
-        if (y.text && !y.done && !t.text) {
-          today.priorities[i] = { text: y.text, done: false, id: y.id || ("p" + (i + 1)) };
-        }
+        if (yp.priorities[i].text) olderP[i].push(textKey(yp.priorities[i].text));
       });
-      yp.tasks.forEach((tk) => {
-        if (!tk.text || tk.done) return;
-        const key = tk.text.toLowerCase();
-        if (seen.has(key)) return;
-        today.tasks.push({ id: tk.id || planTaskId(), text: tk.text, done: false });
-        seen.add(key);
-      });
+      yp.tasks.forEach((tk) => { if (tk.text) olderT.add(textKey(tk.text)); });
     }
-    today._carried = true;
-    return today;
+    [0, 1, 2].forEach((i) => {
+      const t = row.priorities[i];
+      if (!t.text || t.done) return;
+      const key = textKey(t.text);
+      const y = src && src.priorities[i];
+      if (y && y.text && !y.done && textKey(y.text) === key) {
+        if (!rolled.p[i]) rolled.p[i] = t.text;
+        return;
+      }
+      const srcDoneSame = !!(y && y.done && textKey(y.text) === key);
+      const srcEmpty = !(y && y.text);
+      if ((srcDoneSame || srcEmpty) && olderP[i].indexOf(key) !== -1) rolled.p[i] = t.text;
+    });
+    row.tasks.forEach((tk) => {
+      if (!tk.text || tk.done) return;
+      const key = textKey(tk.text);
+      if (rolled.t.some((x) => textKey(x) === key)) return;
+      const srcOpen = !!(src && src.tasks.some((x) => textKey(x.text) === key && !x.done));
+      if (srcOpen) {
+        rolled.t.push(tk.text);
+        return;
+      }
+      const srcHas = !!(src && src.tasks.some((x) => textKey(x.text) === key));
+      if (!srcHas && olderT.has(key)) rolled.t.push(tk.text);
+      if (srcHas && src.tasks.some((x) => textKey(x.text) === key && x.done) && olderT.has(key)) rolled.t.push(tk.text);
+    });
+    row._rolled = rolled;
+    return row;
+  };
+
+  const applyScrub = (iso, plan) => {
+    const all = loadJSON(LS_P, {});
+    const row = normalizePlan(plan);
+    const src = previousPlan(iso, all);
+    if (!src) return null;
+    const rolled = readRolled(row);
+    let changed = false;
+    [0, 1, 2].forEach((i) => {
+      const t = row.priorities[i];
+      const mark = rolled.p[i];
+      if (!mark || !t.text || t.done) return;
+      if (textKey(t.text) !== textKey(mark)) return;
+      const y = src.priorities[i];
+      if (y && y.text && !y.done && textKey(y.text) === textKey(t.text)) return;
+      row.priorities[i] = { text: "", done: false, id: t.id || ("p" + (i + 1)) };
+      rolled.p[i] = null;
+      changed = true;
+    });
+    const rolledKeys = new Set(rolled.t.map(textKey));
+    const nextT = [];
+    const nextRolledT = [];
+    row.tasks.forEach((tk) => {
+      if (!tk.text) {
+        nextT.push(tk);
+        return;
+      }
+      const key = textKey(tk.text);
+      if (!tk.done && rolledKeys.has(key)) {
+        const still = src.tasks.some((x) => textKey(x.text) === key && !x.done);
+        if (!still) {
+          changed = true;
+          return;
+        }
+        nextRolledT.push(tk.text);
+      }
+      nextT.push(tk);
+    });
+    if (nextT.length !== row.tasks.length) changed = true;
+    row.tasks = nextT;
+    rolled.t = nextRolledT;
+    row._rolled = rolled;
+    return changed ? row : null;
   };
 
   const peekPlan = (iso) => {
@@ -929,8 +1041,23 @@ window.ALIGN_LIFE = (() => {
   const planOf = (iso) => {
     const all = loadJSON(LS_P, {});
     let row = normalizePlan(all[iso] || { priorities: ["", "", ""], tasks: [], note: "" });
+    let dirty = false;
     if (!row._carried) {
       row = carryInto(iso, row);
+      dirty = true;
+    }
+    if (!row._scrubbed) {
+      row = markZombies(iso, row, all);
+      row._scrubbed = true;
+      dirty = true;
+    }
+    const scrubbed = applyScrub(iso, row);
+    if (scrubbed) {
+      row = scrubbed;
+      dirty = true;
+    }
+    if (dirty) {
+      row._needsSync = true;
       all[iso] = stamp(row);
       saveJSON(LS_P, all);
     }
@@ -940,6 +1067,7 @@ window.ALIGN_LIFE = (() => {
     const all = loadJSON(LS_P, {});
     const row = normalizePlan(plan || {});
     row._carried = true;
+    row._needsSync = false;
     all[iso] = stamp(row);
     saveJSON(LS_P, all);
     return all[iso];
