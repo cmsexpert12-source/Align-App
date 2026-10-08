@@ -73,6 +73,7 @@
     bibleData: null,
     bibleLoading: false,
     bibleErr: "",
+    bibleChrome: true,
     readBook: "",
     readCh: 0,
     prayOn: false,
@@ -4206,6 +4207,7 @@
         </div>`;
     }
     if (phase === "hide") {
+      const shown = !!sess.revealed;
       return `
         <div class="screen full has-cta">
           <div class="back-row"><button class="icon-btn" data-go="home">${chev()}</button></div>
@@ -4215,11 +4217,14 @@
           </div>
           <div class="verse-body">
             <div class="verse-card">
-              <p class="mv-text" style="letter-spacing:.04em">${escapeHtml(S().initialsOf(v.text))}</p>
+              ${shown
+                ? `<q class="mv-text">${escapeHtml(v.text)}</q>`
+                : `<p class="mv-text" style="letter-spacing:.04em">${escapeHtml(S().initialsOf(v.text))}</p>`}
             </div>
           </div>
           <div class="sticky-cta">
-            <button class="btn" data-act="verse-continue">It’s hidden</button>
+            ${shown ? "" : `<button class="btn ghost" data-act="verse-reveal">Reveal</button>`}
+            <button class="btn" style="${shown ? "" : "margin-top:8px"}" data-act="verse-continue">It’s hidden</button>
           </div>
         </div>`;
     }
@@ -4850,7 +4855,7 @@
     const trShort = (L().trMeta && L().trMeta(tr) && L().trMeta(tr).short) || String(tr).toUpperCase();
     const ref = (data && data.reference) || ((state.readBook || "") + (state.readCh ? " " + state.readCh : "")) || "Scripture";
     return `
-      <div class="screen full has-cta">
+      <div class="screen full has-cta bible-sit${state.bibleChrome === false ? " chrome-off" : ""}">
         <div class="back-row">
           <button class="icon-btn" data-go="home">${chev()}</button>
           <div style="flex:1"></div>
@@ -4866,7 +4871,7 @@
           <button type="button" data-act="bible-prev">Previous</button>
           <button type="button" data-act="bible-next">Next</button>
         </div>
-        <div class="scripture">
+        <div class="scripture" data-act="bible-chrome">
           ${state.bibleLoading ? `<p class="hint">Loading chapter…</p>` : ""}
           ${state.bibleErr ? `<div class="err">${escapeHtml(state.bibleErr)}</div>` : ""}
           ${data ? verses.map((v) => `<p class="verse" data-v="${Number(v.verse) || 0}"><sup>${v.verse}</sup>${escapeHtml((v.text || "").trim())}</p>`).join("") : (!state.bibleLoading ? `<p class="hint">Open a chapter to begin.</p>` : "")}
@@ -6711,6 +6716,11 @@
     } else if (act === "bible-prev") {
       const p = L().prevRef(state.readBook || "Genesis", state.readCh || 1);
       jumpBible(p.book, p.chapter);
+    } else if (act === "bible-chrome") {
+      if (window.getSelection && String(window.getSelection()).trim()) return;
+      state.bibleChrome = state.bibleChrome === false;
+      const root = app.querySelector(".bible-sit");
+      if (root) root.classList.toggle("chrome-off", !state.bibleChrome);
     } else if (act === "bible-next") {
       const n = L().nextRef(state.readBook || "Genesis", state.readCh || 1);
       jumpBible(n.book, n.chapter);
@@ -7040,6 +7050,7 @@
       const sess = state.verseSess;
       if (!sess) return;
       sess.phase = "hide";
+      sess.revealed = false;
       render();
     } else if (act === "begin-day") {
       const iso = today().iso;

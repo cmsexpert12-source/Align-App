@@ -1341,6 +1341,16 @@ img { max-width: 100%; display: block; }
 .acts p { font-size: 13px; color: var(--muted); line-height: 1.4; }
 
 .scripture { padding: 8px 22px 20px; }
+.bible-sit.chrome-off .back-row,
+.bible-sit.chrome-off .page-title,
+.bible-sit.chrome-off .bible-nav,
+.bible-sit.chrome-off .sticky-cta {
+  display: none !important;
+}
+.bible-sit.chrome-off .scripture {
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(28px + var(--safe-b));
+}
 .scripture .ref {
   font-family: var(--display); font-size: 26px; letter-spacing: -.03em; margin: 6px 0 14px;
 }

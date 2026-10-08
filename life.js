@@ -801,6 +801,20 @@ window.ALIGN_LIFE = (() => {
     const id = chapterId(book, chapter);
     return (bibleCursor().log || []).some((x) => x && (x.id === id || (x.book === book && Number(x.chapter) === Number(chapter))));
   };
+  const nextUnread = (book, chapter) => {
+    let b = String(book || "Genesis").trim() || "Genesis";
+    let ch = Math.max(1, Number(chapter) || 1);
+    const origin = chapterId(b, ch);
+    for (let i = 0; i < 1300; i++) {
+      if (!chapterIsRead(b, ch)) return { book: b, chapter: ch };
+      const n = planNext(b, ch);
+      if (!n || !n.book) break;
+      b = n.book;
+      ch = Number(n.chapter) || 1;
+      if (chapterId(b, ch) === origin) break;
+    }
+    return { book: b, chapter: ch };
+  };
   const uniqueReadCount = () => {
     const s = new Set();
     (bibleCursor().log || []).forEach((x) => {
@@ -829,6 +843,9 @@ window.ALIGN_LIFE = (() => {
       c.book = n.book;
       c.chapter = n.chapter;
     }
+    const u = nextUnread(c.book, c.chapter);
+    c.book = u.book;
+    c.chapter = u.chapter;
     setBibleCursor(c);
     return c;
   };
@@ -836,10 +853,11 @@ window.ALIGN_LIFE = (() => {
   const todayAssignment = (iso) => {
     const c = bibleCursor();
     const readToday = (c.log || []).filter((x) => x.date === iso);
+    const nxt = nextUnread(c.book, c.chapter);
     if (readToday.length) {
-      return { start: { book: readToday[0].book, chapter: readToday[0].chapter }, read: readToday, next: { book: c.book, chapter: c.chapter } };
+      return { start: { book: readToday[0].book, chapter: readToday[0].chapter }, read: readToday, next: nxt };
     }
-    return { start: { book: c.book, chapter: c.chapter }, read: [], next: { book: c.book, chapter: c.chapter } };
+    return { start: nxt, read: [], next: nxt };
   };
 
   const stamp = (obj) => Object.assign({}, obj, { updated_at: new Date().toISOString() });
@@ -1257,7 +1275,7 @@ window.ALIGN_LIFE = (() => {
     bibleCursor, setBibleCursor, bookByName, nextRef, prevRef,
     TRANSLATIONS, READ_PLANS, biblePlan, planStart, planNext, planBooks, trMeta,
     fetchChapter, prefetchChapter, bibleTr, setBibleTr, markChapterRead, todayAssignment,
-    chapterIsRead, uniqueReadCount, readCountInBook, chapterId,
+    chapterIsRead, nextUnread, uniqueReadCount, readCountInBook, chapterId,
     planOf, peekPlan, savePlan, journalOf, saveJournal, journalsAll, devotionLog,
     notesList, noteById, emptyNote, upsertNote, deleteNote, mergeNotesRemote, verseOfDay,
     affirmationPref, saveAffirmationPref, affirmationRow, todayAffirmation, parseDevotionVerse, fetchKjv
