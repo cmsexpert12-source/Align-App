@@ -1949,14 +1949,16 @@
     if (step === "devotion") {
       state.view = "devotion";
       render();
-      Promise.all([
+      Promise.allSettled([
         state.spurgeonAm ? Promise.resolve(state.spurgeonAm) : L().todaySpurgeon("am"),
         state.odb ? Promise.resolve(state.odb) : L().fetchODB()
-      ]).then(([sp, odb]) => {
-        state.spurgeonAm = sp;
-        if (odb) state.odb = odb;
+      ]).then((vals) => {
+        const sp = vals[0] && vals[0].status === "fulfilled" ? vals[0].value : null;
+        const odb = vals[1] && vals[1].status === "fulfilled" ? vals[1].value : null;
+        if (sp) state.spurgeonAm = sp;
+        if (odb && odb.title) state.odb = odb;
         if (state.view === "devotion") render();
-      }).catch(() => {});
+      });
       return;
     }
     if (step === "evening") {
@@ -4674,14 +4676,14 @@
             <div class="devotion-verse">${escapeHtml(sp.v)}</div>
             <div class="devotion-body">${escapeHtml(sp.b)}</div>
           ` : `<p class="hint">Loading today’s reading…</p>`}
+          ${odb && odb.title ? `<div class="votd votd-extra">
+            <cite>Our Daily Bread</cite>
+            <q>${escapeHtml(odb.title)}</q>
+            ${odb.excerpt ? `<p class="hint" style="margin:8px 0 0">${escapeHtml(clipText(odb.excerpt, 180))}</p>` : ""}
+          </div>` : ""}
           <div class="field"><label>What remained</label>
             <textarea class="note-box" id="devotion-note" placeholder="A sentence is enough.">${escapeHtml(j.devotion || "")}</textarea>
           </div>
-          ${odb ? `<div class="votd votd-extra">
-            <cite>Our Daily Bread</cite>
-            <q>${escapeHtml(odb.title || "")}</q>
-            ${odb.excerpt ? `<p class="hint" style="margin:8px 0 0">${escapeHtml(clipText(odb.excerpt, 140))}</p>` : ""}
-          </div>` : ""}
         </div>
         <div class="sticky-cta">
           <button class="btn" data-act="save-devotion">Save & continue</button>

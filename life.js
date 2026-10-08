@@ -1269,17 +1269,53 @@ window.ALIGN_LIFE = (() => {
     return t === "pm" ? pm : am;
   };
 
+  const LS_ODB = "align-odb-day";
+  const isoLocal = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  };
+  const parseOdbRss = (xml) => {
+    const item = String(xml || "").split("<item>")[1];
+    if (!item) return null;
+    const grab = (tag) => {
+      const m = item.match(new RegExp("<" + tag + "[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</" + tag + ">", "i"));
+      return m ? m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+    };
+    const title = grab("title");
+    if (!title) return null;
+    return { title, excerpt: grab("description"), url: grab("link") };
+  };
   const fetchODB = async () => {
+    const iso = isoLocal();
+    try {
+      const cached = JSON.parse(localStorage.getItem(LS_ODB) || "null");
+      if (cached && cached.iso === iso && cached.title) return cached;
+    } catch { /* ignore */ }
+    const take = (row) => {
+      if (!row || !row.title) return null;
+      const out = {
+        title: String(row.title || "").trim(),
+        excerpt: String(row.excerpt || "").trim(),
+        url: String(row.url || "").trim(),
+        iso
+      };
+      try { localStorage.setItem(LS_ODB, JSON.stringify(out)); } catch { /* quota */ }
+      return out;
+    };
+    try {
+      const res = await fetch("./api/odb");
+      if (res.ok) {
+        const row = take(await res.json());
+        if (row) return row;
+      }
+    } catch { /* API cold or offline */ }
     try {
       const res = await fetch("https://odb.org/feed/");
-      const xml = await res.text();
-      const item = xml.split("<item>")[1];
-      if (!item) return null;
-      const grab = (tag) => {
-        const m = item.match(new RegExp("<" + tag + "[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</" + tag + ">"));
-        return m ? m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
-      };
-      return { title: grab("title"), excerpt: grab("description"), date: grab("pubDate") };
+      if (!res.ok) return null;
+      return take(parseOdbRss(await res.text()));
     } catch {
       return null;
     }
