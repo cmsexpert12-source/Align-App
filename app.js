@@ -550,7 +550,6 @@
       }
       const remoteLog = await AlignDB.fetchReadingLog();
       if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
-      hydrateBooks().catch(() => {});
     } catch { /* books schema may not be applied yet */ }
     try {
       const remoteSounds = await AlignDB.fetchSounds();
@@ -1773,16 +1772,7 @@
   };
 
   const hydrateBooks = async () => {
-    const books = B().list();
-    for (const b of books) {
-      if (!b.storage_path) continue;
-      try {
-        const have = await B().getFile(b.id);
-        if (have) continue;
-        const dl = await AlignDB.downloadBookFile(b.storage_path);
-        if (dl.ok && dl.data) await B().putFile(b.id, dl.data);
-      } catch { /* stay with what we have */ }
-    }
+    /* Titles sync on boot. The PDF loads when you open the book — pulling every file here OOMs the phone. */
   };
 
   const pullBooksCloud = async () => {
@@ -1792,7 +1782,6 @@
       if (remoteBooks.ok && Array.isArray(remoteBooks.data)) B().mergeRemote(remoteBooks.data);
       const remoteLog = await AlignDB.fetchReadingLog();
       if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
-      await hydrateBooks();
     } catch { /* keep local library */ }
   };
 

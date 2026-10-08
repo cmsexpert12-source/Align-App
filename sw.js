@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v172";
+const CACHE = "align-v173";
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,6 +28,7 @@ const ASSETS = [
 const skipPut = (pathname) =>
   /\/data\/spurgeon\//.test(pathname) ||
   /\/vendor\/pdfjs\//.test(pathname) ||
+  /splash-/i.test(pathname) ||
   /\.pdf$/i.test(pathname);
 
 self.addEventListener("install", (event) => {
@@ -53,7 +54,8 @@ const staleWhileRevalidate = (req) =>
         .then((res) => {
           if (res && res.ok && res.type === "basic") {
             const path = new URL(req.url).pathname;
-            if (!skipPut(path)) cache.put(req, res.clone());
+            const len = Number(res.headers.get("content-length") || 0);
+            if (!skipPut(path) && len < 900000) cache.put(req, res.clone());
           }
           return res;
         })
