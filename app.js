@@ -2981,16 +2981,6 @@
       return s.sub;
     };
 
-    const weekStart = startOfWeek(t.date);
-    const weekDots = [0,1,2,3,4,5,6].map((i) => {
-      const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      const iso = isoOf(d);
-      const isToday = iso === t.iso;
-      const done = morningDone(iso);
-      return `<div class="wd${isToday?" today":""}${done?" done":""}"><span class="n">${DOW[i][0]}</span><span class="dot">${d.getDate()}</span></div>`;
-    }).join("");
-
     const nextCta = cur
       ? (cur.id === "rise" ? "I’m up" : cur.id === "move" ? "Open session" : cur.id === "go" ? "Step out" : cur.id === "evening" ? "Open" : cur.id === "nightverse" ? "Read it" : cur.id === "lights" ? "Goodnight" : "Continue")
       : "Begin the day";
@@ -3076,14 +3066,18 @@
         ${planNow}
         ${wordToday}
         ${((!mStreak && !pulse.mornings && !pulse.chapters && !trainOn()) ? "" : `<div class="home-week">
-          <div class="week-strip">${weekDots}</div>
           <div class="pulse">
             <div class="pulse-top">
               <div class="pulse-num">${mStreak}</div>
               <div>
-                <h4>Day streak</h4>
-                <p>${streakCopy(mStreak)}${best > mStreak ? " Best " + best + "." : ""}</p>
+                <h4>${mStreak ? "mornings in a row" : "Streak"}</h4>
+                <p>${mStreak
+                  ? ((best > mStreak ? "Best " + best + "." : (mStreak === 1 ? "Come back tomorrow." : "")))
+                  : streakCopy(0)}</p>
               </div>
+            </div>
+            <div class="pulse-days" aria-hidden="true">
+              ${pulse.days.map((d) => `<i class="${d.morning ? "on" : ""} ${d.isToday ? "today" : ""}"></i>`).join("")}
             </div>
             ${(() => {
               if (!(pulse.mornings || pulse.sessions || pulse.chapters)) return "";
@@ -3100,7 +3094,8 @@
                 trainOn() ? (mo.sessions + " of " + mo.aimSessions + " sessions") : "",
                 mo.chapters + " of " + mo.aimChapters + " chapters"
               ].filter(Boolean);
-              return `<div class="pulse-bars">
+              return `<p class="pulse-week">This week</p>
+            <div class="pulse-bars">
               ${bar("Path", pulse.mornings, aim.mornings)}
               ${bar("Word", pulse.chapters, aim.chapters)}
               ${trainOn() ? bar("Move", pulse.sessions, aim.sessions) : ""}
@@ -3117,7 +3112,7 @@
               return `<button type="button" class="time-link" data-go="time"><b>${escapeHtml(label)}</b><span>Pace</span></button>`;
             })()}
           </div>
-        </div>`)}
+        </div>`)}}
       </div>
     `;
   };
@@ -3183,19 +3178,14 @@
     const maxBar = Math.max(idealMs, todayMs, 1);
     const kindLabel = { pace: "On pace", long: "Over", short: "Short", held: "Held", open: "—" };
     const cmpRow = (r) => {
-      const delta = r.actual && r.ideal ? (r.actual - r.ideal) : 0;
-      const dLab = !r.actual
-        ? "—"
-        : (Math.abs(delta) < 60000 ? "on pace" : ((delta > 0 ? "+" : "−") + fmt(Math.abs(delta))));
-      const actPct = Math.max(2, Math.min(100, Math.round(r.actual / maxBar * 100)));
-      const idPct = Math.max(2, Math.min(100, Math.round(r.ideal / maxBar * 100)));
       const k = r.actual >= 1000 ? r.kind : "open";
+      const used = r.actual >= 1000 ? fmt(r.actual) : (r.done ? "Done" : "—");
+      const actPct = Math.max(0, Math.min(100, Math.round(r.actual / maxBar * 100)));
+      const idPct = Math.max(2, Math.min(100, Math.round(r.ideal / maxBar * 100)));
       return `
         <div class="time-cmp">
-          <div class="lab">${escapeHtml(r.title)}${r.live ? " · now" : ""}<span>${kindLabel[k] || "—"}</span></div>
-          <b class="ideal">${fmt(r.ideal)}</b>
-          <b class="${k}">${r.actual >= 1000 ? fmt(r.actual) : (r.done ? "Done" : "—")}</b>
-          <b class="${k}">${dLab}</b>
+          <div class="lab">${escapeHtml(r.title)}${r.live ? " · now" : ""}<span>${kindLabel[k] || ""}</span></div>
+          <b class="${k}">${used} / ${fmt(r.ideal)}</b>
           <div class="time-track"><i class="ideal" style="width:${idPct}%"></i><i class="act ${k}" style="width:${actPct}%"></i></div>
         </div>`;
     };
@@ -3218,27 +3208,6 @@
     });
     const timedDays = weekRows.filter((d) => d.act >= 1000);
     const inAim = timedDays.filter((d) => !d.over && !d.starved).length;
-    const areaIds = [
-      { title: "Pray & affirm", ids: ["pray", "affirm"] },
-      { title: "The Word", ids: ["devotion", "verse", "word", "drill", "recite"] },
-      { title: "Train & ready", ids: ["move", "ready"] },
-      { title: "Plan & go", ids: ["plan", "go"] }
-    ];
-    const areaBlock = areaIds.map((a) => {
-      let act = 0, ideal = 0;
-      a.ids.forEach((id) => {
-        act += thisW.byStep[id] || 0;
-        thisW.isos.forEach((iso) => {
-          if (((L().dayTotalMs && L().dayTotalMs(iso)) || 0) < 1000) return;
-          ideal += (L().idealMsFor && L().idealMsFor(iso, id, optsFor(iso))) || 0;
-        });
-      });
-      if (act < 1000 && ideal < 1000) return "";
-      const kind = ideal && act > ideal * 1.2 ? "long" : (ideal && act < ideal * 0.75 ? "short" : "pace");
-      const d = act - ideal;
-      const dLab = !timedDays.length || Math.abs(d) < 60000 ? "" : ((d > 0 ? "+" : "−") + fmt(Math.abs(d)));
-      return `<div class="time-day"><span>${escapeHtml(a.title)}</span><b class="${kind}">${act >= 1000 ? fmt(act) : "—"} / ${ideal ? fmt(ideal) : "—"} ideal${dLab ? `<i>${dLab}</i>` : ""}</b></div>`;
-    }).join("");
     const dayRows = weekRows.map((d) => {
       const dt = new Date(d.iso + "T12:00:00");
       const name = DOW[dt.getDay()];
@@ -3249,56 +3218,46 @@
     const liveLine = (cur && live >= 1000)
       ? `<p class="hint" style="padding:0 16px">Now on ${escapeHtml(cur.title)} · ${fmt(live)} of ${fmt((L().idealMsFor && L().idealMsFor(t.iso, cur.id, opts)) || 0)} ideal</p>`
       : "";
-    const clk = L().clocksFor(t.date);
     const upAt = L().clockAt && L().clockAt(t.iso, "rise");
     const downAt = L().clockAt && L().clockAt(t.iso, "lights");
+    const clockLine = (upAt && upAt.label) || (downAt && downAt.label)
+      ? `<p class="hint" style="padding:0 16px 8px">${upAt && upAt.label ? "Up " + escapeHtml(upAt.label) : "Up —"}${downAt && downAt.label ? " · Down " + escapeHtml(downAt.label) : ""}</p>`
+      : "";
+    const denom = Math.max(windowMs, idealMs, todayMs, 1);
+    const mo = monthPulse();
+    const pct = (n, a) => {
+      const d = Number(a) || 0;
+      if (d <= 0) return 0;
+      return Math.max(0, Math.min(100, Math.round((Number(n) || 0) * 100 / d)));
+    };
+    const bar = (label, n, a) => `<div class="pulse-bar"><div class="pulse-bar-h"><span>${label}</span><b>${n}/${a}</b></div><div class="pulse-bar-track" aria-hidden="true"><i style="width:${pct(n, a)}%"></i></div></div>`;
     return `
       <div class="screen home">
         <div class="topbar"><div class="greet">Time<h2>Pace.</h2></div>
           <div class="topbar-actions">${soundLaunch()}<button class="linkish" data-go="home">Today</button></div>
         </div>
-        <div class="pulse-stats" style="margin:0 16px 8px">
-          <div><b>${upAt && upAt.label ? escapeHtml(upAt.label) : "—"}</b><span>I’m up${clk.wakeLabel ? " · set " + escapeHtml(clk.wakeLabel) : ""}</span></div>
-          <div><b>${downAt && downAt.label ? escapeHtml(downAt.label) : "—"}</b><span>Goodnight${clk.tonightLabel ? " · set " + escapeHtml(clk.tonightLabel) : ""}</span></div>
-        </div>
+        ${clockLine}
         ${liveLine}
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : "—"} / ${fmt(idealMs)}</span></div>
-          <div class="pulse-stats" style="margin:0 0 10px;padding:0;border:0">
-            <div><b>${todayMs >= 1000 ? fmt(todayMs) : "—"}</b><span>Actual</span></div>
-            <div><b>${fmt(idealMs)}</b><span>Ideal</span></div>
-            <div><b>${fmt(windowMs)}</b><span>${sunday ? "To 5:45" : "Aim"}</span></div>
-          </div>
-          <div class="time-track big"><i class="ideal" style="width:${Math.min(100, Math.round(idealMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i><i class="act ${todayMs > windowMs ? "long" : "pace"}" style="width:${Math.min(100, Math.round(todayMs / Math.max(windowMs, idealMs, todayMs, 1) * 100))}%"></i></div>
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This morning</h4><span>${todayMs >= 1000 ? fmt(todayMs) : "—"} / ${fmt(idealMs)} ideal</span></div>
+          <div class="time-track big"><i class="ideal" style="width:${Math.min(100, Math.round(idealMs / denom * 100))}%"></i><i class="act ${todayMs > windowMs ? "long" : "pace"}" style="width:${Math.min(100, Math.round(todayMs / denom * 100))}%"></i></div>
+          <p class="hint" style="padding:0;margin:8px 0 0">${sunday ? "To 5:45 · " + fmt(windowMs) : "Window " + fmt(windowMs)}</p>
         </div>
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4><span>Ideal · actual</span></div>
-          <div class="time-cmp head"><div class="lab"></div><b class="ideal">Ideal</b><b>Used</b><b>Gap</b></div>
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>By step</h4><span>Used / ideal</span></div>
           ${rows.map(cmpRow).join("")}
         </div>
         <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This week</h4><span>${timedDays.length ? inAim + "/" + timedDays.length + " on aim" : "—"}</span></div>
-          <div class="pulse-stats" style="margin:0;padding:0;border:0">
-            <div><b>${thisW.daysN ? fmt(thisW.avg) : "—"}</b><span>Avg used</span></div>
-            <div><b>${timedDays.length ? fmt(Math.round(timedDays.reduce((n, d) => n + d.ideal, 0) / timedDays.length)) : "—"}</b><span>Avg ideal</span></div>
-            <div><b>${timedDays.length ? inAim + "/" + timedDays.length : "—"}</b><span>On aim</span></div>
-          </div>
-          ${areaBlock}
-        </div>
-        ${(() => {
-          const mo = monthPulse();
-          return `<div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This month</h4><span>${mo.days} days</span></div>
-          <div class="pulse-stats" style="margin:0;padding:0;border:0">
-            <div><b>${mo.mornings}/${mo.aimMornings}</b><span>Mornings</span></div>
-            <div><b>${mo.sessions}/${mo.aimSessions}</b><span>Sessions</span></div>
-            <div><b>${mo.chapters}/${mo.aimChapters}</b><span>Chapters</span></div>
-          </div>
-        </div>`;
-        })()}
-        <div class="time-area">
-          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>Days</h4><span>Used / ideal</span></div>
+          <div class="section-h" style="padding:0;margin:0 0 4px"><h4>This week</h4><span>${timedDays.length ? inAim + "/" + timedDays.length + " on aim" : "—"}</span></div>
           ${dayRows}
+        </div>
+        <div class="time-area">
+          <div class="section-h" style="padding:0;margin:0 0 8px"><h4>This month</h4><span>${mo.days} days</span></div>
+          <div class="pulse-bars" style="margin:0;padding:0;border:0">
+            ${bar("Path", mo.mornings, mo.aimMornings)}
+            ${bar("Word", mo.chapters, mo.aimChapters)}
+            ${trainOn() ? bar("Move", mo.sessions, mo.aimSessions) : ""}
+          </div>
         </div>
       </div>
     `;
