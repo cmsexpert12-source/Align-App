@@ -2861,9 +2861,19 @@
         ${rows.map((r) => {
           const cls = r.done ? "done" : (r.now ? "now" : "wait");
           const can = !!(r.done || r.now);
-          const act = can ? `type="button" data-act="open-step" data-step="${escapeAttr(r.s.id)}"` : "";
+          const name = pathShort(r.s);
+          const act = can ? `type="button" data-act="open-step" data-step="${escapeAttr(r.s.id)}" aria-label="${escapeAttr(name)}"` : `aria-hidden="true"`;
           const tag = can ? "button" : "div";
-          return `<${tag} class="pr ${cls}" ${act}><span class="pr-dot"></span><span class="pr-n">${escapeHtml(pathShort(r.s))}</span></${tag}>`;
+          return `<${tag} class="pr ${cls}" ${act}><span class="pr-dot"></span></${tag}>`;
+        }).join("")}
+      </div>
+      <div class="path-legend">
+        ${rows.map((r) => {
+          const cls = r.done ? "done" : (r.now ? "now" : "wait");
+          const can = !!(r.done || r.now);
+          const name = pathShort(r.s);
+          if (!can) return `<span class="path-leg wait">${escapeHtml(name)}</span>`;
+          return `<button type="button" class="path-leg ${cls}" data-act="open-step" data-step="${escapeAttr(r.s.id)}">${escapeHtml(name)}</button>`;
         }).join("")}
       </div>`;
   };
