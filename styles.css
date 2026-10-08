@@ -1130,12 +1130,7 @@ img { max-width: 100%; display: block; }
 }
 .splash .logo {
   width: 84px; height: 84px; border-radius: 26px; background: var(--lime); color: #111;
-  display: grid; place-items: center; animation: pop .5s cubic-bezier(.2,1.4,.3,1) both;
-  position: relative;
-}
-.splash .logo::after {
-  content: ""; position: absolute; inset: -10px; border-radius: 32px; border: 1px solid rgba(214,255,63,.35);
-  animation: pulse-ring 1.6s ease-out infinite;
+  display: grid; place-items: center;
 }
 .splash h1 {
   font-family: var(--display); font-size: 22px; letter-spacing: .28em; margin-top: 22px; font-weight: 800;

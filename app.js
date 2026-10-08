@@ -2601,7 +2601,7 @@
     <div class="screen splash">
       <div class="logo">${markSvg()}</div>
       <h1>ALIGN</h1>
-      <p>Walk the morning in order</p>
+      <p>The morning, in one place</p>
     </div>
   `;
 
