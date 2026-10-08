@@ -128,12 +128,14 @@ Enable **pg_cron** and **pg_net** first if the notice says they are missing (Das
 
 Then **You → Reminders** on, while signed in, and allow notifications. iPhone: Add to Home Screen.
 
-Vercel `/api/cron-push` sends the two reminders in the phone’s timezone (default Africa/Lagos):
+Vercel `/api/cron-push` sends four reminders in the phone’s timezone (default Africa/Lagos):
 
 - 5 minutes before rise — Sunday 3:55, Mon–Sat 4:55
-- 10 minutes before lights out — Saturday 23:50 (midnight), other nights 00:50 (1:00)
+- 14:00 — today’s three / schedule
+- 19:00 — evening book
+- 10 minutes before lights — night devotion, then the verse (Saturday 23:50 / other nights 00:50)
 
-Copy is about the whole morning, not a gym ping. The old `send-push` edge function is optional.
+Copy is ALIGN · plus one line. Not a gym ping. The old `send-push` edge function is optional.
 
 ---
 

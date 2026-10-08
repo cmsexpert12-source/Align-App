@@ -1,4 +1,4 @@
-/* ALIGN timed push — 5 min before rise, 10 min before lights out.
+/* ALIGN timed push — four a day: rise, midday plan, evening book, night devotion.
    Called every 5 minutes from pg_cron (sql/push-alarms.sql).
    Test from the phone: POST { mode: "test" } with the user JWT. */
 
@@ -120,7 +120,13 @@ function pick(bank, iso) {
 
 function payloadFor(kind) {
   if (kind === "lights") {
-    return { title: "ALIGN ·", body: "Ten minutes.", tag: "align-lights", url: "./index.html" };
+    return { title: "ALIGN ·", body: "Night devotion. Then the verse.", tag: "align-lights", url: "./index.html" };
+  }
+  if (kind === "plan") {
+    return { title: "ALIGN ·", body: "Today’s three. Still yours.", tag: "align-plan", url: "./index.html" };
+  }
+  if (kind === "read") {
+    return { title: "ALIGN ·", body: "The book is waiting.", tag: "align-read", url: "./index.html" };
   }
   return { title: "ALIGN ·", body: "Five minutes.", tag: "align-wake", url: "./index.html" };
 }
@@ -173,7 +179,10 @@ async function dropSubs(endpoints) {
 
 async function unmark(userId, kind) {
   if (!userId || !SERVICE) return;
-  const patch = kind === "lights" ? { last_lights_sent: null } : { last_wake_sent: null };
+  const patch = kind === "lights" ? { last_lights_sent: null }
+    : kind === "plan" ? { last_plan_sent: null }
+    : kind === "read" ? { last_read_sent: null }
+    : { last_wake_sent: null };
   await rest("/rest/v1/notification_prefs?user_id=eq." + encodeURIComponent(userId), {
     method: "PATCH",
     token: SERVICE,

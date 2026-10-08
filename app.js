@@ -3644,8 +3644,8 @@
             <div class="grow">
               <h4>Reminders</h4>
               <p>${state.prefs.enabled
-                ? "On · 5 min before rise · 10 min before lights"
-                : ("Off · 5 min before " + (L().fmtHM ? L().fmtHM(r.sunWakeH, r.sunWakeM) : "") + " / " + (L().fmtHM ? L().fmtHM(r.wkWakeH, r.wkWakeM) : ""))}</p>
+                ? "On · rise · 2pm plan · 7pm book · night devotion"
+                : "Off · four times. Rise, plan, book, night."}</p>
             </div>
             <button class="toggle ${state.prefs.enabled?"on":""}" data-act="toggle-push"><i></i></button>
           </div>

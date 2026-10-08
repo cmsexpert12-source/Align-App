@@ -336,7 +336,7 @@ window.ALIGN_LIFE = (() => {
     return elapsed >= 0 && elapsed < winMin * 60;
   };
 
-  /* 5 min before this person's rise. 10 min before their lights out. */
+  /* Four a day: 5 min before rise, 14:00 plan, 19:00 book, 10 min before lights. */
   const dueAlarms = (now = new Date()) => {
     const d = now instanceof Date ? now : new Date(now);
     const WIN = 15;
@@ -355,15 +355,23 @@ window.ALIGN_LIFE = (() => {
     if (hit(preWT)) {
       return { kind: "wake", iso: isoOfDate(tom), title: "ALIGN ·", body: "Five minutes." };
     }
+    const planAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 14, 0, 0, 0);
+    if (hit(planAt)) {
+      return { kind: "plan", iso: isoOfDate(d), title: "ALIGN ·", body: "Today’s three. Still yours." };
+    }
+    const readAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 19, 0, 0, 0);
+    if (hit(readAt)) {
+      return { kind: "read", iso: isoOfDate(d), title: "ALIGN ·", body: "The book is waiting." };
+    }
     const lightsAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.tonightH, clk.tonightM || 0, 0, 0);
     const preL = new Date(lightsAt.getTime() - 10 * 60 * 1000);
     if (hit(preL)) {
-      return { kind: "lights", iso: isoOfDate(d), title: "ALIGN ·", body: "Ten minutes." };
+      return { kind: "lights", iso: isoOfDate(d), title: "ALIGN ·", body: "Night devotion. Then the verse." };
     }
     const lightsT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.tonightH, clkT.tonightM || 0, 0, 0);
     const preLT = new Date(lightsT.getTime() - 10 * 60 * 1000);
     if (hit(preLT)) {
-      return { kind: "lights", iso: isoOfDate(tom), title: "ALIGN ·", body: "Ten minutes." };
+      return { kind: "lights", iso: isoOfDate(tom), title: "ALIGN ·", body: "Night devotion. Then the verse." };
     }
     return null;
   };
