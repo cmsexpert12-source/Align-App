@@ -2973,19 +2973,21 @@ img { max-width: 100%; display: block; }
   border: 1px solid var(--line-2);
   border-radius: 18px;
   padding: 18px 16px;
-  font-family: var(--serif);
+  font-family: var(--font);
   font-size: 22px;
   font-weight: 500;
   line-height: 1.5;
-  color: var(--text);
+  color: #f4f1ea;
   caret-color: var(--lime);
-  -webkit-text-fill-color: var(--text);
+  -webkit-text-fill-color: #f4f1ea;
   outline: none;
   resize: none;
   white-space: pre-wrap;
   overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
 }
-.affirm-box:focus { border-color: var(--lime); }
+.affirm-box:focus { border-color: var(--lime); -webkit-text-fill-color: #f4f1ea; color: #f4f1ea; }
 .affirm-box::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); font-style: italic; }
 .affirm-said {
   margin: 0;

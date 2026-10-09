@@ -519,11 +519,13 @@
       }
       if (life.data.affirmation && Life && Life.saveAffirmationPref) {
         try {
-          const local = Life.affirmationRow ? Life.affirmationRow() : {};
-          const lAt = Date.parse((local && local.updated_at) || "") || 0;
-          const rAt = Date.parse(life.data.affirmation.updated_at || "") || 0;
-          if (!String((local && local.text) || "").trim() || rAt >= lAt) {
-            Life.saveAffirmationPref(life.data.affirmation.text || "", { updated_at: life.data.affirmation.updated_at });
+          if (!(state.view === "affirm" && (state.affirmEdit || state.affirmDraft != null))) {
+            const local = Life.affirmationRow ? Life.affirmationRow() : {};
+            const lAt = Date.parse((local && local.updated_at) || "") || 0;
+            const rAt = Date.parse(life.data.affirmation.updated_at || "") || 0;
+            if (!String((local && local.text) || "").trim() || rAt >= lAt) {
+              Life.saveAffirmationPref(life.data.affirmation.text || "", { updated_at: life.data.affirmation.updated_at });
+            }
           }
         } catch { /* keep local line */ }
       }
@@ -4813,7 +4815,7 @@
         </div>
         <div class="scroll-body affirm-wrap">
           ${editing
-            ? `<textarea class="affirm-box" id="affirm-text" rows="8" maxlength="800" placeholder="The word you speak every morning.">${escapeHtml(custom)}</textarea>`
+            ? `<textarea class="affirm-box" id="affirm-text" rows="8" maxlength="2000" placeholder="The word you speak every morning."></textarea>`
             : `<p class="affirm-said">${escapeHtml(custom)}</p>`}
         </div>
         <div class="sticky-cta">
@@ -5708,7 +5710,14 @@
       L().saveJournal(iso, j);
     });
     const af = $("#affirm-text");
-    if (af) af.addEventListener("input", (e) => { state.affirmDraft = e.target.value; });
+    if (af) {
+      let start = "";
+      try { start = (state.affirmDraft != null) ? String(state.affirmDraft) : ((L().affirmationPref && L().affirmationPref()) || ""); } catch { start = state.affirmDraft || ""; }
+      if (af.value !== start) af.value = start;
+      const keep = () => { state.affirmDraft = af.value; };
+      af.addEventListener("input", keep);
+      af.addEventListener("keyup", keep);
+    }
     const pnote = $("#plan-note");
     if (pnote) pnote.addEventListener("input", e => {
       const iso = today().iso;
@@ -7279,7 +7288,19 @@
       render();
     } else if (act === "edit-affirm") {
       state.affirmEdit = true;
+      if (state.affirmDraft == null) {
+        try { state.affirmDraft = (L().affirmationPref && L().affirmationPref()) || ""; } catch { state.affirmDraft = ""; }
+      }
       render();
+      requestAnimationFrame(() => {
+        const box = document.getElementById("affirm-text");
+        if (!box) return;
+        box.focus();
+        try {
+          const n = box.value.length;
+          box.setSelectionRange(n, n);
+        } catch { /* ok */ }
+      });
     } else if (act === "save-affirm") {
       const box = document.getElementById("affirm-text");
       if (!box) return;
