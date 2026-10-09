@@ -1602,18 +1602,27 @@
     try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch { /* ignore */ }
     try { app.querySelectorAll(".verse.on").forEach((n) => n.classList.remove("on")); } catch { /* ignore */ }
   };
+  const sitOnAndroid = () => /Android/i.test(navigator.userAgent || "");
+  const sitVoiceGenderOf = (v) => {
+    const low = (
+      String((v && v.name) || "") + " " +
+      String((v && v.voiceURI) || "") + " " +
+      String((v && v.lang) || "")
+    ).toLowerCase();
+    if (/\bfemale\b|\bwoman\b|samantha|karen|moira|victoria|\bkate\b|serena|nicky|fiona|tessa|zira|hazel|susan|martha|\bava\b|\bemma\b|joanna|salli|\bivy\b|kendra|allison|catherine|#female|x-sfg|x-tpf|x-tpc|uk english female|us english female/.test(low)) return "feminine";
+    if (/\bmale\b|\bman\b|daniel|\balex\b|\btom\b|\bfred\b|david|james|rishi|aaron|gordon|bruce|nathan|matthew|justin|joey|oliver|thomas|\bmark\b|\bguy\b|#male|x-tpd|x-iol|uk english male|us english male/.test(low)) return "masculine";
+    return "";
+  };
   const sitPickVoice = () => {
     let voices = [];
     try { voices = (window.speechSynthesis && speechSynthesis.getVoices()) || []; } catch { voices = []; }
-    const pool = voices.filter((v) => /^en/i.test(v.lang || "") || /english/i.test(v.name || ""));
+    const pool = voices.filter((v) => /^en/i.test(String(v.lang || "").replace("_", "-")) || /english/i.test(v.name || ""));
     const list = pool.length ? pool : voices;
     if (!list.length) return null;
     const want = sitVoice.gender === "masculine" ? "masculine" : "feminine";
-    const fem = /female|woman|samantha|karen|moira|victoria|kate|serena|nicky|fiona|tessa|zira|hazel|susan|martha|ava|emma|joanna|salli|ivy|kendra|allison|catherine|siri.*female|uk english female|us english female/;
-    const mas = /male|man\b|daniel|alex|tom|fred|david|james|rishi|aaron|gordon|bruce|nathan|matthew|justin|joey|oliver|thomas|\bmark\b|guy|siri.*male|uk english male|us english male/;
     const junk = /compact|eloquence|espeak|robot|novelty|bells|boing|bubbles|cellos|zarvox|trinoids|whisper|bad news|good news|deranged|hysterical|princess|superstar|wobble|albert|ralph|kathy|agnes|junior/;
     const score = (v) => {
-      const n = String((v && v.name) || "") + " " + String((v && v.lang) || "");
+      const n = String((v && v.name) || "") + " " + String((v && v.lang) || "") + " " + String((v && v.voiceURI) || "");
       const low = n.toLowerCase();
       let s = 0;
       if (v && v.localService) s += 6;
@@ -1621,13 +1630,20 @@
       if (junk.test(low)) s -= 40;
       if (/en-GB|en_GB|British|Daniel/i.test(n)) s += 4;
       if (/en-US|en_US/i.test(n)) s += 2;
-      const isF = fem.test(low);
-      const isM = mas.test(low);
-      if (want === "feminine") s += isF ? 24 : (isM ? -18 : 0);
-      else s += isM ? 24 : (isF ? -18 : 0);
+      const g = sitVoiceGenderOf(v);
+      if (g === want) s += 28;
+      else if (g) s -= 22;
       return s;
     };
-    return list.slice().sort((a, b) => score(b) - score(a))[0] || null;
+    const ranked = list.slice().sort((a, b) => score(b) - score(a));
+    const named = ranked.filter((v) => sitVoiceGenderOf(v) === want)[0];
+    if (named) return named;
+    if (want === "masculine") {
+      const fem = ranked.filter((v) => sitVoiceGenderOf(v) === "feminine")[0];
+      const other = ranked.filter((v) => v !== fem)[0];
+      if (other) return other;
+    }
+    return ranked[0] || null;
   };
   const sitVoicesReady = () => new Promise((resolve) => {
     let done = false;
@@ -1773,10 +1789,19 @@
     sitUtter = u;
     const gen = sitGen;
     const v = sitPickVoice();
-    if (v) { u.voice = v; u.lang = v.lang || "en-GB"; }
-    else u.lang = "en-GB";
+    if (v) {
+      let live = v;
+      try {
+        live = ((speechSynthesis.getVoices() || []).filter((x) => x.voiceURI === v.voiceURI || x.name === v.name)[0]) || v;
+      } catch { live = v; }
+      u.voice = live;
+      try { u.voiceURI = live.voiceURI; } catch { /* old webkit */ }
+      u.lang = String(live.lang || "en-GB").replace("_", "-");
+    } else u.lang = "en-GB";
     u.rate = sitVoice.rate;
-    u.pitch = 1;
+    u.pitch = sitOnAndroid()
+      ? (sitVoice.gender === "masculine" ? 0.76 : 1.12)
+      : 1;
     u.onend = () => {
       if (gen !== sitGen) return;
       if (sitVoice.hold) {
