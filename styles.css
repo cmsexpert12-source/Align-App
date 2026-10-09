@@ -958,7 +958,19 @@ img { max-width: 100%; display: block; }
 .done-stats span { font-size: 11px; color: var(--muted); }
 
 /* ---------- PROGRESS ---------- */
-.progress { padding: 8px 16px calc(var(--nav-h) + var(--safe-b) + 16px); }
+.screen.progress,
+.progress {
+  display: block;
+  padding: 8px 16px calc(var(--nav-h) + var(--safe-b) + 16px);
+}
+.screen.progress > * {
+  flex: none;
+  height: auto;
+  min-height: 0;
+}
+.screen.progress .pulse {
+  margin: 0 0 14px;
+}
 .big-stat {
   background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 20px;
   margin-bottom: 12px;
@@ -2152,13 +2164,16 @@ img { max-width: 100%; display: block; }
   border-radius: 16px;
   padding: 10px 12px;
   text-align: left;
-  min-height: 0;
+  flex: none;
+  height: auto;
+  min-height: auto;
+  overflow: hidden;
 }
 .pulse-top {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: start;
 }
 .pulse-num {
   font-family: var(--display);
@@ -2169,7 +2184,8 @@ img { max-width: 100%; display: block; }
   line-height: 1;
   min-width: 28px;
 }
-.pulse-top h4 { font-size: 13px; font-weight: 700; }
+.pulse-top > div { min-width: 0; }
+.pulse-top h4 { font-size: 13px; font-weight: 700; line-height: 1.25; }
 .pulse-top p { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
 .pulse-days {
   display: grid;
