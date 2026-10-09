@@ -5015,6 +5015,8 @@
           ${sitRateHtml()}
           <button class="btn" style="margin-top:8px" data-act="bible-done">${escapeHtml(bibleCta)}</button>
         </div>
+        ${readSkipHtml("bible-prev", "bible-next")}
+        <button type="button" class="read-mark${alreadyToday ? " on" : ""}" data-act="bible-done" title="${escapeAttr(bibleCta)}" aria-label="${escapeAttr(bibleCta)}">${markIco()}</button>
       </div>
     `;
   };
@@ -5417,6 +5419,7 @@
             <button class="btn ghost" data-act="pdf-next">Next</button>
           </div>
         </div>
+        ${readSkipHtml("pdf-prev", "pdf-next")}
       </div>
     `;
   };
@@ -5445,6 +5448,13 @@
   };
 
   const chev = () => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 8 12l7 7"/></svg>`;
+  const skipChev = (dir) => dir === "next"
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg>`
+    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 8 12l7 7"/></svg>`;
+  const markIco = () => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12.5 9.5 17 19 7"/></svg>`;
+  const readSkipHtml = (prevAct, nextAct) => `
+        <button type="button" class="read-skip read-skip-prev" data-act="${prevAct}" title="Previous" aria-label="Previous">${skipChev("prev")}</button>
+        <button type="button" class="read-skip read-skip-next" data-act="${nextAct}" title="Next" aria-label="Next">${skipChev("next")}</button>`;
 
   const ringSvg = (frac) => {
     const r = 86, c = 2 * Math.PI * r;
@@ -6062,7 +6072,6 @@
       if (Math.abs(dx) < across || Math.abs(dx) <= Math.abs(dy) * 1.35) return;
       if (dx < 0) goPdfPage(state.pdfPage + 1);
       else goPdfPage(state.pdfPage - 1);
-      setPdfChrome(true);
     };
     wrap.addEventListener("pointerup", endPtr);
     wrap.addEventListener("pointercancel", endPtr);
@@ -7000,10 +7009,10 @@
       render();
     } else if (act === "pdf-prev") {
       goPdfPage(state.pdfPage - 1);
-      setPdfChrome(true);
+      if (!app.querySelector(".reader.chrome-off")) setPdfChrome(true);
     } else if (act === "pdf-next") {
       goPdfPage(state.pdfPage + 1);
-      setPdfChrome(true);
+      if (!app.querySelector(".reader.chrome-off")) setPdfChrome(true);
     } else if (act === "pdf-theme") {
       pdfPrefs.theme = pdfPrefs.theme === "paper" ? "sepia" : pdfPrefs.theme === "sepia" ? "night" : "paper";
       savePdfPrefs();

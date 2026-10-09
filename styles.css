@@ -1525,7 +1525,9 @@ img { max-width: 100%; display: block; }
 }
 .bible-sit.chrome-off .scripture {
   padding-top: calc(16px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(28px + var(--safe-b));
+  padding-bottom: calc(72px + var(--safe-b));
+  padding-left: 36px;
+  padding-right: 36px;
 }
 .scripture .ref {
   font-family: var(--display); font-size: 26px; letter-spacing: -.03em; margin: 6px 0 14px;
@@ -1842,6 +1844,47 @@ img { max-width: 100%; display: block; }
 }
 .reader.chrome-off .pdf-top { transform: translateY(-10px); }
 .reader.chrome-off .pdf-bottom { transform: translateY(12px); }
+.read-skip,
+.read-mark {
+  position: absolute;
+  z-index: 6;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.read-skip {
+  top: 50%;
+  width: 40px;
+  height: 64px;
+  transform: translateY(-50%);
+  opacity: .4;
+}
+.read-skip-prev { left: 0; }
+.read-skip-next { right: 0; }
+.read-skip svg { width: 18px; height: 18px; }
+.read-skip:active { opacity: .85; }
+.read-mark {
+  bottom: calc(16px + var(--safe-b));
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  color: var(--lime);
+  opacity: .72;
+}
+.read-mark.on { opacity: 1; }
+.read-mark:active { opacity: 1; }
+.read-mark svg { width: 20px; height: 20px; }
+.reader.theme-paper .read-skip,
+.reader.theme-sepia .read-skip { color: #1c140c; }
+.reader.theme-night .read-skip,
+.bible-sit .read-skip { color: #f4f1ea; }
+.bible-sit:not(.chrome-off) .read-mark { display: none; }
 .reader.theme-paper { background: #f3ead7; }
 .reader.theme-paper .pdf-wrap canvas { filter: none; }
 .reader.theme-sepia { background: #e4d0a8; }
