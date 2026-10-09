@@ -1,0 +1,27 @@
+# ALIGN timed pings. Hobby Vercel cannot run every five minutes.
+# GitHub → Settings → Secrets and variables → Actions → New repository secret
+#   Name: CRON_SECRET
+#   Value: the same CRON_SECRET as Vercel (do not commit it)
+name: ALIGN pings
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Tick the sender
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -e
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Add CRON_SECRET in GitHub Actions secrets (same value as Vercel)."
+            exit 1
+          fi
+          curl -sS -f -X POST "https://align-app-brown.vercel.app/api/cron-push" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -d '{"mode":"tick"}'

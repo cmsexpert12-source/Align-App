@@ -1,12 +1,6 @@
 {
   "cleanUrls": false,
   "outputDirectory": ".",
-  "crons": [
-    {
-      "path": "/api/cron-push",
-      "schedule": "*/5 * * * *"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
