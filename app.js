@@ -5988,7 +5988,7 @@
         pinchStart = dist() || 1;
         pinchZoom = pdfZoom;
         try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-      } else if (pdfPrefs.fit === "page" && pdfZoom <= 1.05) {
+      } else if (!pdfReflow && pdfPrefs.fit === "page" && pdfZoom <= 1.05) {
         try { wrap.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       }
     });
@@ -6039,7 +6039,7 @@
       const dx = e.clientX - startX, dy = e.clientY - startY;
       if (!moved) {
         const now = Date.now();
-        if (now - lastTap < 280) {
+        if (!pdfReflow && now - lastTap < 280) {
           lastTap = 0;
           pdfZoom = pdfZoom > 1.2 ? 1 : 1.6;
           savePdfPrefs();
@@ -6053,14 +6053,11 @@
           return;
         }
         lastTap = now;
-        const r = wrap.getBoundingClientRect();
-        const x = (e.clientX - r.left) / Math.max(1, r.width);
-        if (x < 0.28) goPdfPage(state.pdfPage - 1);
-        else if (x > 0.72) goPdfPage(state.pdfPage + 1);
-        else setPdfChrome(!!app.querySelector(".reader.chrome-off"));
+        setPdfChrome(!!app.querySelector(".reader.chrome-off"));
         return;
       }
-      if (pdfZoom <= 1.05 && Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+      if (pdfReflow) return;
+      if (pdfZoom <= 1.05 && Math.abs(dx) > 96 && Math.abs(dx) > Math.abs(dy) * 1.8) {
         if (dx < 0) goPdfPage(state.pdfPage + 1);
         else goPdfPage(state.pdfPage - 1);
       }
