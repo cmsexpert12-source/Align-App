@@ -1727,6 +1727,12 @@ img { max-width: 100%; display: block; }
   touch-action: none;
   align-items: center;
 }
+.reader.reflow .pdf-wrap {
+  overflow: hidden;
+  touch-action: pan-y;
+  align-items: flex-start;
+}
+.reader.reflow .pdf-reflow { touch-action: pan-y; }
 .reader.zoomed .pdf-wrap,
 .reader.fit-width .pdf-wrap {
   overflow: auto;

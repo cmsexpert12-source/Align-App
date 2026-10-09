@@ -6056,11 +6056,13 @@
         setPdfChrome(!!app.querySelector(".reader.chrome-off"));
         return;
       }
-      if (pdfReflow) return;
-      if (pdfZoom <= 1.05 && Math.abs(dx) > 96 && Math.abs(dx) > Math.abs(dy) * 1.8) {
-        if (dx < 0) goPdfPage(state.pdfPage + 1);
-        else goPdfPage(state.pdfPage - 1);
-      }
+      if (!pdfReflow && pdfZoom > 1.05) return;
+      const w = (wrap.getBoundingClientRect().width) || 1;
+      const across = Math.max(64, w * 0.16);
+      if (Math.abs(dx) < across || Math.abs(dx) <= Math.abs(dy) * 1.35) return;
+      if (dx > 0) goPdfPage(state.pdfPage + 1);
+      else goPdfPage(state.pdfPage - 1);
+      setPdfChrome(true);
     };
     wrap.addEventListener("pointerup", endPtr);
     wrap.addEventListener("pointercancel", endPtr);
