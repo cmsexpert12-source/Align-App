@@ -1428,7 +1428,13 @@
         const str = String(i.str || "");
         if (!str.trim()) return;
         const tr = i.transform || [1, 0, 0, 1, 0, 0];
-        marks.push({ str, x: tr[4], y: tr[5] });
+        marks.push({
+          str,
+          x: tr[4],
+          y: tr[5],
+          h: Math.abs(tr[3] || tr[0] || 10),
+          w: Number(i.width) || 0
+        });
         text += str + " ";
       });
       text = text.replace(/\s+/g, " ").trim();
@@ -1451,25 +1457,62 @@
       const t = String((cache && cache.text) || "").trim();
       return t ? `<p>${escapeHtml(t)}</p>` : "";
     }
+    const glue = (left, right) => {
+      const a = String(left || "");
+      const b = String(right || "");
+      if (!a) return b;
+      if (!b) return a;
+      if (/[-\u2010\u2011]\s*$/.test(a)) return a.replace(/[-\u2010\u2011]\s*$/, "") + b.replace(/^\s+/, "");
+      if (/\s$/.test(a) || /^\s/.test(b)) return a.replace(/\s+$/, " ") + b.replace(/^\s+/, "");
+      if (/^[.,;:!?)]/.test(b)) return a + b;
+      return a + " " + b;
+    };
     const sorted = marks.slice().sort((a, b) => (b.y - a.y) || (a.x - b.x));
     const lines = [];
     sorted.forEach((m) => {
+      const piece = String(m.str || "");
+      if (!piece.replace(/\s+/g, "")) return;
       const last = lines[lines.length - 1];
-      const piece = String(m.str || "").trim();
-      if (!piece) return;
-      if (last && Math.abs(last.y - m.y) < 6) last.str += (/[-\u2010\u2011]$/.test(last.str) ? "" : " ") + piece;
-      else lines.push({ str: piece, y: m.y });
+      const tol = Math.max(3.2, (last && last.h ? last.h : (m.h || 10)) * 0.42);
+      if (last && Math.abs(last.y - m.y) <= tol) {
+        last.str = glue(last.str, piece);
+        last.xEnd = Math.max(last.xEnd, (m.x || 0) + (m.w || 0));
+        if (m.h) last.h = Math.max(last.h, m.h);
+      } else {
+        lines.push({
+          str: piece.replace(/[ \t]+/g, " "),
+          y: m.y,
+          h: m.h || 10,
+          x: m.x || 0,
+          xEnd: (m.x || 0) + (m.w || 0)
+        });
+      }
     });
+    lines.forEach((ln) => { ln.str = String(ln.str || "").replace(/\s+/g, " ").trim(); });
+    const gaps = [];
+    const widths = [];
+    for (let i = 1; i < lines.length; i++) gaps.push(Math.abs(lines[i - 1].y - lines[i].y));
+    lines.forEach((ln) => { if (ln.str.length > 8) widths.push(ln.str.length); });
+    const mid = (arr) => {
+      if (!arr.length) return 0;
+      const s = arr.slice().sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)] || 0;
+    };
+    const gapN = mid(gaps) || 12;
+    const lenN = mid(widths) || 42;
+    const leftN = mid(lines.map((ln) => ln.x)) || 0;
     const paras = [];
     let buf = "";
-    let prevY = null;
-    lines.forEach((ln) => {
-      const gap = prevY == null ? 0 : (prevY - ln.y);
-      prevY = ln.y;
-      if (buf && gap > 16) {
+    lines.forEach((ln, i) => {
+      const prev = lines[i - 1];
+      const gap = prev ? Math.abs(prev.y - ln.y) : 0;
+      const prevShort = !!(prev && prev.str.length < Math.max(18, lenN * 0.68) && !/[,;:\u2013\u2014\-]$/.test(prev.str));
+      const bigGap = !!(prev && gap > Math.max(gapN * 1.55, gapN + 3.5));
+      const indent = !!(prev && (ln.x - leftN) > Math.max(18, (ln.h || 10) * 2.1));
+      if (buf && (bigGap || prevShort || indent)) {
         paras.push(buf);
         buf = ln.str;
-      } else buf = buf ? buf + " " + ln.str : ln.str;
+      } else buf = buf ? glue(buf, ln.str) : ln.str;
     });
     if (buf) paras.push(buf);
     return paras.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
@@ -5356,9 +5399,11 @@
         </div>
         <div class="pdf-chrome pdf-bottom">
           <input id="pdf-scrub" type="range" min="1" max="${pages}" value="${state.pdfPage || 1}" />
-          <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+          <div class="pdf-listen">
             <button class="txt-btn" data-act="sit-listen" data-kind="pdf" title="Listen">${escapeHtml(sitLabel("pdf"))}</button>
             ${sitRateHtml()}
+          </div>
+          <div class="pdf-type">
             <button class="txt-btn" data-act="pdf-theme" title="Paper, sepia, or night">${theme === "night" ? "Night" : theme === "sepia" ? "Sepia" : "Paper"}</button>
             <button class="txt-btn" data-act="pdf-fit" title="Fit">${pdfPrefs.fit === "width" ? "Width" : "Page"}</button>
             <button class="txt-btn" data-act="pdf-smaller" title="Smaller type">A−</button>

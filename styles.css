@@ -824,10 +824,19 @@ img { max-width: 100%; display: block; }
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.reader .sit-tools { margin: 0; }
-.reader .sit-voice { margin: 0; }
+.reader .sit-tools {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+.reader .sit-voice { margin: 0; gap: 4px; flex-shrink: 0; }
 .reader .sit-voice button {
   height: 36px;
+  padding: 0 10px;
   background: rgba(255,255,255,.1);
   border: 0;
   color: #f4f1ea;
@@ -836,14 +845,33 @@ img { max-width: 100%; display: block; }
   background: rgba(214,255,63,.22);
   color: var(--lime);
 }
-.reader .sit-rate { margin: 0; gap: 6px; }
+.reader .sit-rate { margin: 0; gap: 4px; flex-shrink: 0; }
 .reader .sit-rate button {
-  width: 36px; height: 36px;
+  width: 32px; height: 36px;
   background: rgba(255,255,255,.1);
   border: 0;
   color: #f4f1ea;
 }
-.reader .sit-rate b { color: #f4f1ea; font-size: 12px; min-width: 36px; }
+.reader .sit-rate b { color: #f4f1ea; font-size: 12px; min-width: 34px; }
+.reader .pdf-listen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.reader .pdf-listen > .txt-btn { flex: 0 0 auto; }
+.reader .pdf-type {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.reader .pdf-type .txt-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+}
 
 /* ---------- PLAYER ---------- */
 .player { min-height: 100%; display: flex; flex-direction: column; }
@@ -1718,11 +1746,11 @@ img { max-width: 100%; display: block; }
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 72px 22px 168px;
+  padding: 72px 22px 228px;
   box-sizing: border-box;
   max-width: 100%;
   word-wrap: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
   font-size: 20px;
   line-height: 1.5;
@@ -1733,7 +1761,7 @@ img { max-width: 100%; display: block; }
 .reader.reflow .pdf-wrap canvas { visibility: hidden; }
 .reader.theme-night .pdf-reflow { background: #0b0c10; color: #f4f1ea; }
 .reader.theme-sepia .pdf-reflow { background: #e8d5b0; color: #2a2010; }
-.reader .pdf-reflow p { margin: 0 0 0.9em; max-width: 100%; }
+.reader .pdf-reflow p { margin: 0 0 0.75em; max-width: 100%; }
 .reader.fit-page .pdf-wrap canvas {
   position: absolute;
   left: 50%; top: 50%;
