@@ -219,6 +219,116 @@ function errText(e) {
   try { return JSON.stringify(body).slice(0, 160); } catch { return String(e.message || "fail").slice(0, 160); }
 }
 
+function addDay(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, (d || 1) + 1));
+  return dt.toISOString().slice(0, 10);
+}
+
+function localClock(tz, d) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz || "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "short",
+    hour12: false
+  });
+  const map = {};
+  fmt.formatToParts(d).forEach((p) => { map[p.type] = p.value; });
+  const date = map.year + "-" + map.month + "-" + map.day;
+  let hr = Number(map.hour);
+  if (map.hour === "24") hr = 0;
+  const mn = Number(map.minute) || 0;
+  const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    date,
+    nextDate: addDay(date),
+    dow: wd[map.weekday] != null ? wd[map.weekday] : 1,
+    mins: (Number.isFinite(hr) ? hr : 0) * 60 + mn
+  };
+}
+
+function nInt(v, fb) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
+}
+
+function slotOf(p, now) {
+  const clk = localClock(p.timezone || "Africa/Lagos", now);
+  const sun = clk.dow === 0;
+  const tomSun = ((clk.dow + 1) % 7) === 0;
+  const minsOf = (h, m) => nInt(h, 0) * 60 + nInt(m, 0);
+  const wake = minsOf(sun ? p.sun_wake_h : p.wk_wake_h, sun ? p.sun_wake_m : p.wk_wake_m) - 5;
+  const wakeTom = minsOf(tomSun ? p.sun_wake_h : p.wk_wake_h, tomSun ? p.sun_wake_m : p.wk_wake_m) - 5;
+  const lights = minsOf(sun ? p.sun_lights_h : p.wk_lights_h, sun ? p.sun_lights_m : p.wk_lights_m) - 10;
+  const lightsTom = minsOf(tomSun ? p.sun_lights_h : p.wk_lights_h, tomSun ? p.sun_lights_m : p.wk_lights_m) - 10;
+  const plan = minsOf(p.plan_h != null ? p.plan_h : 14, p.plan_m != null ? p.plan_m : 0);
+  const read = minsOf(p.read_h != null ? p.read_h : 19, p.read_m != null ? p.read_m : 0);
+  const WIN = 30;
+  const inWin = (start) => start >= 0 && clk.mins >= start && clk.mins < start + WIN;
+  const wrap = (start) => start < 0 && clk.mins >= (1440 + start) && clk.mins < (1440 + start + WIN);
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
+  if (inWin(wake) && day(p.last_wake_sent) !== clk.date) return { kind: "wake", morn: clk.date };
+  if (wrap(wakeTom) && day(p.last_wake_sent) !== clk.nextDate) return { kind: "wake", morn: clk.nextDate };
+  if (inWin(lights) && day(p.last_lights_sent) !== clk.date) return { kind: "lights", morn: clk.date };
+  if (wrap(lightsTom) && day(p.last_lights_sent) !== clk.nextDate) return { kind: "lights", morn: clk.nextDate };
+  if (inWin(plan) && day(p.last_plan_sent) !== clk.date) return { kind: "plan", morn: clk.date };
+  if (inWin(read) && day(p.last_read_sent) !== clk.date) return { kind: "read", morn: clk.date };
+  return null;
+}
+
+async function markKind(userId, kind, morn) {
+  if (!userId || !SERVICE) return;
+  const patch = kind === "lights" ? { last_lights_sent: morn }
+    : kind === "plan" ? { last_plan_sent: morn }
+    : kind === "read" ? { last_read_sent: morn }
+    : { last_wake_sent: morn };
+  await rest("/rest/v1/notification_prefs?user_id=eq." + encodeURIComponent(userId), {
+    method: "PATCH",
+    token: SERVICE,
+    body: patch
+  });
+}
+
+async function dueFromPrefs() {
+  const prefsR = await rest("/rest/v1/notification_prefs?enabled=eq.true&select=*", { token: SERVICE });
+  if (!prefsR.ok) throw new Error((prefsR.json && (prefsR.json.message || prefsR.json.error)) || ("prefs " + prefsR.status));
+  const prefs = Array.isArray(prefsR.json) ? prefsR.json : [];
+  if (!prefs.length) return [];
+  const subsR = await rest("/rest/v1/push_subscriptions?select=user_id,endpoint,p256dh,auth", { token: SERVICE });
+  if (!subsR.ok) throw new Error((subsR.json && (subsR.json.message || subsR.json.error)) || ("subs " + subsR.status));
+  const subs = Array.isArray(subsR.json) ? subsR.json : [];
+  const byUser = {};
+  subs.forEach((s) => {
+    if (!s || !s.user_id || !s.endpoint) return;
+    (byUser[s.user_id] || (byUser[s.user_id] = [])).push(s);
+  });
+  const now = new Date();
+  const out = [];
+  for (const p of prefs) {
+    const hit = slotOf(p, now);
+    if (!hit) continue;
+    const list = byUser[p.user_id] || [];
+    if (!list.length) continue;
+    await markKind(p.user_id, hit.kind, hit.morn);
+    list.forEach((s) => {
+      out.push({
+        user_id: p.user_id,
+        endpoint: s.endpoint,
+        p256dh: s.p256dh,
+        auth: s.auth,
+        kind: hit.kind,
+        morning: hit.morn,
+        timezone: p.timezone
+      });
+    });
+  }
+  return out;
+}
+
 async function sendAll(subs, payload) {
   try {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
@@ -226,7 +336,10 @@ async function sendAll(subs, payload) {
     return { sent: 0, failed: (subs || []).length || 1, gone: [], errors: [{ code: 0, msg: "VAPID: " + errText(e) }] };
   }
   const data = JSON.stringify(payload);
-  const opts = { TTL: 60 * 60 };
+  const opts = {
+    TTL: 60 * 60,
+    headers: { Urgency: "high", Topic: String((payload && payload.tag) || "align") }
+  };
   let sent = 0;
   let failed = 0;
   const gone = [];
@@ -305,21 +418,28 @@ async function handle(req, res) {
   if (!CRON || (cronHeader !== CRON && bearer !== CRON)) return send(res, 401, { error: "Unauthorized cron" });
   if (!SERVICE) return send(res, 500, { error: "Set SUPABASE_SERVICE_ROLE_KEY on Vercel." });
 
-  const due = await rest("/rest/v1/rpc/align_due_push", {
-    method: "POST",
-    token: SERVICE,
-    body: {}
-  });
-  if (!due.ok) {
-    const msg = (due.json && (due.json.message || due.json.hint || due.json.error)) || ("HTTP " + due.status);
-    return send(res, due.status === 404 ? 503 : 500, {
-      error: msg,
-      hint: "Run sql/push-alarms.sql in Supabase → SQL Editor."
+  let rows = [];
+  let via = "js";
+  try {
+    rows = await dueFromPrefs();
+  } catch (e) {
+    via = "rpc";
+    const due = await rest("/rest/v1/rpc/align_due_push", {
+      method: "POST",
+      token: SERVICE,
+      body: {}
     });
+    if (!due.ok) {
+      const msg = (due.json && (due.json.message || due.json.hint || due.json.error)) || ("HTTP " + due.status);
+      return send(res, due.status === 404 ? 503 : 500, {
+        error: msg,
+        js: String((e && e.message) || e).slice(0, 160),
+        hint: "Run sql/push-alarms.sql in Supabase → SQL Editor."
+      });
+    }
+    rows = Array.isArray(due.json) ? due.json : [];
   }
-
-  const rows = Array.isArray(due.json) ? due.json : [];
-  if (!rows.length) return send(res, 200, { ok: true, sent: 0, note: "none due" });
+  if (!rows.length) return send(res, 200, { ok: true, sent: 0, note: "none due", via });
 
   let sent = 0;
   let failed = 0;
@@ -335,7 +455,7 @@ async function handle(req, res) {
     if (r.sent === 0 && row.user_id) await unmark(row.user_id, row.kind);
     if (r.errors && r.errors.length && errors.length < 6) errors.push(...r.errors);
   }
-  return send(res, 200, { ok: true, sent, failed, n: rows.length, titles: titles.slice(0, 4), errors });
+  return send(res, 200, { ok: true, sent, failed, n: rows.length, titles: titles.slice(0, 4), errors, via });
 }
 
 export const config = { maxDuration: 30 };
