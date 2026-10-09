@@ -259,6 +259,8 @@ begin
 end;
 $$;
 
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
@@ -352,6 +354,7 @@ create or replace function public.align_safe_local(tz text)
 returns timestamp
 language plpgsql
 stable
+set search_path = public
 as $$
 begin
   return timezone(coalesce(nullif(btrim(tz), ''), 'Africa/Lagos'), now());
@@ -463,7 +466,7 @@ $$;
 
 revoke all on function public.align_due_push() from public, anon, authenticated;
 grant execute on function public.align_due_push() to service_role;
-grant execute on function public.align_safe_local(text) to anon, authenticated, service_role;
+revoke all on function public.align_safe_local(text) from public, anon, authenticated;
 
 -- Every 5 minutes: hit the Vercel sender. Enable pg_cron + pg_net
 -- in Dashboard → Database → Extensions if this block notices an error.
@@ -475,6 +478,7 @@ create or replace function public.align_account_bytes(uid uuid)
 returns bigint
 language sql
 stable
+set search_path = public
 as $$
   select coalesce((select sum(bytes)::bigint from public.books where user_id = uid), 0)
        + coalesce((select sum(bytes)::bigint from public.sounds where user_id = uid and coalesce(is_public, false) = false), 0);
@@ -483,6 +487,7 @@ $$;
 create or replace function public.align_guard_quota()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 declare
   used bigint;

@@ -19,6 +19,7 @@ create or replace function public.align_safe_local(tz text)
 returns timestamp
 language plpgsql
 stable
+set search_path = public
 as $$
 begin
   return timezone(coalesce(nullif(btrim(tz), ''), 'Africa/Lagos'), now());
@@ -209,7 +210,7 @@ $$;
 revoke all on function public.align_due_push() from public, anon, authenticated;
 grant execute on function public.align_due_push() to service_role;
 
-grant execute on function public.align_safe_local(text) to anon, authenticated, service_role;
+revoke all on function public.align_safe_local(text) from public, anon, authenticated;
 
 -- Postgres must ping Vercel every 5 minutes. Enable pg_cron + pg_net in
 -- Dashboard → Database → Extensions if the notices below say they are missing.
