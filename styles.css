@@ -1594,11 +1594,12 @@ img { max-width: 100%; display: block; }
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  color: var(--text);
+  color: #f4f1ea;
   caret-color: var(--lime);
-  -webkit-text-fill-color: var(--text);
+  -webkit-text-fill-color: #f4f1ea;
 }
-.task-row.done input { text-decoration: line-through; color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.task-row.done input:not(:focus) { text-decoration: line-through; color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.task-row input:focus { text-decoration: none; color: #f4f1ea; -webkit-text-fill-color: #f4f1ea; }
 
 .word-hub { padding: 8px 16px calc(var(--nav-h) + var(--safe-b) + 16px); }
 .big-link {

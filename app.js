@@ -5074,7 +5074,7 @@
           `).join("")}
           <button class="btn ghost" data-act="add-task" style="height:44px;margin:8px 0 14px">Add a line</button>
           <div class="field"><label>Notes</label>
-            <textarea class="note-box" id="plan-note" placeholder="People, calls, the afternoon…">${escapeHtml(p.note || "")}</textarea>
+            <textarea class="note-box" id="plan-note" placeholder="People, calls, the afternoon…"></textarea>
           </div>
         </div>
         <div class="sticky-cta">
@@ -5799,13 +5799,18 @@
       af.addEventListener("keyup", keep);
     }
     const pnote = $("#plan-note");
-    if (pnote) pnote.addEventListener("input", e => {
-      const iso = today().iso;
-      const p = L().planOf(iso);
-      p.note = e.target.value;
-      L().savePlan(iso, p);
-      AlignDB.saveDayPlan(iso, p);
-    });
+    if (pnote) {
+      const isoN = today().iso;
+      const noteNow = String((L().planOf(isoN) || {}).note || "");
+      if (pnote.value !== noteNow) pnote.value = noteNow;
+      pnote.addEventListener("input", e => {
+        const iso = today().iso;
+        const p = L().planOf(iso);
+        p.note = e.target.value;
+        L().savePlan(iso, p);
+        AlignDB.saveDayPlan(iso, p);
+      });
+    }
     const diary = $("#diary-note");
     const ntitle = $("#note-title");
     const onNoteInput = () => { paintNoteEmpty(); saveOpenNote(); };
@@ -5861,7 +5866,10 @@
     if (ntitle) ntitle.addEventListener("input", onNoteInput);
     [0,1,2].forEach((i) => {
       const el = document.getElementById("prio-" + i);
-      if (el) el.addEventListener("input", () => {
+      if (el) {
+        const cur0 = prioOf((L().planOf(today().iso).priorities || [])[i]);
+        if (el.value !== String(cur0.text || "")) el.value = String(cur0.text || "");
+        el.addEventListener("input", () => {
         const iso = today().iso;
         const p = L().planOf(iso);
         const cur = prioOf(p.priorities[i]);
@@ -5873,8 +5881,12 @@
         L().savePlan(iso, p);
         AlignDB.saveDayPlan(iso, p);
       });
+      }
     });
     app.querySelectorAll("[data-task]").forEach((el) => {
+      const ti = Number(el.dataset.task);
+      const t0 = ((L().planOf(today().iso).tasks || [])[ti] || {}).text || "";
+      if (el.value !== String(t0)) el.value = String(t0);
       el.addEventListener("input", () => {
         const iso = today().iso;
         const p = L().planOf(iso);
@@ -6958,6 +6970,7 @@
     } else if (act === "save-dayplan") {
       const iso = today().iso;
       const p = L().planOf(iso);
+      const already = stepIsDone("plan");
       p.priorities = [0,1,2].map((i) => {
         const cur = prioOf(p.priorities[i]);
         const text = ((document.getElementById("prio-" + i) || {}).value || "");
@@ -6968,11 +6981,16 @@
       p.tasks = (p.tasks || []).filter((tk) => tk && String(tk.text || "").trim());
       L().savePlan(iso, p);
       const res = await AlignDB.saveDayPlan(iso, p, { now: true });
-      completeStep("plan");
       state.planJustSaved = true;
       const cloud = !!(state.session && res && res.ok && res.data !== null);
       toast(cloud ? "Plan saved" : (res && res.ok === false ? "Saved on this device" : "Plan saved"));
-      goNext();
+      if (already) {
+        state.view = "home";
+        render();
+      } else {
+        completeStep("plan");
+        goNext();
+      }
     } else if (act === "edit-dayplan") {
       state.planJustSaved = false;
       render();
@@ -7409,6 +7427,7 @@
         return;
       }
       const iso = today().iso;
+      const already = stepIsDone("plan");
       const plan = L().planOf(iso);
       plan.priorities = (plan.priorities || []).map((x, i) => {
         const cur = prioOf(x);
@@ -7417,9 +7436,10 @@
       (plan.tasks || []).forEach((tk) => { if (tk) tk.done = true; });
       L().savePlan(iso, plan);
       AlignDB.saveDayPlan(iso, plan);
-      completeStep("plan");
+      if (!already) completeStep("plan");
       toast("Schedule done.");
-      goNext();
+      if (already) render();
+      else goNext();
     } else if (act === "note-fmt") {
       applyNoteFmt(el && el.dataset.cmd);
     }
