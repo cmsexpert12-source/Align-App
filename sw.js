@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v196";
+const CACHE = "align-v197";
 const ASSETS = [
   "./",
   "./index.html",
@@ -89,16 +89,17 @@ self.addEventListener("push", (event) => {
   } catch {
     try { payload.body = event.data.text(); } catch { /* empty push */ }
   }
+  const origin = self.location.origin;
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: "./assets/icon-192.png",
-      badge: "./assets/favicon-32.png",
+    self.registration.showNotification(payload.title || "ALIGN ·", {
+      body: payload.body || "Five minutes.",
+      icon: origin + "/assets/icon-192.png",
+      badge: origin + "/assets/favicon-32.png",
       vibrate: [80, 40, 80],
       data: { url: payload.url || "./index.html" },
       tag: payload.tag || "align-reminder",
       renotify: true
-    })
+    }).catch(() => self.registration.showNotification("ALIGN ·", { body: "Five minutes." }))
   );
 });
 

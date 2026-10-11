@@ -256,7 +256,7 @@ function nInt(v, fb) {
   return Number.isFinite(n) ? n : fb;
 }
 
-function slotOf(p, now) {
+function slotsOf(p, now) {
   const clk = localClock(p.timezone || "Africa/Lagos", now);
   const sun = clk.dow === 0;
   const tomSun = ((clk.dow + 1) % 7) === 0;
@@ -267,17 +267,23 @@ function slotOf(p, now) {
   const lightsTom = minsOf(tomSun ? p.sun_lights_h : p.wk_lights_h, tomSun ? p.sun_lights_m : p.wk_lights_m) - 10;
   const plan = minsOf(p.plan_h != null ? p.plan_h : 14, p.plan_m != null ? p.plan_m : 0);
   const read = minsOf(p.read_h != null ? p.read_h : 19, p.read_m != null ? p.read_m : 0);
-  const WIN = 30;
-  const inWin = (start) => start >= 0 && clk.mins >= start && clk.mins < start + WIN;
-  const wrap = (start) => start < 0 && clk.mins >= (1440 + start) && clk.mins < (1440 + start + WIN);
+  const WIN = 6 * 60;
+  const inWin = (start) => {
+    if (!(start >= 0)) return false;
+    const end = start + WIN;
+    if (clk.mins >= start && clk.mins < Math.min(1440, end)) return true;
+    return false;
+  };
+  const wrap = (start) => start < 0 && clk.mins >= (1440 + start) && clk.mins < Math.min(1440, 1440 + start + WIN);
   const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
-  if (inWin(wake) && day(p.last_wake_sent) !== clk.date) return { kind: "wake", morn: clk.date };
-  if (wrap(wakeTom) && day(p.last_wake_sent) !== clk.nextDate) return { kind: "wake", morn: clk.nextDate };
-  if (inWin(lights) && day(p.last_lights_sent) !== clk.date) return { kind: "lights", morn: clk.date };
-  if (wrap(lightsTom) && day(p.last_lights_sent) !== clk.nextDate) return { kind: "lights", morn: clk.nextDate };
-  if (inWin(plan) && day(p.last_plan_sent) !== clk.date) return { kind: "plan", morn: clk.date };
-  if (inWin(read) && day(p.last_read_sent) !== clk.date) return { kind: "read", morn: clk.date };
-  return null;
+  const out = [];
+  if (inWin(wake) && day(p.last_wake_sent) !== clk.date) out.push({ kind: "wake", morn: clk.date });
+  if (wrap(wakeTom) && day(p.last_wake_sent) !== clk.nextDate) out.push({ kind: "wake", morn: clk.nextDate });
+  if (inWin(plan) && day(p.last_plan_sent) !== clk.date) out.push({ kind: "plan", morn: clk.date });
+  if (inWin(read) && day(p.last_read_sent) !== clk.date) out.push({ kind: "read", morn: clk.date });
+  if (inWin(lights) && day(p.last_lights_sent) !== clk.date) out.push({ kind: "lights", morn: clk.date });
+  if (wrap(lightsTom) && day(p.last_lights_sent) !== clk.nextDate) out.push({ kind: "lights", morn: clk.nextDate });
+  return out;
 }
 
 async function markKind(userId, kind, morn) {
@@ -309,22 +315,24 @@ async function dueFromPrefs() {
   const now = new Date();
   const out = [];
   for (const p of prefs) {
-    const hit = slotOf(p, now);
-    if (!hit) continue;
+    const hits = slotsOf(p, now);
+    if (!hits.length) continue;
     const list = byUser[p.user_id] || [];
     if (!list.length) continue;
-    await markKind(p.user_id, hit.kind, hit.morn);
-    list.forEach((s) => {
-      out.push({
-        user_id: p.user_id,
-        endpoint: s.endpoint,
-        p256dh: s.p256dh,
-        auth: s.auth,
-        kind: hit.kind,
-        morning: hit.morn,
-        timezone: p.timezone
+    for (const hit of hits) {
+      await markKind(p.user_id, hit.kind, hit.morn);
+      list.forEach((s) => {
+        out.push({
+          user_id: p.user_id,
+          endpoint: s.endpoint,
+          p256dh: s.p256dh,
+          auth: s.auth,
+          kind: hit.kind,
+          morning: hit.morn,
+          timezone: p.timezone
+        });
       });
-    });
+    }
   }
   return out;
 }

@@ -339,7 +339,7 @@ window.ALIGN_LIFE = (() => {
   /* Four a day: 5 min before rise, 14:00 plan, 19:00 book, 10 min before lights. */
   const dueAlarms = (now = new Date()) => {
     const d = now instanceof Date ? now : new Date(now);
-    const WIN = 15;
+    const WIN = 360;
     const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
     const hit = (at) => inWindow(d, at.getHours(), at.getMinutes(), WIN) && sameDay(d, at);
     const clk = clocksFor(d);

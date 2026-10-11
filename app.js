@@ -6688,6 +6688,9 @@
         else if (!state.session) toast("On while ALIGN is open. Sign in so they still arrive when it is closed.");
         else {
           const ping = await sendTestPush();
+          if (!(ping.ok && ping.via === "push")) {
+            try { await localNotify("ALIGN ·", "Five minutes.", "align-test"); } catch { /* ok */ }
+          }
           toast(ping.ok && ping.via === "push"
             ? "Reminders on. You should see one now."
             : (ping.error || "Reminders on this phone. Stay signed in from the Home Screen."));

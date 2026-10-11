@@ -5,7 +5,10 @@
 name: ALIGN pings
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # GitHub does not honor */5 on this repo (it was firing every few hours).
+    # Hourly ticks plus a 6-hour due window still catch all four pings.
+    - cron: "7 * * * *"
+    - cron: "37 * * * *"
   workflow_dispatch:
 jobs:
   tick:
