@@ -125,17 +125,99 @@ function pick(bank, iso) {
   return { title: pair[0], body: pair[1] };
 }
 
-function payloadFor(kind) {
+const PLAN_NOTES = [
+  [
+    ["ALIGN · Write the three", "Sunday still has a shape. Name what matters before the house fills."],
+    ["ALIGN · The day is a vow", "Three lines. Then church. Don't let the morning end unnamed."],
+    ["ALIGN · Keep it light", "One or two true things. The light path still needs a plan."]
+  ],
+  [
+    ["ALIGN · Name the three", "The day already has a shape. Write the three. The rest can wait."],
+    ["ALIGN · Don't carry twelve", "Three that matter. The man who names them owns the afternoon."],
+    ["ALIGN · Monday on paper", "If it is not written, the noise will write it for you."]
+  ],
+  [
+    ["ALIGN · Still three", "Midweek wants more. Give it three. Finish those. Become."],
+    ["ALIGN · Cut it down", "What you will not do is as holy as what you will. Write the three."],
+    ["ALIGN · The afternoon is watching", "Name them now. 2 o'clock is how the morning stays true."]
+  ],
+  [
+    ["ALIGN · Halfway, still yours", "Three lines. Not a new life — the one you already chose."],
+    ["ALIGN · Don't renegotiate", "The path is chosen. Write today's three like it is life."],
+    ["ALIGN · Own the middle", "Wednesday eats the unplanned. Don't be eaten."]
+  ],
+  [
+    ["ALIGN · What you name, you do", "Three. Written. Then the rest of Thursday cannot steal you."],
+    ["ALIGN · Guard the list", "The feed has plans for you. Write yours first."],
+    ["ALIGN · Faithful looks like this", "No mood. Three lines. Then go."]
+  ],
+  [
+    ["ALIGN · Finish on paper", "Close the work week with three true things. Don't coast."],
+    ["ALIGN · Friday still counts", "Name them. Then finish well. The weekend does not get this hour."],
+    ["ALIGN · Don't leak it", "Three. Written. Then you can rest without guilt."]
+  ],
+  [
+    ["ALIGN · Saturday has a shape", "Rest is not drift. Name one or two. Keep the vow."],
+    ["ALIGN · Light, not empty", "A short list. A holy afternoon. Write it."],
+    ["ALIGN · Ready for Sunday", "What you name today, you don't carry into church."]
+  ]
+];
+
+const READ_NOTES = [
+  [
+    ["ALIGN · Open the book", "Sunday's sitting is still yours. One chapter is obedience. Open it."],
+    ["ALIGN · The page is waiting", "Church was the morning. The book is the evening. Sit."],
+    ["ALIGN · Don't skip the sitting", "A short page still counts. Open it before the night takes you."]
+  ],
+  [
+    ["ALIGN · The book is waiting", "One sitting. Not a mood. Open the page you said you would."],
+    ["ALIGN · Monday still reads", "The morning made you. The evening keeps you. Open the book."],
+    ["ALIGN · Sit down", "The feed can wait. One page is how a man stays in the Word twice."]
+  ],
+  [
+    ["ALIGN · Keep the sitting", "Tuesday night belongs to the page. Open it."],
+    ["ALIGN · Don't drift", "You walked the morning. Finish the day in the book."],
+    ["ALIGN · The same vow", "Body. Prayer. Scripture. And tonight, the sitting. Open it."]
+  ],
+  [
+    ["ALIGN · Midweek page", "Halfway is where most men close the book. Not you."],
+    ["ALIGN · Still on the page", "One sitting. The man you want reads when no one claps."],
+    ["ALIGN · Open it anyway", "Tired is not a reason. The book is waiting."]
+  ],
+  [
+    ["ALIGN · What you repeat", "A Thursday sitting becomes who you are. Open the book."],
+    ["ALIGN · Guard this hour", "Seven o'clock is for the page. Don't give it to the feed."],
+    ["ALIGN · Sit, don't scroll", "The Word in the morning. The book at night. Keep both."]
+  ],
+  [
+    ["ALIGN · Finish in the book", "Close the work week on the page. One sitting. Then rest."],
+    ["ALIGN · Friday still reads", "Don't coast. Open it. The weekend is not owed this hour."],
+    ["ALIGN · Keep the streak", "A sitting tonight is how Saturday stays holy."]
+  ],
+  [
+    ["ALIGN · Saturday sitting", "Rest includes the page. Open the book. Stay with it."],
+    ["ALIGN · Don't give it away", "The house can wait ten minutes. The book cannot."],
+    ["ALIGN · Ready the soul", "Tonight's page is Sunday morning's strength. Open it."]
+  ]
+];
+
+function payloadFor(kind, iso) {
+  const day = iso || todayInTz("Africa/Lagos");
   if (kind === "lights") {
-    return { title: "ALIGN ·", body: "Night devotion. Then the verse.", tag: "align-lights", url: "./index.html" };
+    const n = pick(LIGHTS_NOTES, day);
+    return { title: n.title, body: n.body, tag: "align-lights", url: "./index.html" };
   }
   if (kind === "plan") {
-    return { title: "ALIGN ·", body: "Today’s three. Still yours.", tag: "align-plan", url: "./index.html" };
+    const n = pick(PLAN_NOTES, day);
+    return { title: n.title, body: n.body, tag: "align-plan", url: "./index.html" };
   }
   if (kind === "read") {
-    return { title: "ALIGN ·", body: "The book is waiting.", tag: "align-read", url: "./index.html" };
+    const n = pick(READ_NOTES, day);
+    return { title: n.title, body: n.body, tag: "align-read", url: "./index.html" };
   }
-  return { title: "ALIGN ·", body: "Five minutes.", tag: "align-wake", url: "./index.html" };
+  const n = pick(WAKE_NOTES, day);
+  const body = /^Five minutes/i.test(n.body) ? n.body : ("Five minutes. " + n.body);
+  return { title: n.title, body, tag: "align-wake", url: "./index.html" };
 }
 
 function todayInTz(tz) {

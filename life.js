@@ -323,6 +323,89 @@ window.ALIGN_LIFE = (() => {
     return { title: n.title, body: "Five minutes. " + n.body };
   };
 
+  const PLAN_NOTES = [
+    [
+      ["ALIGN · Write the three", "Sunday still has a shape. Name what matters before the house fills."],
+      ["ALIGN · The day is a vow", "Three lines. Then church. Don't let the morning end unnamed."],
+      ["ALIGN · Keep it light", "One or two true things. The light path still needs a plan."]
+    ],
+    [
+      ["ALIGN · Name the three", "The day already has a shape. Write the three. The rest can wait."],
+      ["ALIGN · Don't carry twelve", "Three that matter. The man who names them owns the afternoon."],
+      ["ALIGN · Monday on paper", "If it is not written, the noise will write it for you."]
+    ],
+    [
+      ["ALIGN · Still three", "Midweek wants more. Give it three. Finish those. Become."],
+      ["ALIGN · Cut it down", "What you will not do is as holy as what you will. Write the three."],
+      ["ALIGN · The afternoon is watching", "Name them now. 2 o'clock is how the morning stays true."]
+    ],
+    [
+      ["ALIGN · Halfway, still yours", "Three lines. Not a new life — the one you already chose."],
+      ["ALIGN · Don't renegotiate", "The path is chosen. Write today's three like it is life."],
+      ["ALIGN · Own the middle", "Wednesday eats the unplanned. Don't be eaten."]
+    ],
+    [
+      ["ALIGN · What you name, you do", "Three. Written. Then the rest of Thursday cannot steal you."],
+      ["ALIGN · Guard the list", "The feed has plans for you. Write yours first."],
+      ["ALIGN · Faithful looks like this", "No mood. Three lines. Then go."]
+    ],
+    [
+      ["ALIGN · Finish on paper", "Close the work week with three true things. Don't coast."],
+      ["ALIGN · Friday still counts", "Name them. Then finish well. The weekend does not get this hour."],
+      ["ALIGN · Don't leak it", "Three. Written. Then you can rest without guilt."]
+    ],
+    [
+      ["ALIGN · Saturday has a shape", "Rest is not drift. Name one or two. Keep the vow."],
+      ["ALIGN · Light, not empty", "A short list. A holy afternoon. Write it."],
+      ["ALIGN · Ready for Sunday", "What you name today, you don't carry into church."]
+    ]
+  ];
+  const READ_NOTES = [
+    [
+      ["ALIGN · Open the book", "Sunday's sitting is still yours. One chapter is obedience. Open it."],
+      ["ALIGN · The page is waiting", "Church was the morning. The book is the evening. Sit."],
+      ["ALIGN · Don't skip the sitting", "A short page still counts. Open it before the night takes you."]
+    ],
+    [
+      ["ALIGN · The book is waiting", "One sitting. Not a mood. Open the page you said you would."],
+      ["ALIGN · Monday still reads", "The morning made you. The evening keeps you. Open the book."],
+      ["ALIGN · Sit down", "The feed can wait. One page is how a man stays in the Word twice."]
+    ],
+    [
+      ["ALIGN · Keep the sitting", "Tuesday night belongs to the page. Open it."],
+      ["ALIGN · Don't drift", "You walked the morning. Finish the day in the book."],
+      ["ALIGN · The same vow", "Body. Prayer. Scripture. And tonight, the sitting. Open it."]
+    ],
+    [
+      ["ALIGN · Midweek page", "Halfway is where most men close the book. Not you."],
+      ["ALIGN · Still on the page", "One sitting. The man you want reads when no one claps."],
+      ["ALIGN · Open it anyway", "Tired is not a reason. The book is waiting."]
+    ],
+    [
+      ["ALIGN · What you repeat", "A Thursday sitting becomes who you are. Open the book."],
+      ["ALIGN · Guard this hour", "Seven o'clock is for the page. Don't give it to the feed."],
+      ["ALIGN · Sit, don't scroll", "The Word in the morning. The book at night. Keep both."]
+    ],
+    [
+      ["ALIGN · Finish in the book", "Close the work week on the page. One sitting. Then rest."],
+      ["ALIGN · Friday still reads", "Don't coast. Open it. The weekend is not owed this hour."],
+      ["ALIGN · Keep the streak", "A sitting tonight is how Saturday stays holy."]
+    ],
+    [
+      ["ALIGN · Saturday sitting", "Rest includes the page. Open the book. Stay with it."],
+      ["ALIGN · Don't give it away", "The house can wait ten minutes. The book cannot."],
+      ["ALIGN · Ready the soul", "Tonight's page is Sunday morning's strength. Open it."]
+    ]
+  ];
+  const noteFrom = (bank, date = new Date()) => {
+    const d = date instanceof Date ? date : new Date(date);
+    const rows = bank[d.getDay()] || bank[1];
+    const pair = rows[d.getDate() % rows.length];
+    return { title: pair[0], body: pair[1] };
+  };
+  const planNote = (date = new Date()) => noteFrom(PLAN_NOTES, date);
+  const readNote = (date = new Date()) => noteFrom(READ_NOTES, date);
+
   const isoOfDate = (d) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -346,32 +429,38 @@ window.ALIGN_LIFE = (() => {
     const wakeAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.wakeH, clk.wakeM || 0, 0, 0);
     const preWake = new Date(wakeAt.getTime() - 5 * 60 * 1000);
     if (hit(preWake)) {
-      return { kind: "wake", iso: isoOfDate(d), title: "ALIGN ·", body: "Five minutes." };
+      const n = preWakeNote(d);
+      return { kind: "wake", iso: isoOfDate(d), title: n.title, body: n.body };
     }
     const tom = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
     const clkT = clocksFor(tom);
     const wakeT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.wakeH, clkT.wakeM || 0, 0, 0);
     const preWT = new Date(wakeT.getTime() - 5 * 60 * 1000);
     if (hit(preWT)) {
-      return { kind: "wake", iso: isoOfDate(tom), title: "ALIGN ·", body: "Five minutes." };
+      const n = preWakeNote(tom);
+      return { kind: "wake", iso: isoOfDate(tom), title: n.title, body: n.body };
     }
     const planAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 14, 0, 0, 0);
     if (hit(planAt)) {
-      return { kind: "plan", iso: isoOfDate(d), title: "ALIGN ·", body: "Today’s three. Still yours." };
+      const n = planNote(d);
+      return { kind: "plan", iso: isoOfDate(d), title: n.title, body: n.body };
     }
     const readAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 19, 0, 0, 0);
     if (hit(readAt)) {
-      return { kind: "read", iso: isoOfDate(d), title: "ALIGN ·", body: "The book is waiting." };
+      const n = readNote(d);
+      return { kind: "read", iso: isoOfDate(d), title: n.title, body: n.body };
     }
     const lightsAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clk.tonightH, clk.tonightM || 0, 0, 0);
     const preL = new Date(lightsAt.getTime() - 10 * 60 * 1000);
     if (hit(preL)) {
-      return { kind: "lights", iso: isoOfDate(d), title: "ALIGN ·", body: "Night devotion. Then the verse." };
+      const n = lightsNote(d);
+      return { kind: "lights", iso: isoOfDate(d), title: n.title, body: n.body };
     }
     const lightsT = new Date(tom.getFullYear(), tom.getMonth(), tom.getDate(), clkT.tonightH, clkT.tonightM || 0, 0, 0);
     const preLT = new Date(lightsT.getTime() - 10 * 60 * 1000);
     if (hit(preLT)) {
-      return { kind: "lights", iso: isoOfDate(tom), title: "ALIGN ·", body: "Night devotion. Then the verse." };
+      const n = lightsNote(tom);
+      return { kind: "lights", iso: isoOfDate(tom), title: n.title, body: n.body };
     }
     return null;
   };
@@ -1379,7 +1468,7 @@ window.ALIGN_LIFE = (() => {
   return {
     BOOKS, STEPS, EVENING, ACTS, STEP_IDS,
     loadRoutine, saveRoutine, mergeRoutineRemote, coerceRoutine, fmtHM,
-    clocksFor, isEvening, chapterTarget, isShort, setShort, stepsFor, wakeNote, lightsNote, preWakeNote, dueAlarms,
+    clocksFor, isEvening, chapterTarget, isShort, setShort, stepsFor, wakeNote, lightsNote, preWakeNote, planNote, readNote, dueAlarms,
     todaySpurgeon,
     morningOf, setStep, emptyMorning,
     timesOf, markOpen, markClose, stampClock, clockAt, fmtClockAt, mergeTimesRemote, attachTimes, fmtSpan, dayTotalMs, timingParts,

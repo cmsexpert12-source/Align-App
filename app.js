@@ -421,7 +421,8 @@
         return { ok: false, error: "Could not reach the sender." };
       }
     }
-    await localNotify("ALIGN ·", "Five minutes.", "align-test");
+    const n = (L().preWakeNote && L().preWakeNote()) || { title: "ALIGN ·", body: "Five minutes." };
+    await localNotify(n.title, n.body, "align-test");
     return { ok: true, via: "local" };
   };
 
@@ -6701,7 +6702,10 @@
         else {
           const ping = await sendTestPush();
           if (!(ping.ok && ping.via === "push")) {
-            try { await localNotify("ALIGN ·", "Five minutes.", "align-test"); } catch { /* ok */ }
+            try {
+              const n = (L().preWakeNote && L().preWakeNote()) || { title: "ALIGN ·", body: "Five minutes." };
+              await localNotify(n.title, n.body, "align-test");
+            } catch { /* ok */ }
           }
           toast(ping.ok && ping.via === "push"
             ? "Reminders on. You should see one now."
