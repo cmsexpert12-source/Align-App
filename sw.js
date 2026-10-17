@@ -1,5 +1,5 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v200";
+const CACHE = "align-v201";
 const ASSETS = [
   "./",
   "./index.html",
@@ -54,6 +54,7 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  if (url.protocol === "blob:" || url.protocol === "data:") return;
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
   event.respondWith(staleWhileRevalidate(req));

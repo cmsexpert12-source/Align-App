@@ -1034,7 +1034,6 @@
     return Object.assign(readHoursForm("rt-"), { min, minSun, on: r.on, order: r.order, trainPlan: r.trainPlan });
   };
   let pdfDoc = null;
-  let pdfObjectUrl = null;
   let pdfRenderTask = null;
   let pdfPaintGen = 0;
   let pdfZoom = 1;
@@ -2049,10 +2048,6 @@
       try { pdfDoc.destroy(); } catch { /* ignore */ }
       pdfDoc = null;
     }
-    if (pdfObjectUrl) {
-      try { URL.revokeObjectURL(pdfObjectUrl); } catch { /* ignore */ }
-      pdfObjectUrl = null;
-    }
   };
 
   const syncBook = async (book) => {
@@ -2111,12 +2106,8 @@
       if (!blob) throw new Error("This PDF isn’t on the phone yet. Open ALIGN online once to download it.");
       const lib = await B().loadPdfjs();
       if (!lib) throw new Error("The reader didn’t load. Refresh once with a connection.");
-      if (pdfObjectUrl) {
-        try { URL.revokeObjectURL(pdfObjectUrl); } catch { /* ignore */ }
-        pdfObjectUrl = null;
-      }
-      pdfObjectUrl = URL.createObjectURL(blob);
-      pdfDoc = await lib.getDocument({ url: pdfObjectUrl }).promise;
+      const buf = await blob.arrayBuffer();
+      pdfDoc = await lib.getDocument({ data: buf }).promise;
       state.pdfPages = pdfDoc.numPages || 0;
       const cur = B().byId(id);
       state.pdfPage = Math.min(Math.max(1, cur.current_page || 1), state.pdfPages || 1);
