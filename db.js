@@ -167,9 +167,9 @@ window.AlignDB = (() => {
     if (!userId) return ok([]);
     const { data, error } = await sb
       .from("workouts")
-      .select("date, day_id, minutes, completed, total, log, created_at")
+      .select("date, day_id, minutes, completed, total, created_at")
       .eq("user_id", userId)
-      .gte("date", sinceIso(400))
+      .gte("date", sinceIso(42))
       .order("date", { ascending: true });
     if (error) return fail(error);
     const mapped = (data || []).map((r) => ({
@@ -178,7 +178,7 @@ window.AlignDB = (() => {
       minutes: r.minutes,
       completed: r.completed,
       total: r.total,
-      log: r.log || []
+      log: r.log
     }));
     return ok(mapped);
   };
@@ -1188,14 +1188,14 @@ window.AlignDB = (() => {
     const sb = client();
     const userId = await uidOf();
     if (!sb || !userId) return ok(null);
-    const from = sinceIso(120);
+    const from = sinceIso(40);
     const [m, p, j, b, a0, n] = await Promise.all([
       sb.from("mornings").select("date, steps, updated_at").eq("user_id", userId).gte("date", from),
       sb.from("day_plans").select("date, payload, updated_at").eq("user_id", userId).gte("date", from),
       sb.from("journals").select("date, payload, updated_at").eq("user_id", userId).gte("date", from),
       sb.from("bible_state").select("book, chapter, log, updated_at").eq("user_id", userId).maybeSingle(),
       sb.from("app_state").select("scripture, routine, updated_at").eq("user_id", userId).maybeSingle(),
-      sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId).order("updated_at", { ascending: false }).limit(80)
+      sb.from("notes").select("id, date, title, body, created_at, updated_at").eq("user_id", userId).order("updated_at", { ascending: false }).limit(24)
     ]);
     if (m.error && missingTable(m.error)) return ok(null);
     let a = a0;

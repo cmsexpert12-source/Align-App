@@ -723,7 +723,10 @@ window.ALIGN_LIFE = (() => {
   };
 
   const bibleCursor = () => loadJSON(LS_B, { book: "Genesis", chapter: 1, log: [] });
-  const setBibleCursor = (c) => saveJSON(LS_B, c);
+  const setBibleCursor = (c) => {
+    if (c && Array.isArray(c.log) && c.log.length > 400) c = { ...c, log: c.log.slice(-400) };
+    saveJSON(LS_B, c);
+  };
 
   const bookByName = (name) => BOOKS.find((b) => b.name === name) || BOOKS[0];
 

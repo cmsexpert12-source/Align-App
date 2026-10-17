@@ -1,27 +1,12 @@
 /* ALIGN service worker — offline cache + web push */
-const CACHE = "align-v199";
+const CACHE = "align-v200";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js",
-  "./data.js",
-  "./life.js",
-  "./scripture.js",
-  "./books.js",
-  "./ai.js",
-  "./sound.js",
-  "./db.js",
   "./config.js",
-  "./vendor/supabase.js",
   "./manifest.webmanifest",
-  "./fonts/dm-sans.woff2",
-  "./fonts/fraunces.woff2",
-  "./fonts/syne.woff2",
   "./assets/icon-192.png",
-  "./assets/icon-512.png",
-  "./assets/icon-maskable-512.png",
-  "./assets/apple-touch-icon.png",
   "./assets/favicon-32.png"
 ];
 
@@ -29,6 +14,7 @@ const skipPut = (pathname) =>
   /\/data\/spurgeon\//.test(pathname) ||
   /\/vendor\/pdfjs\//.test(pathname) ||
   /splash-/i.test(pathname) ||
+  /icon-512|icon-maskable|og\.png|hero-onboard|done-burst/i.test(pathname) ||
   /\.pdf$/i.test(pathname);
 
 self.addEventListener("install", (event) => {
@@ -55,7 +41,7 @@ const staleWhileRevalidate = (req) =>
           if (res && res.ok && res.type === "basic") {
             const path = new URL(req.url).pathname;
             const len = Number(res.headers.get("content-length") || 0);
-            if (!skipPut(path) && len < 900000) cache.put(req, res.clone());
+            if (!skipPut(path) && (len < 1 || len < 450000)) cache.put(req, res.clone());
           }
           return res;
         })

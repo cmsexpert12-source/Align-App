@@ -428,6 +428,58 @@
 
   let applying = false;
   let lastHydrateAt = 0;
+  let lastHeavyAt = 0;
+  const whenIdle = (fn, ms) => {
+    const run = () => { try { fn(); } catch { /* ignore */ } };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: ms || 3500 });
+    else setTimeout(run, Math.min(ms || 900, 1400));
+  };
+
+  const hydrateHeavy = async () => {
+    if (!state.session) return;
+    if (Date.now() - lastHeavyAt < 180000) return;
+    lastHeavyAt = Date.now();
+    try {
+      const remote = await AlignDB.fetchWorkouts();
+      if (remote.ok && remote.data && remote.data.length) {
+        const byKey = {};
+        state.history.forEach((h) => { if (h) byKey[h.date + "|" + h.dayId] = h; });
+        remote.data.forEach((h) => {
+          const k = h.date + "|" + h.dayId;
+          const loc = byKey[k];
+          if (!loc) byKey[k] = h;
+          else if ((h.completed || 0) > (loc.completed || 0) || (h.minutes || 0) > (loc.minutes || 0)) {
+            byKey[k] = { ...h, log: loc.log || h.log };
+          }
+        });
+        state.history = Object.keys(byKey).map((k) => byKey[k]);
+        save();
+      }
+    } catch { /* history later */ }
+    try {
+      if (AlignDB.markHydrated) AlignDB.markHydrated();
+      if (state.profile && state.profile.name) AlignDB.upsertProfile(state.profile.name);
+      if (AlignDB.seedLocal) AlignDB.seedLocal();
+      AlignDB.flush();
+    } catch { /* retry on next online */ }
+    try {
+      const remoteBooks = await AlignDB.fetchBooks();
+      if (remoteBooks.ok && Array.isArray(remoteBooks.data)) B().mergeRemote(remoteBooks.data);
+      const remoteLog = await AlignDB.fetchReadingLog();
+      if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
+    } catch { /* books schema may not be applied yet */ }
+    try {
+      const remoteSounds = await AlignDB.fetchSounds();
+      if (remoteSounds.ok && remoteSounds.data && window.ALIGN_SOUND) ALIGN_SOUND.mergeRemote(remoteSounds.data);
+    } catch { /* sounds schema may not be applied yet */ }
+    try {
+      if (AlignDB.fetchMyCircle) {
+        const circ = await AlignDB.fetchMyCircle();
+        if (circ && circ.ok) state.circle = circ.data || null;
+      }
+    } catch { /* circle schema may not be applied yet */ }
+  };
+
   const applySession = async (session) => {
     state.session = session;
     if (!session) {
@@ -446,19 +498,6 @@
     const meta = session.user.user_metadata || {};
     if (!state.profile.name) {
       state.profile.name = meta.display_name || emailName;
-      save();
-    }
-    const remote = await AlignDB.fetchWorkouts();
-    if (remote.ok && remote.data && remote.data.length) {
-      const byKey = {};
-      state.history.forEach((h) => { if (h) byKey[h.date + "|" + h.dayId] = h; });
-      remote.data.forEach((h) => {
-        const k = h.date + "|" + h.dayId;
-        const loc = byKey[k];
-        if (!loc) byKey[k] = h;
-        else if ((h.completed || 0) > (loc.completed || 0) || (h.minutes || 0) > (loc.minutes || 0)) byKey[k] = h;
-      });
-      state.history = Object.keys(byKey).map((k) => byKey[k]);
       save();
     }
     const prefs = await AlignDB.fetchPrefs();
@@ -510,7 +549,7 @@
           seen.add(k);
           log.push(x);
         });
-        if (log.length > 2500) log.splice(0, log.length - 2500);
+        if (log.length > 400) log.splice(0, log.length - 400);
         const useRemote = remoteLog.length >= localLog.length;
         Life.setBibleCursor({
           book: useRemote ? life.data.bible.book : c.book,
@@ -542,33 +581,8 @@
         try { Life.mergeRoutineRemote(life.data.routine); } catch { /* keep local hours */ }
       }
     }
-    try {
-      if (AlignDB.markHydrated) AlignDB.markHydrated();
-      if (state.profile && state.profile.name) AlignDB.upsertProfile(state.profile.name);
-      if (AlignDB.seedLocal) AlignDB.seedLocal();
-      await AlignDB.flush();
-    } catch { /* retry on next online */ }
-    try {
-      const remoteBooks = await AlignDB.fetchBooks();
-      if (remoteBooks.ok && Array.isArray(remoteBooks.data)) {
-        B().mergeRemote(remoteBooks.data);
-      }
-      const remoteLog = await AlignDB.fetchReadingLog();
-      if (remoteLog.ok && remoteLog.data) B().mergeRemoteLog(remoteLog.data);
-    } catch { /* books schema may not be applied yet */ }
-    try {
-      const remoteSounds = await AlignDB.fetchSounds();
-      if (remoteSounds.ok && remoteSounds.data && window.ALIGN_SOUND) {
-        ALIGN_SOUND.mergeRemote(remoteSounds.data);
-      }
-    } catch { /* sounds schema may not be applied yet */ }
-    try {
-      if (AlignDB.fetchMyCircle) {
-        const circ = await AlignDB.fetchMyCircle();
-        if (circ && circ.ok) state.circle = circ.data || null;
-      }
-    } catch { /* circle schema may not be applied yet */ }
     } finally { applying = false; }
+    whenIdle(() => { hydrateHeavy(); }, 2800);
   };
 
   const cloudCopy = (st, signed) => {
@@ -1020,6 +1034,7 @@
     return Object.assign(readHoursForm("rt-"), { min, minSun, on: r.on, order: r.order, trainPlan: r.trainPlan });
   };
   let pdfDoc = null;
+  let pdfObjectUrl = null;
   let pdfRenderTask = null;
   let pdfPaintGen = 0;
   let pdfZoom = 1;
@@ -1124,6 +1139,26 @@
   };
 
   const AI = () => window.ALIGN_AI;
+  let aiLoading = null;
+  const loadAi = () => {
+    if (window.ALIGN_AI) return Promise.resolve(window.ALIGN_AI);
+    if (aiLoading) return aiLoading;
+    aiLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "./ai.js";
+      s.async = true;
+      s.onload = () => {
+        if (window.ALIGN_AI) resolve(window.ALIGN_AI);
+        else { aiLoading = null; reject(new Error("Ask didn’t load.")); }
+      };
+      s.onerror = () => {
+        aiLoading = null;
+        reject(new Error("Ask didn’t load. Refresh once with a connection."));
+      };
+      document.head.appendChild(s);
+    });
+    return aiLoading;
+  };
 
   const aiChips = () => {
     const v = state.view;
@@ -1338,6 +1373,7 @@
       if (state.view === "reader" || state.view === "book") {
         try { await grabPdfText(); } catch { /* page text optional */ }
       }
+      await loadAi();
       const res = await AI().ask({ prompt: q, context: aiContext() });
       state.ai.reply = (res && res.text) || "";
       state.ai.provider = (res && res.provider) || "";
@@ -2013,6 +2049,10 @@
       try { pdfDoc.destroy(); } catch { /* ignore */ }
       pdfDoc = null;
     }
+    if (pdfObjectUrl) {
+      try { URL.revokeObjectURL(pdfObjectUrl); } catch { /* ignore */ }
+      pdfObjectUrl = null;
+    }
   };
 
   const syncBook = async (book) => {
@@ -2071,8 +2111,12 @@
       if (!blob) throw new Error("This PDF isn’t on the phone yet. Open ALIGN online once to download it.");
       const lib = await B().loadPdfjs();
       if (!lib) throw new Error("The reader didn’t load. Refresh once with a connection.");
-      const buf = await blob.arrayBuffer();
-      pdfDoc = await lib.getDocument({ data: buf }).promise;
+      if (pdfObjectUrl) {
+        try { URL.revokeObjectURL(pdfObjectUrl); } catch { /* ignore */ }
+        pdfObjectUrl = null;
+      }
+      pdfObjectUrl = URL.createObjectURL(blob);
+      pdfDoc = await lib.getDocument({ url: pdfObjectUrl }).promise;
       state.pdfPages = pdfDoc.numPages || 0;
       const cur = B().byId(id);
       state.pdfPage = Math.min(Math.max(1, cur.current_page || 1), state.pdfPages || 1);
@@ -7175,6 +7219,7 @@
       /* keep the sheet open */
     } else if (act === "ai-open") {
       state.ai.open = true;
+      loadAi().catch(() => {});
       if (state.view === "reader") {
         setPdfChrome(true);
         grabPdfText().catch(() => {});
@@ -7192,7 +7237,7 @@
       const chip = aiChips()[Number(el.dataset.i)];
       if (chip) runAi(chip[1]);
     } else if (act === "ai-prefer") {
-      AI().save({ prefer: el.dataset.p });
+      loadAi().then((mod) => { if (mod && mod.save) mod.save({ prefer: el.dataset.p }); }).catch(() => {});
       render();
     } else if (act === "sound-toggle") {
       sitStop();
@@ -7489,7 +7534,6 @@
   };
 
   const boot = async () => {
-    registerSW();
     if (window.ALIGN_SOUND && ALIGN_SOUND.onChange) ALIGN_SOUND.onChange(() => {
       if (["splash", "onboard", "walk"].includes(state.view)) return;
       try { paintNow(); } catch { /* keep UI */ }
@@ -7515,6 +7559,16 @@
       if (AlignDB.configured()) {
         AlignDB.onAuth((sess) => {
           const was = state.session && state.session.user && state.session.user.id;
+          const nowId = sess && sess.user && sess.user.id;
+          if (!sess) {
+            applySession(null).then(() => paintCloud()).catch(() => {});
+            return;
+          }
+          if (nowId && nowId === was && Date.now() - lastHydrateAt < 600000) {
+            state.session = sess;
+            try { paintCloud(); } catch { /* keep UI */ }
+            return;
+          }
           applySession(sess).then(() => {
             if (state.view === "splash") return;
             const now = sess && sess.user && sess.user.id;
@@ -7524,14 +7578,6 @@
           }).catch(() => {});
         });
         if (AlignDB.onStatus) AlignDB.onStatus(() => paintCloud());
-        timed(AlignDB.session(), 2500).then((s) => {
-          if (s && s.ok && s.data) {
-            applySession(s.data).then(() => {
-              if (state.view === "splash") return;
-              try { render(); } catch { /* keep UI */ }
-            }).catch(() => {});
-          }
-        });
       }
     } catch (err) { console.warn(err); }
     try {
@@ -7539,16 +7585,27 @@
       if (prefs) state.prefs = prefs;
     } catch { /* ignore */ }
     armLocalAlarms();
-    refreshPushSub().catch(() => {});
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       tickAlarms();
       if (!state.session) return;
-      if (Date.now() - lastHydrateAt < 120000) { try { paintCloud(); } catch { /* keep UI */ } return; }
+      if (Date.now() - lastHydrateAt < 600000) { try { paintCloud(); } catch { /* keep UI */ } return; }
       applySession(state.session).then(() => paintCloud()).catch(() => {});
     });
     clearTimeout(splashWatch);
     leaveSplash();
+    whenIdle(() => { registerSW(); }, 2200);
+    whenIdle(() => { refreshPushSub().catch(() => {}); }, 4000);
+    if (window.AlignDB && AlignDB.configured()) {
+      timed(AlignDB.session(), 2500).then((s) => {
+        if (s && s.ok && s.data) {
+          applySession(s.data).then(() => {
+            if (state.view === "splash") return;
+            try { render(); } catch { /* keep UI */ }
+          }).catch(() => {});
+        }
+      });
+    }
   };
 
   boot().catch(() => leaveSplash());
